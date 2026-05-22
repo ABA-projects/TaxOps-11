@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- TaxOps - Favicon / App Icon (Versión simplificada para 16-512px) -->
+  
+  <!-- Fondo blanco -->
+  <rect width="256" height="256" fill="white"/>
+
+  <!-- ISOTIPO SIMPLIFICADO para favicon -->
+  <g transform="translate(128, 128)">
+    <!-- Engranaje simplificado - solo contorno -->
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#E05519" stroke-width="6"/>
+    
+    <!-- Dientes simplificados (4 dientes en lugar de 8 para claridad en tamaños pequeños) -->
+    <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+    <g transform="rotate(90)">
+      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+    </g>
+    <g transform="rotate(180)">
+      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+    </g>
+    <g transform="rotate(270)">
+      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+    </g>
+
+    <!-- Centro del engranaje -->
+    <circle cx="0" cy="0" r="40" fill="white"/>
+
+    <!-- Símbolo interior SIMPLIFICADO: % Grid -->
+    <!-- Porcentaje -->
+    <circle cx="-15" cy="-18" r="10" fill="none" stroke="#1A1A2E" stroke-width="5"/>
+    <circle cx="15" cy="18" r="10" fill="none" stroke="#1A1A2E" stroke-width="5"/>
+    <line x1="-24" y1="24" x2="24" y2="-24" stroke="#1A1A2E" stroke-width="5" stroke-linecap="round"/>
+    
+    <!-- Grid simplificado (2x2 en lugar de 3x3) -->
+    <line x1="-20" y1="-15" x2="-20" y2="15" stroke="#1A1A2E" stroke-width="3" opacity="0.35"/>
+    <line x1="20" y1="-15" x2="20" y2="15" stroke="#1A1A2E" stroke-width="3" opacity="0.35"/>
+    
+    <line x1="-20" y1="-15" x2="20" y2="-15" stroke="#1A1A2E" stroke-width="3" opacity="0.35"/>
+    <line x1="-20" y1="15" x2="20" y2="15" stroke="#1A1A2E" stroke-width="3" opacity="0.35"/>
+  </g>
+</svg>

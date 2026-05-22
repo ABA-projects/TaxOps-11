@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TaxOps — Procesador de facturas DIAN</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <meta
+      name="description"
+      content="TaxOps: procesamiento automatizado de documentos electrónicos DIAN (facturas, notas, documentos equivalentes) con validación, prorrateo IVA y exportación a Excel."
+    />
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a33;
+        --text: #e7ecf5;
+        --muted: #9aa6c0;
+        --accent: #4f8cff;
+        --border: #1f2a4a;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(circle at top, #182454 0%, var(--bg) 60%);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+      }
+      main {
+        max-width: 720px;
+        width: 100%;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+      }
+      img.logo { max-width: 240px; margin-bottom: 1.5rem; }
+      h1 { font-size: 1.6rem; margin: 0 0 0.5rem; }
+      p { color: var(--muted); line-height: 1.6; }
+      .badge {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        background: rgba(79, 140, 255, 0.15);
+        color: var(--accent);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+      }
+      ul { padding-left: 1.2rem; color: var(--muted); line-height: 1.8; }
+      code {
+        background: rgba(255, 255, 255, 0.06);
+        padding: 0.1rem 0.4rem;
+        border-radius: 6px;
+        font-size: 0.9em;
+      }
+      footer {
+        margin-top: 2rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img class="logo" src="/assets/logo.svg" alt="TaxOps" />
+      <span class="badge">Proyecto Python · Streamlit</span>
+      <h1>Procesador de documentos electrónicos DIAN</h1>
+      <p>
+        TaxOps automatiza la lectura de facturas electrónicas, notas crédito,
+        notas débito, documentos soporte y documentos equivalentes (POS / SPD)
+        emitidos en Colombia, generando un libro de Excel con las hojas
+        <code>BASE_DATOS</code>, <code>VALIDACION</code> y
+        <code>PRORRATEO_IVA</code>.
+      </p>
+      <ul>
+        <li>Extracción robusta desde PDF y XML UBL 2.1.</li>
+        <li>Validación de CUFE/CUDE, NIT, totales y duplicados.</li>
+        <li>Prorrateo de IVA conforme al Art. 490 E.T.</li>
+        <li>Procesamiento paralelo de carpetas con cientos de documentos.</li>
+      </ul>
+      <footer>
+        La aplicación es un servicio Streamlit y se despliega en
+        Streamlit Community Cloud (ver <code>docs/guia-streamlit-cloud.md</code>
+        en el repositorio). Esta página es únicamente la portada estática
+        publicada en Netlify.
+      </footer>
+    </main>
+  </body>
+</html>

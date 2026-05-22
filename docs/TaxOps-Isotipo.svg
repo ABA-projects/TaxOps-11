@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- TaxOps - Isotipo (Logo Mark) - Concepto Principal -->
+  <defs>
+    <style>
+      .gear-stroke { stroke: #E05519; fill: none; stroke-width: 12; stroke-linecap: round; }
+      .symbol-stroke { stroke: #1A1A2E; fill: none; stroke-width: 10; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <!-- Fondo blanco (para visualización) -->
+  <rect width="512" height="512" fill="white"/>
+
+  <!-- ISOTIPO: Engranaje + Símbolo % Grid -->
+  
+  <!-- Engranaje Exterior (Naranja) -->
+  <g transform="translate(256, 256)">
+    <!-- Círculo base del engranaje -->
+    <circle cx="0" cy="0" r="160" fill="none" stroke="#E05519" stroke-width="12" opacity="0.3"/>
+    
+    <!-- 8 Dientes del engranaje - patrón simétrico -->
+    <!-- Diente 1 (arriba) -->
+    <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    <!-- Diente 2 (arriba-derecha 45°) -->
+    <g transform="rotate(45)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 3 (derecha) -->
+    <g transform="rotate(90)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 4 (derecha-abajo 45°) -->
+    <g transform="rotate(135)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 5 (abajo) -->
+    <g transform="rotate(180)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 6 (abajo-izquierda 45°) -->
+    <g transform="rotate(225)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 7 (izquierda) -->
+    <g transform="rotate(270)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+    <!-- Diente 8 (izquierda-arriba 45°) -->
+    <g transform="rotate(315)">
+      <rect x="-20" y="-200" width="40" height="60" fill="#E05519" rx="8"/>
+    </g>
+
+    <!-- Centro del engranaje (hueco) -->
+    <circle cx="0" cy="0" r="80" fill="white"/>
+
+    <!-- SÍMBOLO INTERIOR: % Grid Híbrido (Azul Marino) -->
+    <!-- Círculo superior del % -->
+    <circle cx="-30" cy="-35" r="22" fill="none" stroke="#1A1A2E" stroke-width="10"/>
+    <!-- Círculo inferior del % -->
+    <circle cx="30" cy="35" r="22" fill="none" stroke="#1A1A2E" stroke-width="10"/>
+    <!-- Línea diagonal % -->
+    <line x1="-48" y1="48" x2="48" y2="-48" stroke="#1A1A2E" stroke-width="10" stroke-linecap="round"/>
+
+    <!-- Grid de 3x3 superpuesto (líneas finas) -->
+    <!-- Líneas verticales del grid -->
+    <line x1="-35" y1="-30" x2="-35" y2="30" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+    <line x1="0" y1="-30" x2="0" y2="30" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+    <line x1="35" y1="-30" x2="35" y2="30" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+    <!-- Líneas horizontales del grid -->
+    <line x1="-35" y1="-30" x2="35" y2="-30" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+    <line x1="-35" y1="0" x2="35" y2="0" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+    <line x1="-35" y1="30" x2="35" y2="30" stroke="#1A1A2E" stroke-width="6" opacity="0.4"/>
+  </g>
+</svg>

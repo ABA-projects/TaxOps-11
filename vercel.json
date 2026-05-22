@@ -1,0 +1,7 @@
+{
+  "framework": "nextjs",
+  "rootDirectory": "taxops-web",
+  "buildCommand": "cd taxops-web && npm install && npm run build",
+  "outputDirectory": "taxops-web/.next",
+  "installCommand": "cd taxops-web && npm install"
+}

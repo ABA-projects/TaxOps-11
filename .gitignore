@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.env
+.venv
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs y outputs
+logs/
+outputs/
+facturas/*.pdf
+facturas/*.xml
+facturas/*.xlsx
+
+# Node.js / Next.js
+node_modules/
+.next/
+taxops-web/.env.local
+taxops-web/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Streamlit secrets
+.streamlit/secrets.toml

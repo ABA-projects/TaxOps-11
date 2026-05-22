@@ -1,0 +1,53 @@
+# TaxOps — Deploy explícito a Railway
+#
+# Se activa SOLO después de que el job CI pase en main.
+#
+# NOTA: Si Railway ya tiene auto-deploy activado en este repo
+# (Settings → Source → Auto Deploy), este workflow es redundante
+# y Railway desplegará dos veces. En ese caso, desactiva el
+# auto-deploy de Railway y deja que este workflow sea el único disparador.
+#
+# Secretos requeridos en GitHub (Settings → Secrets → Actions):
+#   RAILWAY_API_TOKEN        → railway.app → Account Settings → Tokens
+#   RAILWAY_SERVICE_API_ID   → ID del servicio "api"  en Railway (Settings del servicio)
+#   RAILWAY_SERVICE_WEB_ID   → ID del servicio "web"  en Railway (Settings del servicio)
+#
+# Cómo obtener los IDs de servicio:
+#   1. Entra a railway.app → tu proyecto
+#   2. Haz click en el servicio → Settings → Copy Service ID
+
+name: Deploy to Railway
+
+on:
+  workflow_dispatch:  # desactivado — activar manualmente si se necesita
+
+jobs:
+  deploy:
+    name: Deploy → Railway
+    runs-on: ubuntu-latest
+    # Solo despliega si CI pasó
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Redeploy API service
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"${{ secrets.RAILWAY_SERVICE_API_ID }}\") }"}' \
+            https://backboard.railway.app/graphql/v2
+
+      - name: Redeploy Web service
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"${{ secrets.RAILWAY_SERVICE_WEB_ID }}\") }"}' \
+            https://backboard.railway.app/graphql/v2
+
+      - name: Deploy summary
+        run: |
+          echo "### Deploy disparado ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.event.workflow_run.head_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rama**: main" >> $GITHUB_STEP_SUMMARY
+          echo "- Revisa el estado en https://railway.app" >> $GITHUB_STEP_SUMMARY
