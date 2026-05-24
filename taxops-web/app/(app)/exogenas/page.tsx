@@ -93,14 +93,23 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 /* ─── página principal ───────────────────────────────────────── */
+// Direct API URL — bypasses Vercel proxy timeout for long-running uploads
+const DIRECT_API = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem("taxops_token");
+}
+
 export default function ExogenasPage() {
-  const { postForm, post } = useApi();
+  const { post } = useApi(); // used for chatbot and export (short requests via proxy)
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [tab, setTab] = useState<"analytics" | "exogenas" | "detalle">("analytics");
   const [loading, setLoading] = useState(false);
+  const [warmingUp, setWarmingUp] = useState(false);
   const [error, setError] = useState("");
 
   // Chatbot
@@ -132,10 +141,45 @@ export default function ExogenasPage() {
     setError("");
     setLoading(true);
     setResult(null);
+
+    // Step 1: warm up Render (free tier sleeps; cold start takes ~50 s).
+    // Call /health directly — no Vercel proxy — so we can wait up to 90 s.
+    setWarmingUp(true);
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 90_000);
+      const h = await fetch(`${DIRECT_API}/health`, {
+        signal: ctrl.signal,
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      });
+      clearTimeout(tid);
+      if (!h.ok) throw new Error("health check failed");
+    } catch {
+      setError("No se pudo conectar con el servidor. Espera unos segundos e inténtalo de nuevo.");
+      setWarmingUp(false);
+      setLoading(false);
+      return;
+    }
+    setWarmingUp(false);
+
+    // Step 2: upload files directly to Render (bypasses Vercel proxy timeout).
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
     try {
-      const data = await postForm<ProcessResult>("/exogenas/process", fd);
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 300_000); // 5 min max
+      const res = await fetch(`${DIRECT_API}/exogenas/process`, {
+        method: "POST",
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+        body: fd,
+        signal: ctrl.signal,
+      });
+      clearTimeout(tid);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+      const data: ProcessResult = await res.json();
       setResult(data);
       setTab("analytics");
     } catch (e: unknown) {
@@ -248,8 +292,11 @@ export default function ExogenasPage() {
       )}
 
       <button onClick={handleProcess} disabled={loading || !files.length} className="btn-primary px-8">
-        {loading ? "Procesando..." : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
+        {warmingUp ? "Iniciando servidor..." : loading ? "Procesando..." : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
       </button>
+      {warmingUp && (
+        <p className="text-xs text-gray-400 mt-1">El servidor puede tardar hasta 1 minuto en iniciar. Por favor espera.</p>
+      )}
 
       {result && (
         <div className="space-y-4">
