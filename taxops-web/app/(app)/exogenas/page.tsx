@@ -93,7 +93,7 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 /* ─── página principal ───────────────────────────────────────── */
-// Direct API URL — bypasses Vercel proxy timeout for long-running uploads
+// Direct API URL — bypasses Vercel proxy for uploads and polling
 const DIRECT_API = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 function getToken(): string | null {
@@ -101,9 +101,15 @@ function getToken(): string | null {
   return sessionStorage.getItem("taxops_token");
 }
 
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export default function ExogenasPage() {
   const { post } = useApi(); // used for chatbot and export (short requests via proxy)
   const fileRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ProcessResult | null>(null);
@@ -111,6 +117,8 @@ export default function ExogenasPage() {
   const [loading, setLoading] = useState(false);
   const [warmingUp, setWarmingUp] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [currentFile, setCurrentFile] = useState("");
 
   // Chatbot
   const [chatOpen, setChatOpen] = useState(false);
@@ -126,6 +134,11 @@ export default function ExogenasPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMsgs]);
 
+  // Clean up polling interval on unmount
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
   function addFiles(list: FileList | null) {
     if (!list) return;
     const VALID_EXT = /\.(pdf|jpg|jpeg|png|tiff?|bmp|webp|xlsx?|docx?)$/i;
@@ -136,57 +149,90 @@ export default function ExogenasPage() {
     });
   }
 
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }
+
+  function startPolling(jobId: string) {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${DIRECT_API}/exogenas/status/${jobId}`, {
+          headers: authHeaders(),
+        });
+
+        if (res.status === 404) {
+          stopPolling();
+          setError("El servidor se reinició mientras procesaba. Intenta de nuevo.");
+          setLoading(false);
+          return;
+        }
+        if (!res.ok) return; // transient error — keep polling
+
+        const data = await res.json();
+
+        if (typeof data.progress === "number") setProgress(data.progress);
+        if (data.current_file) setCurrentFile(data.current_file);
+
+        if (data.status === "done") {
+          stopPolling();
+          setResult(data.result as ProcessResult);
+          setTab("analytics");
+          setLoading(false);
+        } else if (data.status === "error") {
+          stopPolling();
+          setError(data.error || "Error en el procesamiento");
+          setLoading(false);
+        }
+      } catch {
+        // Network hiccup — keep polling, don't abort
+      }
+    }, 3000);
+  }
+
   async function handleProcess() {
     if (!files.length) { setError("Agrega al menos un certificado PDF"); return; }
-    setError("");
-    setLoading(true);
-    setResult(null);
+    setError(""); setLoading(true); setResult(null); setProgress(0); setCurrentFile("");
 
-    // Step 1: warm up Render (free tier sleeps; cold start takes ~50 s).
-    // Call /health directly — no Vercel proxy — so we can wait up to 90 s.
+    // Phase 1: wake up Render (free tier sleeps; cold start ~50 s)
     setWarmingUp(true);
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 90_000);
       const h = await fetch(`${DIRECT_API}/health`, {
         signal: ctrl.signal,
-        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+        headers: authHeaders(),
       });
       clearTimeout(tid);
       if (!h.ok) throw new Error("health check failed");
     } catch {
       setError("No se pudo conectar con el servidor. Espera unos segundos e inténtalo de nuevo.");
-      setWarmingUp(false);
-      setLoading(false);
-      return;
+      setWarmingUp(false); setLoading(false); return;
     }
     setWarmingUp(false);
 
-    // Step 2: upload files directly to Render (bypasses Vercel proxy timeout).
+    // Phase 2: upload files → server returns job_id immediately
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
+    let jobId: string;
     try {
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 300_000); // 5 min max
       const res = await fetch(`${DIRECT_API}/exogenas/process`, {
         method: "POST",
-        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+        headers: authHeaders(),
         body: fd,
-        signal: ctrl.signal,
       });
-      clearTimeout(tid);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
         throw new Error(err.detail || `Error ${res.status}`);
       }
-      const data: ProcessResult = await res.json();
-      setResult(data);
-      setTab("analytics");
+      const body = await res.json();
+      jobId = body.job_id;
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error al procesar");
-    } finally {
-      setLoading(false);
+      setError(e instanceof Error ? e.message : "Error al enviar archivos");
+      setLoading(false); return;
     }
+
+    // Phase 3: poll status every 3 s until done or error
+    startPolling(jobId);
   }
 
   async function handleExport() {
@@ -209,7 +255,6 @@ export default function ExogenasPage() {
     setChatMsgs((p) => [...p, userMsg]);
     setChatLoading(true);
 
-    // Contexto con resultados actuales
     const contextNote = result
       ? `\n\n[Contexto: el usuario procesó ${result.procesados} certificados. Total retenciones detectadas en Formato 1003: ${result.df_1003.length} registros.]`
       : "";
@@ -234,7 +279,6 @@ export default function ExogenasPage() {
   const detalle = result?.df_detalle ?? [];
   const f1003 = result?.df_1003 ?? [];
 
-  // Detectar columna de valor en detalle
   const valorCol = detalle.length
     ? ["valor_retencion", "retencion", "valor", "valor_retenido"].find((c) => c in detalle[0]) ?? Object.keys(detalle[0])[3] ?? ""
     : "";
@@ -291,12 +335,34 @@ export default function ExogenasPage() {
         </div>
       )}
 
-      <button onClick={handleProcess} disabled={loading || !files.length} className="btn-primary px-8">
-        {warmingUp ? "Iniciando servidor..." : loading ? "Procesando..." : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
-      </button>
-      {warmingUp && (
-        <p className="text-xs text-gray-400 mt-1">El servidor puede tardar hasta 1 minuto en iniciar. Por favor espera.</p>
-      )}
+      <div>
+        <button onClick={handleProcess} disabled={loading || !files.length} className="btn-primary px-8">
+          {warmingUp
+            ? "Iniciando servidor..."
+            : loading
+              ? `Procesando... ${progress}%`
+              : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
+        </button>
+
+        {warmingUp && (
+          <p className="text-xs text-gray-400 mt-2">El servidor puede tardar hasta 1 minuto en iniciar. Por favor espera.</p>
+        )}
+
+        {loading && !warmingUp && (
+          <div className="mt-3 space-y-1.5">
+            <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="h-1.5 rounded-full bg-brand-orange transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            {currentFile && (
+              <p className="text-xs text-gray-400 truncate">Procesando: {currentFile}</p>
+            )}
+            <p className="text-xs text-gray-400">Esto puede tomar varios minutos con muchos archivos.</p>
+          </div>
+        )}
+      </div>
 
       {result && (
         <div className="space-y-4">
@@ -347,7 +413,6 @@ export default function ExogenasPage() {
             {/* ── Analítica ── */}
             {tab === "analytics" && (
               <div className="p-6 space-y-6">
-                {/* KPIs */}
                 <div className="flex flex-wrap gap-4">
                   <StatCard label="Total retenciones" value={fmt(totalRetencion)} sub={`${detalle.length} registros`} />
                   <StatCard label="Retenedores únicos" value={String(byRetenedor.length)} sub="en exógenas" />
@@ -355,7 +420,6 @@ export default function ExogenasPage() {
                   <StatCard label="Archivos procesados" value={String(result.procesados)} sub={`de ${result.total_archivos}`} />
                 </div>
 
-                {/* Top retenedores */}
                 {byRetenedor.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -369,7 +433,6 @@ export default function ExogenasPage() {
                   </div>
                 )}
 
-                {/* Por concepto */}
                 {byConcepto.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -399,7 +462,6 @@ export default function ExogenasPage() {
       <div className="fixed bottom-6 right-6 z-50">
         {chatOpen && (
           <div className="mb-3 w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ height: "480px" }}>
-            {/* Header */}
             <div className="bg-brand-navy px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bot size={18} className="text-brand-orange" />
@@ -410,7 +472,6 @@ export default function ExogenasPage() {
               </button>
             </div>
 
-            {/* Mensajes */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
               {chatMsgs.map((m, i) => (
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -429,7 +490,6 @@ export default function ExogenasPage() {
               <div ref={chatBottomRef} />
             </div>
 
-            {/* Input */}
             <div className="p-3 border-t border-gray-200 flex gap-2">
               <input
                 value={chatInput}
@@ -455,4 +515,3 @@ export default function ExogenasPage() {
     </div>
   );
 }
-

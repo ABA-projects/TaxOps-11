@@ -1,8 +1,12 @@
 """Exogenas router — process, list, export."""
 from __future__ import annotations
 
+import shutil
 import tempfile
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -12,20 +16,61 @@ from schemas import ExportExogenasRequest, ProcessExogenasResponse
 
 router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
+# In-memory job store — keyed by job_id, lives for the server instance lifetime
+_jobs: dict[str, dict[str, Any]] = {}
+# Limit concurrent OCR jobs to avoid OOM on free tier (extras queue automatically)
+_executor = ThreadPoolExecutor(max_workers=2)
 
-@router.post("/process", response_model=ProcessExogenasResponse)
+
+def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
+    """Runs in thread pool. Writes final state to _jobs[job_id]."""
+    try:
+        from services.processor_exogenas import procesar_exogenas
+
+        total = len(paths)
+
+        def on_progress(i: int, _total: int, name: str) -> None:
+            _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
+            _jobs[job_id]["current_file"] = name
+
+        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id)
+
+        _jobs[job_id] = {
+            "status": "done",
+            "progress": 100,
+            "current_file": "",
+            "result": {
+                "total_archivos": resultado.total_archivos,
+                "procesados": resultado.total_archivos - resultado.errores,
+                "errores": resultado.errores,
+                "ica_excluidos": resultado.ica_excluidos,
+                "advertencias": resultado.advertencias,
+                "df_detalle": resultado.df_detalle.fillna("").to_dict(orient="records"),
+                "df_1003": resultado.df_1003.fillna("").to_dict(orient="records"),
+            },
+        }
+    except Exception as exc:
+        _jobs[job_id] = {"status": "error", "error": str(exc), "progress": 0}
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.post("/process")
 async def process_exogenas(
     files: list[UploadFile] = File(...),
     user: dict = Depends(get_current_user),
-) -> ProcessExogenasResponse:
+) -> dict:
     _ALLOWED = {
         ".pdf", ".docx", ".doc",
         ".xlsx", ".xls",
         ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp",
     }
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_paths: list[Path] = []
+    # Persist files in a temp dir that outlives this request (background task needs them)
+    tmpdir = tempfile.mkdtemp()
+    tmp_paths: list[Path] = []
+
+    try:
         for upload in files:
             safe_name = Path(upload.filename or "archivo").name
             if Path(safe_name).suffix.lower() not in _ALLOWED:
@@ -35,28 +80,33 @@ async def process_exogenas(
                            "Soportados: PDF, DOCX, XLSX, JPG, PNG.",
                 )
             dest = Path(tmpdir) / safe_name
-            # Escribir en chunks de 256 KB — no carga el archivo completo en RAM
             with dest.open("wb") as fout:
                 while chunk := await upload.read(256 * 1024):
                     fout.write(chunk)
             tmp_paths.append(dest)
+    except HTTPException:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
+    except Exception as exc:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Error leyendo archivos: {exc}")
 
-        try:
-            from services.processor_exogenas import procesar_exogenas
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"status": "processing", "progress": 0, "current_file": ""}
 
-            resultado = procesar_exogenas(paths=tmp_paths, org_id=user["org_id"])
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Error en procesamiento: {exc}")
+    _executor.submit(_run_job, job_id, tmp_paths, user["org_id"], tmpdir)
 
-    return ProcessExogenasResponse(
-        total_archivos=resultado.total_archivos,
-        procesados=resultado.total_archivos - resultado.errores,
-        errores=resultado.errores,
-        ica_excluidos=resultado.ica_excluidos,
-        advertencias=resultado.advertencias,
-        df_detalle=resultado.df_detalle.fillna("").to_dict(orient="records"),
-        df_1003=resultado.df_1003.fillna("").to_dict(orient="records"),
-    )
+    return {"job_id": job_id, "status": "processing", "total": len(tmp_paths)}
+
+
+@router.get("/status/{job_id}")
+async def job_status(
+    job_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    if job_id not in _jobs:
+        raise HTTPException(status_code=404, detail="Job no encontrado o servidor reiniciado")
+    return _jobs[job_id]
 
 
 @router.post("/export")
