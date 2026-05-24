@@ -1,12 +1,3 @@
----
-title: TaxOps SaaS
-emoji: 🧾
-colorFrom: orange
-colorTo: blue
-sdk: docker
-pinned: false
----
-
 # TaxOps — Plataforma Contable SaaS Colombia
 
 > Automatización contable para empresas colombianas: facturas DIAN, nómina CST 2026, calendario tributario, exógenas Formato 1003 y chatbot contable con IA.
@@ -14,7 +5,13 @@ pinned: false
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-15.3-black?logo=next.js)](https://nextjs.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://postgresql.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://docker.com)
+[![Render](https://img.shields.io/badge/API-Render-46E3B7?logo=render)](https://taxops-api.onrender.com)
+[![Vercel](https://img.shields.io/badge/Frontend-Vercel-black?logo=vercel)](https://tax-ops-11.vercel.app)
+
+**Producción:**
+- Frontend: [https://tax-ops-11.vercel.app](https://tax-ops-11.vercel.app)
+- API: [https://taxops-api.onrender.com](https://taxops-api.onrender.com)
+- API Docs: [https://taxops-api.onrender.com/docs](https://taxops-api.onrender.com/docs)
 
 ---
 
@@ -27,7 +24,7 @@ pinned: false
 5. [Inicio rápido (local)](#inicio-rápido-local)
 6. [Variables de entorno](#variables-de-entorno)
 7. [API Reference](#api-reference)
-8. [Despliegue en Railway](#despliegue-en-railway)
+8. [Despliegue (Render + Vercel)](#despliegue-render--vercel)
 9. [Estructura del repositorio](#estructura-del-repositorio)
 10. [Roadmap](#roadmap)
 
@@ -41,7 +38,7 @@ pinned: false
 | **Prorrateo IVA** | Cálculo Art. 490 ET para IVA descontable parcial |
 | **Nómina CST 2026** | Nómina mensual + liquidación definitiva con parafiscales correctos |
 | **Exógenas 1003** | Generación Formato 1003 DIAN para proveedores |
-| **Calendario DIAN** | 17 fechas tributarias 2026 con alertas automáticas |
+| **Calendario DIAN** | 31 fechas tributarias 2026 con alertas automáticas |
 | **Chatbot IA** | Asistente contable sobre Groq llama-3.3-70b-versatile |
 | **Dashboard** | Métricas, accesos rápidos y notificaciones de vencimiento |
 
@@ -52,41 +49,39 @@ pinned: false
 | Capa | Tecnología |
 |------|-----------|
 | Frontend | Next.js 15.3 · App Router · TypeScript · Tailwind CSS |
-| Backend | FastAPI 0.115 + Uvicorn |
-| Base de datos | PostgreSQL 16 |
+| Backend | FastAPI 0.115 + Uvicorn · Docker |
+| Base de datos | PostgreSQL 16 (Neon) |
 | Auth | JWT (access 30 min / refresh 7 d) + bcrypt |
 | IA | Groq API — llama-3.3-70b-versatile |
 | PDF export | ReportLab 4.2 |
 | Excel export | openpyxl 3.1 |
 | Extracción PDF/XML | pdfplumber 0.11 + lxml 5.3 |
-| Contenedores | Docker + Docker Compose |
-| Deploy | Railway (api + web + postgres) |
-| PWA | Web App Manifest + shortcuts |
+| Streamlit (legacy) | Interfaz original — mantiene compatibilidad local |
+| Deploy API | Render (Docker, free tier) |
+| Deploy Frontend | Vercel (Next.js, hobby tier) |
 
 ---
 
 ## Arquitectura
 
 ```
-┌─────────────────────────────────────────────┐
-│              :3000  (taxops-web)            │
-│           Next.js 15 — App Router           │
-│  middleware.ts → auth gate (JWT cookie)     │
-└──────────────────┬──────────────────────────┘
-                   │ HTTP / useApi hook
-┌──────────────────▼──────────────────────────┐
-│              :8000  (api/)                  │
-│            FastAPI + Uvicorn                │
-│  /auth  /nomina  /facturas  /exogenas       │
-│  /chatbot  /admin                           │
-└──────────────────┬──────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│   https://tax-ops-11.vercel.app                 │
+│           Next.js 15 — App Router               │
+│   middleware.ts → auth gate (JWT cookie)        │
+└──────────────────┬──────────────────────────────┘
+                   │ HTTPS / useApi hook
+┌──────────────────▼──────────────────────────────┐
+│   https://taxops-api.onrender.com               │
+│            FastAPI + Uvicorn (Docker)           │
+│   /auth  /nomina  /facturas  /exogenas          │
+│   /chatbot  /admin  /calendario                 │
+└──────────────────┬──────────────────────────────┘
                    │ SQLAlchemy / psycopg2
-┌──────────────────▼──────────────────────────┐
-│              :5432  (db)                    │
-│           PostgreSQL 16                     │
-│  db=taxops · multi-tenant ready             │
-└─────────────────────────────────────────────┘
-       :8080 → Adminer (solo local)
+┌──────────────────▼──────────────────────────────┐
+│           PostgreSQL 16 (Neon)                  │
+│   multi-tenant · Alembic migrations             │
+└─────────────────────────────────────────────────┘
 ```
 
 ### Flujo de autenticación
@@ -100,70 +95,27 @@ Requests protegidos → middleware.ts verifica cookie
                     → useApi hook añade Authorization: Bearer <token>
 ```
 
-### Rutas públicas vs protegidas
-
-`middleware.ts` deja pasar sin auth:
-- `/` — landing page
-- `/login`
-- `/api/auth/*`
-- `/manifest.json`, `/_next/*`, `/icons/*` (estáticos)
-
-Todo lo demás redirige a `/login`.
-
 ---
 
 ## Módulos implementados
 
 ### 1. Landing page pública (`/`)
-
 - Completamente pública (no requiere auth)
-- Hero + 3-step explainer + 9 features + pricing mensual/anual (−20%)
-- Preview calendario DIAN + 3 testimonios + formulario de contacto
-- Responsive · dark mode compatible · PWA installable
+- Hero + features + pricing mensual/anual (−20%)
+- Preview calendario DIAN + testimonios
 
 ### 2. Autenticación
-
-- Login en `/login` con JWT
-- Refresh automático de access token via cookie httpOnly
-- Logout limpia ambas cookies vía `/api/auth/logout`
-- `useApi` hook: maneja Authorization header en todas las llamadas
+- Login en `/login` con JWT (access + refresh cookie httpOnly)
+- Refresh automático via `/api/auth/session`
+- `useApi` hook maneja Authorization header en todas las llamadas
 
 ### 3. Dashboard (`/dashboard`)
-
 - KPIs: facturas procesadas, IVA acumulado, nóminas calculadas
-- Quick actions con colores por módulo: Facturas (orange), Nómina (blue), Calendario DIAN (cyan), Chatbot (purple)
-- Notificaciones inline de vencimientos próximos DIAN
+- Quick actions por módulo
+- Notificaciones inline de vencimientos DIAN
 
 ### 4. Nómina CST 2026 (`/nomina`)
-
-**4 tabs:**
-
-#### Nómina Mensual
-- Presets SMLMV: 1×, 2×, 3×, 5×, 10×, Integral (botón → activo naranja)
-- Horas extras y recargos: HED +25%, HEN +75%, RN +35%, HOD +75%, HEDD +100%, HEND +150%, RND +110%
-- Parafiscales empleador: Salud 8.5%, Pensión 12%, ARL clase I–V, SENA 2%, ICBF 3%, Caja Compensación 4%
-- Exoneración SENA+ICBF automática para salarios ≤10 SMLMV (Art. 114-1 ET, Ley 1607/2012)
-- FSP Fondo Solidaridad Pensional para IBC ≥4 SMLMV
-- Export Excel (.xlsx) y PDF (ReportLab, branding navy/orange)
-
-#### Liquidación definitiva
-- Cesantías (base 360 días), intereses 12% anual, prima de servicios, vacaciones
-- Indemnización Art. 64 CST según tipo de contrato y causa de terminación
-- Export Excel y PDF
-
-#### Empleados
-- Directorio en `localStorage` (`taxops_empleados`)
-- "Nuevo empleado" con presets SMLMV integrados
-- Botones "Mensual" / "Liquidar" → pre-llenan el formulario y cambian de tab
-- **Batch import**: drag-and-drop Excel/CSV → `POST /nomina/import-batch`
-  - Columnas requeridas: `nombre`, `salario_basico`
-  - Columnas opcionales: `dias_trabajados`, `clase_riesgo_arl`
-- Tabla de resultados con totales + "Descargar Excel" batch
-
-#### Analítica
-- Historial de cálculos (`localStorage`, últimos 20)
-- KPIs: total cálculos, neto promedio, mayor neto, carga patronal promedio
-- Gráfico de barras: Neto (naranja) vs Carga patronal (azul)
+**4 tabs:** Nómina Mensual · Liquidación Definitiva · Empleados · Analítica
 
 **Parámetros legales CST 2026:**
 
@@ -172,103 +124,103 @@ Todo lo demás redirige a `/login`.
 | SMLMV | $1,750,905 |
 | Auxilio de transporte | $249,095 (aplica ≤2 SMLMV) |
 | Salario integral mínimo | $22,761,765 (13× SMLMV) |
-| Tope IBC | $43,772,625 (25× SMLMV) |
-| Jornada máxima (Ley 2101/2021) | 44 h/sem → 42 h en 2026 |
+| Jornada máxima | 42 h/sem (Ley 2101/2021) |
+
+- Parafiscales empleador: Salud 8.5%, Pensión 12%, ARL I–V, SENA 2%, ICBF 3%, Caja 4%
+- Exoneración SENA+ICBF automática para salarios ≤10 SMLMV (Art. 114-1 ET)
+- Export Excel (.xlsx) y PDF (ReportLab, branding navy/orange)
+- Batch import: drag-and-drop Excel/CSV → resultados batch
 
 ### 5. Calendario DIAN 2026 (`/calendario`)
+- 31 eventos tributarios agrupados por mes
+- Alerta visual para eventos ≤10 días
+- Filtros por tipo: retención, IVA, renta, exógenas, ICA, patrimonio
+- Export ICS → Google Calendar / Apple Calendar
+- Actualizable sin redeploy vía `PUT /calendario/eventos` (superadmin)
 
-- 17 eventos tributarios agrupados por mes
-- Alerta visual roja para eventos ≤10 días
-- Filtros por tipo: retención, IVA, renta, exógenas, ICA, patrimonio, otro
-- Toggle "solo próximos"
-- Export ICS → importa directo a Google Calendar / Apple Calendar
-- Chatbot contextualizado con normativa DIAN 2026
-
-### 6. Notification Bell (header global)
-
-- Vencimientos DIAN dentro de los próximos 30 días
-- Badge naranja con contador de alertas activas
-- Urgencia: rojo ≤3 d / ámbar ≤10 d / azul ≤30 d
-- Dismiss por evento o "limpiar todo"
-- Persistencia: `localStorage` (`taxops_notif_dismissed`)
-- Link "Ver calendario completo →"
-
-### 7. Facturas DIAN (`/facturas`)
-
-- Upload de PDF/XML electrónicos (pdfplumber + lxml UBL 2.1)
+### 6. Facturas DIAN (`/facturas`)
+- Upload PDF/XML electrónicos (pdfplumber + lxml UBL 2.1)
 - Extracción: CUFE, NIT/nombre emisor, fecha, base, IVA, total
 - Validación: cuadre (base + IVA = total), CUFE 96 chars, formato NIT
-- Detección automática: Nota Crédito/Débito, Mandato/Peaje, Soporte
-- Deduplicación por CUFE en PostgreSQL (`ON CONFLICT DO NOTHING`)
-- Autorretenedores: 3.287 NITs DIAN — retención $0 para ellos
+- Detección: Nota Crédito/Débito, Mandato/Peaje, Soporte, Equivalente
+- Deduplicación por CUFE (`ON CONFLICT DO NOTHING`)
+- Autorretenedores: 3.287 NITs DIAN
+- Prorrateo IVA Art. 490 ET automático
 - Export Excel 3 hojas: BASE_DATOS, VALIDACION, PRORRATEO_IVA
-- Chatbot con contexto de las facturas cargadas
 
-### 8. Prorrateo IVA Art. 490 ET
-
-```
-% deducible = ingresos_gravados / (ingresos_gravados + ingresos_excluidos)
-IVA descontable = IVA_compras × % deducible
-```
-
-- Sin ingresos informados → 100% deducible con advertencia
-- Mandatos/Peajes → IVA no descontable
-- Notas Crédito → valores negativos reducen el total del mes
-
-### 9. Exógenas Formato 1003 (`/exogenas`)
-
-- Generación del reporte de pagos a terceros DIAN
-- Agrupación por NIT proveedor
+### 7. Exógenas Formato 1003 (`/exogenas`)
+- Extracción de certificados de retención (PDF, imagen, Excel, Word)
+- 12+ layouts soportados (SAP bilingüe, Mekano ERP, narrativo, ICA 4-col…)
 - Export Excel compatible DIAN
 
-### 10. Chatbot Contable (`/chatbot`)
-
-- Groq llama-3.3-70b-versatile (gratuito)
+### 8. Chatbot Contable (`/chatbot`)
+- Groq llama-3.3-70b-versatile
 - Contexto: ET 2026, CST, DIAN, normativa colombiana
-- Historial por sesión
-- `PageChatbot` embebible en cualquier módulo con `systemContext` y `currentData`
+- Tool use: `consultar_iva_mes`, `top_proveedores`, `buscar_factura`
 
-### 11. PWA
-
-- `public/manifest.json`: nombre, iconos, start_url (`/dashboard`), shortcuts
-- Shortcuts: Nómina (`/nomina`) y Calendario DIAN (`/calendario`)
-- Theme color navy `#1A3A5C`
-- Installable en Chrome/Edge desktop y Android
+### 9. Admin (`/admin`)
+- Gestión de usuarios (crear, desactivar, reactivar, eliminar)
+- Gestión de grupos con módulos asignados
+- Audit logs con filtros por módulo/acción/email
+- KPIs del tenant
 
 ---
 
 ## Inicio rápido (local)
 
 ### Prerrequisitos
+- Python 3.10+
+- Node.js 22+
+- PostgreSQL (o `DATABASE_URL` de Neon/Supabase)
 
-- Docker Desktop ≥ 4.x
-
-### 1. Variables de entorno
+### 1. Instalar dependencias
 
 ```bash
+# Backend
+pip install -r requirements.txt
+pip install -e .          # expone CLI `taxops`
+
+# API
+pip install -r api/requirements-api.txt
+
+# Frontend
+cd taxops-web && npm install
+```
+
+### 2. Variables de entorno
+
+```bash
+cp .env.example .env
 cp api/.env.example api/.env
-cp taxops-web/.env.local.example taxops-web/.env.local
 ```
 
 Editar `api/.env`:
 ```env
-DATABASE_URL=postgresql://taxops:taxops_local_2026@db:5432/taxops
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 SECRET_KEY=cambia_esto_por_minimo_32_caracteres_aleatorios
 GROQ_API_KEY=gsk_...
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
-Editar `taxops-web/.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-INTERNAL_API_URL=http://api:8000
-NEXTAUTH_SECRET=otro_secreto_seguro_minimo_32_chars
-```
-
-### 2. Build y arrancar
+### 3. Inicializar base de datos
 
 ```bash
-docker compose build
-docker compose up -d
+export DATABASE_URL=postgresql://...
+python manage.py init-db
+python manage.py create-org --name "Mi Empresa" --email admin@empresa.co --password Admin1234!
+```
+
+### 4. Arrancar servicios
+
+```bash
+# API (terminal 1)
+cd api && uvicorn main:app --reload --port 8000
+
+# Frontend (terminal 2)
+cd taxops-web && npm run dev
+
+# Streamlit legacy opcional (terminal 3)
+python -m streamlit run Home.py
 ```
 
 | Servicio | URL |
@@ -276,28 +228,7 @@ docker compose up -d
 | Frontend | http://localhost:3000 |
 | API | http://localhost:8000 |
 | Swagger UI | http://localhost:8000/docs |
-| Adminer (BD) | http://localhost:8080 |
-
-### 3. Crear primer usuario
-
-```bash
-curl -X POST http://localhost:8000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@empresa.co","password":"Admin1234!","nombre":"Admin"}'
-```
-
-### 4. Verificar
-
-```bash
-# Landing pública (sin auth)
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000     # → 200
-
-# API healthy
-curl http://localhost:8000/health                                  # → {"status":"ok"}
-
-# PWA manifest
-curl http://localhost:3000/manifest.json | python3 -m json.tool   # → JSON válido
-```
+| Streamlit | http://localhost:8501 |
 
 ---
 
@@ -307,271 +238,235 @@ curl http://localhost:3000/manifest.json | python3 -m json.tool   # → JSON vá
 
 | Variable | Descripción | Requerida |
 |----------|-------------|-----------|
-| `DATABASE_URL` | Conexión PostgreSQL | ✅ |
+| `DATABASE_URL` | Conexión PostgreSQL (Neon/local) | ✅ |
 | `SECRET_KEY` | Firma JWT (mín. 32 chars) | ✅ |
 | `GROQ_API_KEY` | API key Groq | ✅ |
+| `BOOTSTRAP_SECRET` | Secret para endpoint de arranque | ✅ |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | ✅ |
+| `ALGORITHM` | Algoritmo JWT | No (default: HS256) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Expiración access token | No (default: 30) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Expiración refresh token | No (default: 7) |
+| `TAXOPS_SUPERADMIN_EMAILS` | Emails con acceso superadmin | No |
 
 ### Frontend (`taxops-web/.env.local`)
 
 | Variable | Descripción | Requerida |
 |----------|-------------|-----------|
 | `NEXT_PUBLIC_API_URL` | URL pública de la API | ✅ |
-| `INTERNAL_API_URL` | URL interna Docker/Railway | ✅ |
-| `NEXTAUTH_SECRET` | Firma de sesión Next.js | ✅ |
 
 ---
 
 ## API Reference
 
-Documentación interactiva completa: `http://localhost:8000/docs` (Swagger UI)
+Documentación interactiva completa: [https://taxops-api.onrender.com/docs](https://taxops-api.onrender.com/docs)
 
 ### Auth
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/auth/token` | Login → access + refresh token |
-| POST | `/auth/refresh` | Renovar access token |
-| POST | `/auth/register` | Crear usuario |
+| POST | `/auth/login` | Login → access + refresh token |
+| POST | `/auth/register` | Crear organización + usuario owner |
 | GET | `/auth/me` | Perfil del usuario autenticado |
 
-### Nómina
+### Admin
 
-| Método | Endpoint | Body / Params | Descripción |
-|--------|----------|---------------|-------------|
-| GET | `/nomina/parametros` | — | Parámetros legales 2026 |
-| POST | `/nomina/mensual` | `EntradaNomina` JSON | Calcular nómina mensual |
-| POST | `/nomina/liquidacion` | `EntradaLiquidacion` JSON | Calcular liquidación |
-| POST | `/nomina/export` | `{tipo, ...campos}` | Excel nómina o liquidación |
-| POST | `/nomina/export-pdf` | `{tipo, ...campos}` | PDF nómina o liquidación |
-| POST | `/nomina/import-batch` | `multipart/form-data file=` | Importar Excel/CSV → JSON |
-| POST | `/nomina/export-batch` | `{rows: [...]}` | Excel resultados batch |
+| Método | Endpoint | Guard | Descripción |
+|--------|----------|-------|-------------|
+| GET | `/admin/stats` | require_admin | Dashboard KPIs |
+| GET/POST | `/admin/users` | require_admin | Listar / crear usuarios |
+| DELETE | `/admin/users/{id}/permanent` | require_owner | Eliminar usuario |
+| GET/POST | `/admin/groups` | require_admin/owner | CRUD grupos |
+| GET | `/admin/audit-logs` | require_admin | Logs de auditoría |
 
-**`EntradaNomina` campos principales:**
+### Calendario
 
-```json
-{
-  "salario_basico": 1750905,
-  "dias_trabajados": 30,
-  "clase_riesgo_arl": 1,
-  "tipo_salario": "ordinario",
-  "hed": 0, "hen": 0, "rn": 0, "hod": 0, "hedd": 0, "hend": 0, "rnd": 0,
-  "bonificaciones_salariales": 0,
-  "comisiones": 0,
-  "otros_no_salariales": 0,
-  "retencion_fuente": 0,
-  "otras_deducciones": 0
-}
-```
-
-### Facturas
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/facturas/upload` | Subir PDF/XML DIAN (multipart) |
-| GET | `/facturas/` | Listar facturas del tenant |
-| DELETE | `/facturas/{id}` | Eliminar factura |
-| POST | `/facturas/export` | Excel 3 hojas |
-
-### Chatbot
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/chatbot/mensaje` | Enviar mensaje |
-| GET | `/chatbot/historial` | Historial de la sesión |
-| DELETE | `/chatbot/historial` | Limpiar historial |
+| Método | Endpoint | Guard | Descripción |
+|--------|----------|-------|-------------|
+| GET | `/calendario/eventos` | get_current_user | Eventos DIAN del año en curso |
+| PUT | `/calendario/eventos` | require_superadmin | Reemplazar todos los eventos |
+| POST | `/calendario/eventos` | require_superadmin | Agregar evento |
+| DELETE | `/calendario/eventos/{id}` | require_superadmin | Eliminar evento |
 
 ---
 
-## Despliegue en Railway
+## Despliegue (Render + Vercel)
 
-### Estructura de servicios
-
-```
-GitHub repo (main)
-├── Servicio: api
-│   ├── Dockerfile: api/Dockerfile-api
-│   ├── Root directory: /
-│   └── Env vars: SECRET_KEY, GROQ_API_KEY
-│       DATABASE_URL ← inyectado por el plugin PostgreSQL
-│
-├── Servicio: web
-│   ├── Dockerfile: taxops-web/Dockerfile
-│   ├── Root directory: taxops-web/
-│   └── Env vars: NEXT_PUBLIC_API_URL (URL pública del servicio api)
-│                INTERNAL_API_URL, NEXTAUTH_SECRET
-│
-└── Plugin: PostgreSQL
-    └── DATABASE_URL → inyectado automáticamente al servicio api
-```
-
-### Pasos
-
-1. Crear proyecto en [railway.app](https://railway.app)
-2. Add plugin → **PostgreSQL**
-3. Add service → GitHub → este repo → configurar servicio **api**:
-   - Dockerfile path: `api/Dockerfile-api`
-   - Variables: `SECRET_KEY`, `GROQ_API_KEY`
-4. Add service → GitHub → este repo → configurar servicio **web**:
-   - Root directory: `taxops-web`
-   - Variables: `NEXT_PUBLIC_API_URL`, `NEXTAUTH_SECRET`
-5. Push a `main` → Railway hace rebuild automático
-
-### Health checks Railway
+### Render — API
 
 ```
-GET /health         → {"status":"ok","version":"1.0.0"}   (API)
-GET /manifest.json  → PWA manifest válido                  (Web)
+Repo: ABA-projects/TaxOps-11 / branch: main
+Dockerfile: api/Dockerfile-api
+URL: https://taxops-api.onrender.com
 ```
+
+**Variables de entorno requeridas en Render:**
+
+| Variable | Descripción |
+|----------|-------------|
+| `DATABASE_URL` | Conexión Neon PostgreSQL |
+| `SECRET_KEY` | Clave JWT |
+| `GROQ_API_KEY` | API key Groq |
+| `BOOTSTRAP_SECRET` | Secret de arranque |
+| `ALLOWED_ORIGINS` | `https://tax-ops-11.vercel.app,http://localhost:3000` |
+
+Alembic corre automáticamente en el startup del contenedor (`api/main.py` llama `alembic upgrade head`).
+
+### Vercel — Frontend
+
+```
+Repo: ABA-projects/TaxOps-11 / branch: main
+Root Directory: taxops-web
+Framework: Next.js
+URL: https://tax-ops-11.vercel.app
+```
+
+**Variables de entorno requeridas en Vercel:**
+
+| Variable | Valor |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://taxops-api.onrender.com` |
+
+### CI/CD
+
+- Push a `main` → Vercel redeploya automáticamente (webhook GitHub)
+- Push a `main` → Render redeploya automáticamente (webhook GitHub)
+- `.github/workflows/ci.yml` — flake8+mypy (api-lint), pytest (api-test), ESLint+tsc (web-lint), next build (web-build)
 
 ---
 
 ## Estructura del repositorio
 
 ```
-proyecto-facturas/
+TaxOps-11/
 ├── api/                          # FastAPI backend
 │   ├── Dockerfile-api
-│   ├── main.py                   # App, CORS, routers, lifespan
-│   ├── dependencies.py           # get_current_user, get_db
-│   ├── schemas.py                # Pydantic schemas
+│   ├── main.py                   # App, CORS, routers, Alembic startup
 │   ├── requirements-api.txt
 │   ├── .env.example
-│   ├── core/
-│   │   ├── config.py             # Settings (pydantic-settings)
-│   │   └── security.py           # JWT, bcrypt
-│   ├── alembic/                  # Migraciones de BD
-│   │   ├── env.py                # Lee DATABASE_URL de settings
-│   │   └── versions/001_initial_schema.py
-│   ├── alembic.ini               # Config Alembic (cd api/ && alembic upgrade head)
+│   ├── alembic/                  # Migraciones DB
+│   ├── core/                     # config.py, security.py
+│   ├── data/
+│   │   └── calendario_2026.json  # 31 eventos DIAN (fuente de verdad)
 │   └── routers/
 │       ├── auth.py
-│       ├── nomina.py             # 7 endpoints nómina
-│       ├── invoices.py
+│       ├── admin.py
+│       ├── nomina.py
+│       ├── facturas.py
 │       ├── exogenas.py
 │       ├── chatbot.py
-│       └── admin.py
+│       └── calendario.py
 │
 ├── taxops-web/                   # Next.js 15.3 frontend
-│   ├── Dockerfile
+│   ├── vercel.json               # { "framework": "nextjs" }
 │   ├── next.config.ts
-│   ├── tailwind.config.ts        # brand-orange #E05519, brand-navy #1A3A5C
-│   ├── middleware.ts             # Auth gate
-│   ├── public/
-│   │   └── manifest.json         # PWA manifest
+│   ├── middleware.ts             # Auth gate JWT
 │   ├── app/
 │   │   ├── page.tsx              # Landing pública
-│   │   ├── login/page.tsx
-│   │   ├── layout.tsx            # Root layout + PWA meta tags
-│   │   ├── api/auth/             # login / logout / session routes
-│   │   └── (app)/                # Rutas autenticadas
-│   │       ├── layout.tsx        # Sidebar + Header
-│   │       ├── dashboard/page.tsx
-│   │       ├── nomina/page.tsx   # 4 tabs, presets, batch
-│   │       ├── calendario/page.tsx
-│   │       ├── facturas/page.tsx
-│   │       ├── exogenas/page.tsx
-│   │       └── chatbot/page.tsx
+│   │   ├── login/
+│   │   ├── api/auth/             # login / logout / session / callback
+│   │   └── (app)/               # Rutas autenticadas
+│   │       ├── dashboard/
+│   │       ├── nomina/
+│   │       ├── calendario/
+│   │       ├── facturas/
+│   │       ├── exogenas/
+│   │       ├── chatbot/
+│   │       ├── admin/
+│   │       └── perfil/
 │   ├── components/
-│   │   ├── PageChatbot.tsx       # Chatbot embebible
-│   │   └── layout/
-│   │       ├── sidebar.tsx       # Nav lateral con CalendarDays
-│   │       └── header.tsx        # ThemeToggle + NotificationBell
 │   └── lib/
-│       ├── api.ts                # useApi: get/post/postForm/patch/del
-│       └── auth.tsx              # Auth context
+│
+├── pipeline/                     # Procesamiento facturas DIAN
+│   ├── extractor.py              # PDF/XML → dict (thread-safe)
+│   ├── validator.py              # CUFE, NIT, cuadre
+│   ├── prorateo.py               # Art. 490 ET
+│   ├── excel_writer.py           # Workbook 3 hojas
+│   └── autorretenedores.txt      # 3.287 NITs DIAN (feb 2026)
+│
+├── exogenas/
+│   └── extractor.py             # Certificados retención (12+ layouts)
 │
 ├── services/
-│   ├── nomina.py                 # Lógica CST 2026 (calcular_nomina, calcular_liquidacion)
-│   └── processor.py             # Pipeline facturas
+│   ├── processor.py             # Orquestación pipeline facturas
+│   ├── processor_exogenas.py    # Orquestación pipeline exógenas
+│   ├── chatbot.py               # Multi-provider (Groq/OpenAI/Anthropic/Google)
+│   └── nomina.py                # Cálculos CST 2026
 │
-├── extractor.py                  # PDF/XML DIAN → dict
-├── validator.py                  # CUFE, NIT, cuadre
-├── prorateo.py                   # Art. 490 ET
-├── autorretenedores.txt          # 3.287 NITs DIAN (feb 2026)
-├── docker-compose.yml
-├── docs/
-│   ├── ARQUITECTURA.md
-│   ├── API.md
-│   ├── DESPLIEGUE.md
-│   ├── TaxOps-Design-Brief.md
-│   └── TaxOps-Logo-Horizontal.svg
+├── db/
+│   ├── init.sql                 # Schema multi-tenant completo
+│   └── database.py              # Capa SQLAlchemy (degraded mode)
 │
-├── Home.py, pages/               # ⚠️ LEGACY — app Streamlit original (no usar en prod)
-│                                 #   El stack productivo es FastAPI + Next.js (api/ + taxops-web/)
-│
+├── manage.py                    # CLI: init-db, create-org
+├── home_gate.py                 # Auth gate Streamlit (local/SaaS)
+├── Home.py                      # Streamlit landing (legacy)
+├── render.yaml                  # Render deployment config
+├── vercel.json                  # { "framework": "nextjs" }
+├── requirements.txt             # Dependencias Streamlit
 └── tests/
-    ├── test_extractor.py         # 44 tests
-    ├── test_validator.py         # 19 tests
-    ├── test_prorateo.py          # 12 tests
-    ├── test_chatbot.py           # 11 tests
-    └── test_e2e.py               # 32 tests (requieren PDFs)
+    ├── test_extractor.py        # 44 tests
+    ├── test_validator.py        # 19 tests
+    ├── test_prorateo.py         # 12 tests
+    ├── test_chatbot.py          # 11 tests
+    ├── test_e2e.py              # 32 tests (requieren PDFs)
+    ├── test_auth.py
+    ├── test_home_login_gate.py
+    ├── test_manage.py
+    ├── test_database_lazy.py
+    ├── test_get_org_id.py
+    ├── test_processor_db.py
+    └── test_processor_exogenas_db.py
 ```
 
 ---
 
 ## Roadmap
 
-### ✅ v1.0 MVP — Implementado
+### ✅ v1.0 — Implementado
 
-- [x] Landing page pública con pricing mensual/anual
-- [x] Autenticación JWT (login/logout/refresh/cookies httpOnly)
+- [x] Autenticación JWT multi-tenant (login/logout/refresh/cookies httpOnly)
 - [x] Dashboard con KPIs y quick actions
 - [x] Nómina mensual CST 2026 (parafiscales, HE, exoneración SENA/ICBF)
 - [x] Liquidación definitiva (cesantías, prima, vacaciones, indemnización)
-- [x] Presets SMLMV con selector visual
-- [x] Export nómina a Excel y PDF (ReportLab)
-- [x] Directorio de empleados (localStorage)
-- [x] Batch import desde Excel/CSV + export batch Excel
-- [x] Calendario DIAN 2026 (17 eventos, filtros, export ICS)
-- [x] Notification bell con alertas 30 días (urgencia por color)
-- [x] Chatbot IA (Groq llama-3.3-70b) + PageChatbot embebible
-- [x] Facturas DIAN PDF/XML (extracción, validación, deduplicación)
-- [x] Exógenas Formato 1003
-- [x] Prorrateo IVA Art. 490 ET
-- [x] PWA manifest (installable)
-- [x] Dark mode (ThemeToggle, localStorage persistencia)
-- [x] Docker Compose local + Railway producción
+- [x] Export nómina Excel y PDF (ReportLab)
+- [x] Batch import empleados desde Excel/CSV
+- [x] Calendario DIAN 2026 (31 eventos, filtros, export ICS)
+- [x] Notification bell con alertas 30 días
+- [x] Chatbot IA (Groq) embebible por módulo
+- [x] Facturas DIAN PDF/XML (extracción, validación, prorrateo, deduplicación)
+- [x] Exógenas Formato 1003 (12+ layouts)
+- [x] Admin panel (usuarios, grupos, audit logs)
+- [x] Deploy Render (API) + Vercel (Frontend)
+- [x] CI/CD automático en push a main
 
 ### 🚧 v1.1 — Próximo
 
-- [ ] Iconos PWA (`/public/icons/icon-192.png`, `icon-512.png`)
-- [ ] Plantilla Excel descargable para batch import nómina
-- [ ] Persistencia empleados en BD (actualmente localStorage)
-- [ ] Email alerts vencimientos DIAN (Resend.com)
-- [ ] Google Calendar OAuth sync
+- [ ] Rate limiting por organización
+- [ ] Invitaciones por email (hoy el owner crea usuarios directamente)
+- [ ] Permisos por grupo (módulos bloqueados en frontend)
+- [ ] Script auto-update calendario DIAN (parsear PDF DIAN anual)
+- [ ] Fixes extractor exógenas (5 layouts pendientes)
 
 ### 🔮 v2.0 — Futuro
 
-- [ ] Multi-empresa / multi-tenant por NIT
+- [ ] Multi-empresa / clientes por contador
 - [ ] ZIP batch upload de facturas
-- [ ] Integración ERP (SIIGO API / Helisa)
-- [ ] PayU Colombia gateway
+- [ ] Integración ERP (SIIGO / Helisa)
 - [ ] App móvil (React Native / Expo)
 
 ---
 
-## Marca
-
-| Token | Valor |
-|-------|-------|
-| `brand-orange` | `#E05519` |
-| `brand-navy` | `#1A3A5C` |
-| Fuente | Inter (Google Fonts) |
-| Logos | `docs/TaxOps-Logo-Horizontal.svg` |
-
----
-
-## Tests (pipeline Python)
+## Tests
 
 ```bash
-# Solo unitarios (sin PDFs)
-python3 -m pytest tests/test_extractor.py tests/test_validator.py \
-                  tests/test_prorateo.py tests/test_chatbot.py -v
+# Unitarios (sin PDFs ni DB)
+python -m pytest tests/test_extractor.py tests/test_validator.py \
+                 tests/test_prorateo.py tests/test_chatbot.py -v
+
+# End-to-end (requieren PDFs en pipeline/)
+python -m pytest tests/test_e2e.py -v
 
 # Con cobertura
-python3 -m pytest --cov=. --cov-report=term-missing
+python -m pytest --cov=. --cov-report=term-missing
 ```
 
 ---

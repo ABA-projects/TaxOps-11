@@ -5,11 +5,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install dependencies
+# Install dependencies (Streamlit app)
 pip install -r requirements.txt
+
+# Install as editable package (exposes `taxops` CLI entry point)
+pip install -e .
 
 # Run Streamlit app (entry point: Home.py)
 python -m streamlit run Home.py
+
+# Run FastAPI server (from api/ directory)
+cd api && uvicorn main:app --reload --port 8000
+# API docs at http://localhost:8000/docs
+
+# Run Next.js frontend
+cd taxops-web && npm install && npm run dev   # http://localhost:3000
+cd taxops-web && npm run build && npm run lint
+
+# DB management (requires DATABASE_URL env var)
+python manage.py init-db
+python manage.py create-org --name "Firma ABC" --email admin@firma.com --password secret123
 
 # Run CLI processor
 python main.py
@@ -19,49 +34,60 @@ python main.py --workers 8
 # Run file watcher (requires: pip install watchdog>=4.0.0)
 python watcher.py
 
-# Docker — desarrollo local completo (app + PostgreSQL + Adminer)
-cp .env.example .env          # rellenar POSTGRES_PASSWORD y GROQ_API_KEY
-docker-compose up --build     # primera vez (~3 min)
-docker-compose up             # siguientes veces
-docker-compose down -v        # destruir incluyendo volumen postgres
-
-# URLs locales Docker
-#   App:     http://localhost:8501
-#   Adminer: http://localhost:8080  (Server: db, User: taxops)
-
 # Run tests
 python -m pytest
 python -m pytest tests/test_extractor.py tests/test_validator.py tests/test_prorateo.py tests/test_chatbot.py
-python -m pytest tests/test_e2e.py -v    # requiere PDFs en facturas/
+python -m pytest tests/test_e2e.py -v    # requires PDFs in facturas/
+python -m pytest tests/test_extractor.py::TestClass::test_name -v  # single test
 python -m pytest --cov=. --cov-report=term-missing
 ```
+
+## Deployment
+
+- **API (Render)**: `render.yaml` deploys `api/Dockerfile-api` as a Docker web service.
+- **Frontend (Vercel)**: `taxops-web/` deploys to Vercel. `INTERNAL_API_URL` is baked at build time; fallback: `NEXT_PUBLIC_API_URL` → `http://localhost:8000`.
+- **CI/CD**: `.github/workflows/ci.yml` runs flake8+mypy (api-lint), pytest (api-test), ESLint+tsc (web-lint), next build (web-build) on push/PR to main. `.github/workflows/deploy.yml` triggers Railway redeploy when CI passes.
+- **Alembic**: migrations run automatically on API startup (`api/main.py` calls `alembic upgrade head`). Manual: `cd api && alembic upgrade head`.
+
+## Auth modes
+
+The app has two runtime modes:
+
+- **Local/demo** — `DATABASE_URL` not set. No authentication required. Streamlit app runs without login gate.
+- **SaaS** — `DATABASE_URL` set. `home_gate.py:login_required()` returns `True`; `Home.py` enforces auth via JWT session stored in `st.session_state["auth"]`.
+
+FastAPI always requires auth (JWT Bearer). Required env vars for SaaS: see `api/.env.example`.
 
 ## Architecture
 
 TaxOps procesa facturas electrónicas DIAN (PDF/XML) colombianas en un pipeline:
-`facturas/` → `facturas/extractor.py` → `validator.py` → `prorateo.py` → `excel_writer.py` / PostgreSQL
+`pipeline/extractor.py` → `pipeline/validator.py` → `pipeline/prorateo.py` → `pipeline/excel_writer.py` / PostgreSQL
 
-**Stack:** FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · Docker · Railway
+**Stack:** Streamlit · FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · Render · Vercel
 
 ### Module responsibilities
 
-- **`facturas/extractor.py`** — Parsing de documentos. `extract_one(path)` es el entry point principal (thread-safe). Despacha a `extract_xml()` o `extract_pdf()` por extensión. XML tiene prioridad cuando coexisten ambos. Carga `autorretenedores.txt` al inicio como frozenset O(1). Fallback de fecha desde nombre de carpeta (`_date_from_folder`).
+- **`pipeline/extractor.py`** — Parsing de documentos. `extract_one(path)` es el entry point principal (thread-safe). Despacha a `extract_xml()` o `extract_pdf()` por extensión. XML tiene prioridad cuando coexisten ambos. Carga `autorretenedores.txt` al inicio como frozenset O(1). Fallback de fecha desde nombre de carpeta (`_date_from_folder`).
 
-- **`facturas/validator.py`** — Validación stateless sobre DataFrame. `validate()` agrega columnas `validacion` (OK/ERROR) y `observacion`. Verifica: formato CUFE/CUDE (96 hex), duplicados, formato NIT, subtotal+IVA≈total (tolerancia $1 COP), campos obligatorios vacíos, mandato/peaje con IVA.
+- **`pipeline/validator.py`** — Validación stateless sobre DataFrame. `validate()` agrega columnas `validacion` (OK/ERROR) y `observacion`. Verifica: formato CUFE/CUDE (96 hex), duplicados, formato NIT, subtotal+IVA≈total (tolerancia $1 COP), campos obligatorios vacíos, mandato/peaje con IVA.
 
-- **`facturas/prorateo.py`** — Prorrateo IVA Art. 490 E.T. `calcular_prorateo()` recibe dicts `{YYYY-MM: float}` para gravados/excluidos. Mandatos siempre van a no-deducible. Notas Crédito tienen signo negativo → reducen automáticamente el mes. `calcular_prorateo_simple()` retorna 100% deducible con columna de advertencia.
+- **`pipeline/prorateo.py`** — Prorrateo IVA Art. 490 E.T. `calcular_prorateo()` recibe dicts `{YYYY-MM: float}` para gravados/excluidos. Mandatos siempre van a no-deducible. Notas Crédito tienen signo negativo → reducen automáticamente el mes. `calcular_prorateo_simple()` retorna 100% deducible con columna de advertencia.
 
-- **`facturas/excel_writer.py`** — Escribe el workbook de 3 hojas (BASE_DATOS, VALIDACION, PRORRATEO_IVA). Colores en VALIDACION: rojo=ERROR, verde=OK. Columnas de dinero con formato `#,##0.00`.
+- **`pipeline/excel_writer.py`** — Escribe el workbook de 3 hojas (BASE_DATOS, VALIDACION, PRORRATEO_IVA). Colores en VALIDACION: rojo=ERROR, verde=OK. Columnas de dinero con formato `#,##0.00`.
 
 - **`main.py`** — CLI via `argparse`. Deduplica pares PDF/XML en `_resolver_archivos()` antes del paralelismo. Procesa con `ThreadPoolExecutor`. Log por archivo; progreso cada 50 archivos.
 
-- **`watcher.py`** — Watcher local con `watchdog` (no incluido en requirements.txt cloud). Monitorea `facturas/` recursivamente. Debounce: 10s. Espera 5s al detectar nuevo archivo. Requiere `pip install watchdog>=4.0.0`.
+- **`manage.py`** — Operator CLI. `init-db` corre `db/init.sql` directamente vía raw psycopg2 (no SQLAlchemy text, que para en el primer `;`). `create-org` crea organización + usuario owner.
 
-- **`Home.py`** — Landing page TaxOps. Usa `utils/theme.py` para Dark/Light/System. Botones CTA con `st.switch_page()`.
+- **`home_gate.py`** — Helpers puros sin Streamlit para la compuerta de login. `login_required()` devuelve `True` cuando `DATABASE_URL` está set. `get_auth_session()` valida que `st.session_state["auth"]` tenga las 4 claves requeridas (`user_id`, `org_id`, `role`, `email`).
 
 - **`services/processor.py`** — Orquestación UI-agnóstica: extracción → validación → prorrateo → insert DB. `procesar()` devuelve `ResultadoProcesamiento` con los 3 DataFrames. Integra `db/database.py` para deduplicación por CUFE.
 
+- **`services/processor_exogenas.py`** — Equivalente de `processor.py` para certificados de retención. Orquesta `exogenas/extractor.py` → DB.
+
 - **`services/chatbot.py`** — Accounting Assistant multi-provider. Soporta Groq, OpenAI, Anthropic, Google. Selección dinámica de modelo. Tool use: `consultar_iva_mes`, `top_proveedores`, `buscar_factura`, `resumen_errores`, `resumen_general`.
+
+- **`services/nomina.py`** — Procesador de nómina electrónica DIAN.
 
 - **`utils/theme.py`** — Sistema de temas Dark/Light/System. `apply_theme()` inyecta CSS. `theme_selector()` muestra el radio en sidebar. Paletas `_DARK` / `_LIGHT` con tokens de color TaxOps.
 
@@ -69,9 +95,7 @@ TaxOps procesa facturas electrónicas DIAN (PDF/XML) colombianas en un pipeline:
 
 - **`db/init.sql`** — Schema PostgreSQL multi-tenant: `organizations`, `users` (con `deleted_at` soft-hard delete), `clients`, `invoices`, `processing_sessions`, `autorretenedores`, `ingresos_prorateo`, `groups`, `user_groups`, `audit_logs`. UUID como PK, índices GIN trigram en campos de búsqueda.
 
-- **`facturas/autorretenedores.txt`** — 3.287 NITs DIAN (corte 25/02/2026). Cargado al inicio de `facturas/extractor.py`. Para actualizar: reemplazar por nuevo archivo NIT-por-línea. En producción se carga desde tabla `autorretenedores` de PostgreSQL.
-
-- **`taxops-web/app/icon.svg`** — Favicon Next.js App Router (auto-detected). Logo TaxOps Tax naranja + Ops azul marino.
+- **`pipeline/autorretenedores.txt`** — 3.287 NITs DIAN (corte 25/02/2026). Cargado al inicio de `pipeline/extractor.py`. Para actualizar: reemplazar por nuevo archivo NIT-por-línea. En producción se carga desde tabla `autorretenedores` de PostgreSQL.
 
 - **`exogenas/extractor.py`** (~1090 líneas) — Extractor de certificados de retención. Entry points: `extract_many(path)` → `list[dict]`, `extract_one(path)` → `dict`. Soporta PDF (pdfplumber + pytesseract para escaneados), imágenes (pytesseract 2×), Excel (.xlsx openpyxl / .xls xlrd), Word (.docx). Layouts soportados: Bodega de Moda standard, Tennis narrativo, RETE IVA bimestral, RTE ICA 4-col, SAP bilingüe (EL BUCANERO), Mekano ERP (ENTREAGUAS), MEDIFE/IRCC, PUBLIK MAGIC paréntesis, Narrativo base, MAYORISTA, SAN JUAN DE DIOS, QUIRUSTETIC, Multi-concepto tabla.
   - `_extract_direccion`: usa word boundaries `(?<!\w)AV(?!\w)` para no capturar "GRAVABLE", "AVABLE", "CLARANTES", nombres de empresa.
@@ -149,7 +173,7 @@ autorretenedores (reemplaza autorretenedores.txt en producción)
 | POST | `/calendario/eventos` | require_superadmin | Agrega un evento individual |
 | DELETE | `/calendario/eventos/{id}` | require_superadmin | Elimina un evento por ID |
 
-Guards: `get_current_user` → `require_admin` (owner+admin) → `require_owner` (solo owner) → `require_superadmin` (emails en TAXOPS_SUPERADMIN_EMAILS)
+Guards: `get_current_user` → `require_admin` (owner+admin) → `require_owner` (solo owner) → `require_superadmin` (emails en `TAXOPS_SUPERADMIN_EMAILS`)
 
 ### Key regex patterns
 
@@ -169,25 +193,19 @@ Bug crítico resuelto: `_search_money_near(text, "IVA", line_start=True)` — re
 
 ```
 tests/
-├── test_extractor.py   # 44 unit tests — funciones puras + mocked PDF
-├── test_validator.py   # 19 unit tests — reglas de validación
-├── test_prorateo.py    # 12 unit tests — Art. 490 ET
-├── test_chatbot.py     # 11 unit tests — sin llamar API real
-└── test_e2e.py         # 32 end-to-end (se saltan si no hay PDFs)
+├── test_extractor.py          # 44 unit tests — funciones puras + mocked PDF
+├── test_validator.py          # 19 unit tests — reglas de validación
+├── test_prorateo.py           # 12 unit tests — Art. 490 ET
+├── test_chatbot.py            # 11 unit tests — sin llamar API real
+├── test_e2e.py                # 32 end-to-end (se saltan si no hay PDFs)
+├── test_auth.py               # auth helpers y JWT
+├── test_home_login_gate.py    # home_gate.py sin Streamlit
+├── test_manage.py             # manage.py CLI (init-db, create-org)
+├── test_database_lazy.py      # db/database.py lazy-load / degraded mode
+├── test_get_org_id.py         # utils/org_id.py
+├── test_processor_db.py       # services/processor.py con DB
+└── test_processor_exogenas_db.py  # services/processor_exogenas.py con DB
 ```
-
-### CI/CD
-
-- **`.github/workflows/ci.yml`** — flake8 + mypy (api-lint), pytest pipeline tests (api-test), ESLint + tsc (web-lint), next build (web-build). Corre en push/PR a main.
-- **`.github/workflows/deploy.yml`** — Se activa cuando CI pasa. Llama Railway GraphQL API para redeploy. **Si Railway tiene auto-deploy ON en el repo, desactivarlo para evitar doble deploy.** Secretos requeridos: `RAILWAY_API_TOKEN`, `RAILWAY_SERVICE_API_ID`, `RAILWAY_SERVICE_WEB_ID`.
-- **`taxops-web/next.config.ts`** — `INTERNAL_API_URL` se bake en build time. Tiene `.trim()` defensivo. Fallback: `NEXT_PUBLIC_API_URL` → `http://localhost:8000`.
-- **Alembic**: `api/alembic/versions/001_baseline.py` (marker), `002_audit_groups.py` (deleted_at + groups + audit_logs).
-
-### Próximos pasos
-
-- **Rate limiting**: sin throttling por organización
-- **Invitaciones por email**: hoy solo el owner puede crear usuarios directamente
-- **Permisos por grupo**: grupos tienen `modules[]` pero el frontend no bloquea rutas por grupo todavía
 
 ### Bugs pendientes — extractor exógenas (próxima sesión)
 
@@ -198,3 +216,9 @@ tests/
 5. **EL BUCANERO RTE IVA** → razón social vacía — SAP bilingüe para IVA tiene layout diferente al de renta.
 6. **COMERTEX** → razón social="GIRON", nit=3144113024 — NIT 10 dígitos clasificado como tipo_doc=31; podría ser cédula (13). Fix: verificar si hay "NIT:" o "Cédula:" en el texto.
 7. **Script auto-update calendario**: Parsear PDF DIAN anual y generar `calendario_YYYY.json` automáticamente.
+
+### Próximos pasos
+
+- **Rate limiting**: sin throttling por organización
+- **Invitaciones por email**: hoy solo el owner puede crear usuarios directamente
+- **Permisos por grupo**: grupos tienen `modules[]` pero el frontend no bloquea rutas por grupo todavía
