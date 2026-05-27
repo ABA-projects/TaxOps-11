@@ -33,7 +33,7 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
             _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
             _jobs[job_id]["current_file"] = name
 
-        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=2)
+        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=1)
 
         _jobs[job_id] = {
             "status": "done",
