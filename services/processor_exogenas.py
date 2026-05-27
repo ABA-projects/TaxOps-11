@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -75,7 +77,8 @@ def _agregar(df: pd.DataFrame) -> pd.DataFrame:
 def procesar_exogenas(
     paths: list[Path],
     on_progress: Callable[[int, int, str], None] | None = None,
-    org_id: str | None = None,          # Si se pasa, guarda en PostgreSQL
+    org_id: str | None = None,
+    workers: int = 3,
 ) -> ResultadoExogenas:
     """
     Procesa una lista de certificados de retención PDF.
@@ -85,25 +88,46 @@ def procesar_exogenas(
         paths: Lista de rutas a procesar.
         on_progress: Callback opcional (i, total, nombre) para reportar progreso.
         org_id: UUID de organización. Si se pasa, persiste en PostgreSQL.
+        workers: Número de archivos a procesar en paralelo.
     """
-    filas: list[dict] = []
-    errores = 0
-    advertencias: list[str] = []
+    total = len(paths)
+    shared: dict = {"filas": [], "errores": 0, "advertencias": [], "done": 0}
+    lock = threading.Lock()
 
-    for i, p in enumerate(paths):
-        if on_progress:
-            on_progress(i, len(paths), Path(p).name)
+    def _process_one(p: Path) -> None:
+        local_rows: list[dict] = []
+        local_warn: list[str] = []
+        local_err = 0
         try:
             rows = extract_many(p)
             for row in rows:
                 row["_archivo"] = Path(p).name
                 if row.get("error"):
-                    errores += 1
-                    advertencias.append(f"⚠️ {Path(p).name}: {row['error']}")
-                filas.append(row)
+                    local_err += 1
+                    local_warn.append(f"⚠️ {Path(p).name}: {row['error']}")
+                local_rows.append(row)
         except Exception as e:
-            errores += 1
-            advertencias.append(f"❌ {Path(p).name}: {e}")
+            local_err = 1
+            local_warn = [f"❌ {Path(p).name}: {e}"]
+        with lock:
+            shared["filas"].extend(local_rows)
+            shared["errores"] += local_err
+            shared["advertencias"].extend(local_warn)
+            shared["done"] += 1
+            if on_progress:
+                on_progress(shared["done"], total, Path(p).name)
+
+    effective_workers = min(workers, total) if total > 1 else 1
+    if effective_workers > 1:
+        with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+            list(pool.map(_process_one, paths))
+    else:
+        for p in paths:
+            _process_one(p)
+
+    filas: list[dict] = shared["filas"]
+    errores: int = shared["errores"]
+    advertencias: list[str] = shared["advertencias"]
 
     if not filas:
         return ResultadoExogenas(
