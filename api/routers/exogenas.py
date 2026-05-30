@@ -1,6 +1,7 @@
 """Exogenas router — process, list, export."""
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 import uuid
@@ -18,12 +19,35 @@ router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
 # In-memory job store — keyed by job_id, lives for the server instance lifetime
 _jobs: dict[str, dict[str, Any]] = {}
-# Limit concurrent OCR jobs to avoid OOM on free tier (extras queue automatically)
-_executor = ThreadPoolExecutor(max_workers=2)
+# One job at a time to avoid OOM on Cloud Run 2 GB (OCR is memory-intensive)
+_executor = ThreadPoolExecutor(max_workers=1)
+
+_RESULT_DIR = Path(tempfile.gettempdir()) / "taxops_jobs"
+_RESULT_DIR.mkdir(exist_ok=True)
+
+
+def _save_result(job_id: str, state: dict) -> None:
+    """Persist completed job state to /tmp so it survives minor restarts."""
+    try:
+        (_RESULT_DIR / f"{job_id}.json").write_text(
+            json.dumps(state, default=str), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def _load_result(job_id: str) -> dict | None:
+    path = _RESULT_DIR / f"{job_id}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
 
 
 def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
-    """Runs in thread pool. Writes final state to _jobs[job_id]."""
+    """Runs in thread pool. Writes final state to _jobs[job_id] and /tmp."""
     try:
         from services.processor_exogenas import procesar_exogenas
 
@@ -35,7 +59,7 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
 
         resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=2)
 
-        _jobs[job_id] = {
+        state: dict[str, Any] = {
             "status": "done",
             "progress": 100,
             "current_file": "",
@@ -49,8 +73,12 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
                 "df_1003": resultado.df_1003.fillna("").to_dict(orient="records"),
             },
         }
+        _jobs[job_id] = state
+        _save_result(job_id, state)
     except Exception as exc:
-        _jobs[job_id] = {"status": "error", "error": str(exc), "progress": 0}
+        state = {"status": "error", "error": str(exc), "progress": 0}
+        _jobs[job_id] = state
+        _save_result(job_id, state)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -104,9 +132,13 @@ async def job_status(
     job_id: str,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    if job_id not in _jobs:
-        raise HTTPException(status_code=404, detail="Job no encontrado o servidor reiniciado")
-    return _jobs[job_id]
+    if job_id in _jobs:
+        return _jobs[job_id]
+    cached = _load_result(job_id)
+    if cached:
+        _jobs[job_id] = cached  # restore into memory for subsequent polls
+        return cached
+    raise HTTPException(status_code=404, detail="Job no encontrado o servidor reiniciado")
 
 
 @router.post("/export")
