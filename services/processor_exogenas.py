@@ -99,7 +99,15 @@ def procesar_exogenas(
         local_warn: list[str] = []
         local_err = 0
         try:
-            rows = extract_many(p)
+            # Run extract_many in a sub-thread with a hard timeout so a hanging
+            # OCR call (e.g. Tesseract on a corrupt file) cannot block forever.
+            with ThreadPoolExecutor(max_workers=1) as _ex:
+                _fut = _ex.submit(extract_many, p)
+                try:
+                    rows = _fut.result(timeout=90)  # 90 s max per file
+                except Exception:
+                    _fut.cancel()
+                    raise
             for row in rows:
                 row["_archivo"] = Path(p).name
                 if row.get("error"):
