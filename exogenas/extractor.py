@@ -1448,6 +1448,21 @@ def extract_many(path: "str | Path") -> list[dict]:
     concepto, porcentaje = _detect_concepto(text, tipo_cert)
     b, r                 = _extract_amounts(text, tipo_cert, nit_hint=nit)
     r = _fix_pct_as_amount(b, r)
+    # Si encontró montos pero no el nombre/NIT del retenedor → LLM solo para esos campos
+    if b > 0 and razon == "":
+        llm_rows = _llm_extract(text, path.name)
+        if llm_rows:
+            lr0 = llm_rows[0]
+            lraz = str(lr0.get("razon_social", "") or "").strip()
+            if lraz:
+                razon = lraz
+            lnit = re.sub(r"\D", "", str(lr0.get("nit", nit) or nit))
+            if lnit and not nit:
+                nit = lnit
+            ldv = str(lr0.get("dv", dv) or dv).strip()
+            if ldv and not dv:
+                dv = ldv
+
     if b == 0 and r == 0:
         llm_rows = _llm_extract(text, path.name)
         if llm_rows:
