@@ -36,8 +36,16 @@ _COLS_1003 = [
 ]
 
 _COLS_DETALLE = [
-    "archivo", "tipo_cert", "razon_social", "nit", "dv", "tipo_doc",
-    "direccion", "ciudad_retencion", "concepto", "base", "retencion", "porcentaje", "error",
+    "archivo",
+    "concepto",
+    "porcentaje",
+    "razon_social",        # empresa que retiene
+    "nit",                 # NIT retenedor
+    "retenido_razon_social",  # empresa a quien se le practicó
+    "retenido_nit",           # NIT retenido
+    "base",
+    "retencion",
+    "tipo_cert", "tipo_doc", "dv", "direccion", "ciudad_retencion", "error",
 ]
 
 

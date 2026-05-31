@@ -1134,6 +1134,43 @@ def _fix_pct_as_amount(b: float, r: float) -> float:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _extract_retenido(text: str) -> tuple[str, str]:
+    """
+    Extrae nombre y NIT del RETENIDO (empresa a quien se le practicó la retención).
+    Busca en el encabezado del certificado: sección Señores, Retenido, A favor de, etc.
+    Retorna (razon_social, nit).
+    """
+    head = text[:3000]
+    name_pats = [
+        r"(?i)se[ñn]ores?\s*:\s*\n?\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)estimados?\s+se[ñn]ores?\s*:\s*\n?\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)retenido\s*:\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)beneficiario\s*:\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)expedido\s+a\s*:\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)a\s+favor\s+de\s*:\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+        r"(?i)practicada\s+a\s*:\s*([A-ZÁÉÍÓÚÜÑ][^\n]{5,80})",
+    ]
+    razon = ""
+    for pat in name_pats:
+        m = re.search(pat, head)
+        if m:
+            candidate = re.sub(r"[,;:\s]+$", "", m.group(1).strip())
+            if len(candidate) > 5:
+                razon = candidate
+                break
+
+    nit_ret = ""
+    if razon:
+        pos = text.find(razon)
+        if pos >= 0:
+            nearby = text[pos: pos + 300]
+            nm = re.search(r"\b([0-9]{9,10})\b", nearby)
+            if nm:
+                nit_ret = nm.group(1)
+
+    return razon, nit_ret
+
+
 def _base_row(path: Path, error: str = "") -> dict:
     """Dict base con todos los campos requeridos."""
     return {
@@ -1144,6 +1181,8 @@ def _base_row(path: Path, error: str = "") -> dict:
         "direccion": "", "ciudad_retencion": "", "concepto": "", "base": 0.0,
         "retencion": 0.0, "porcentaje": 0.0, "tipo_cert": "",
         "validacion_tasa": 0.0,
+        # Retenido (empresa a quien se le practicó la retención)
+        "retenido_razon_social": "", "retenido_nit": "",
         "es_escaneado": False,
         "fuente": "PDF", "archivo": path.name, "error": error,
     }
@@ -1328,15 +1367,19 @@ def _llm_extract(text: str, filename: str) -> list[dict] | None:
         f"ARCHIVO: {filename}\n\n"
         f"TEXTO DEL DOCUMENTO:\n{text[:6000]}\n\n"
         "CONTEXTO IMPORTANTE:\n"
-        "- El RETENEDOR es la empresa que PAGA y RETIENE el impuesto (emite el certificado).\n"
-        "- El RETENIDO es quien recibió el pago (no lo extraigas).\n"
-        "- Extrae siempre los datos del RETENEDOR y los montos retenidos.\n\n"
+        "- El RETENEDOR es la empresa que PAGA y RETIENE el impuesto (emite el certificado). "
+        "Su nombre/NIT suele aparecer en el encabezado, membrete o sección 'Retenedor:'.\n"
+        "- El RETENIDO es la empresa A QUIEN SE LE PRACTICÓ la retención. "
+        "Suele aparecer en 'Señores:', 'A:', 'Retenido:', 'Beneficiario:' o al inicio del cuerpo.\n"
+        "- Extrae AMBOS con sus NITs y también los montos.\n\n"
         "Devuelve ÚNICAMENTE un JSON array. Cada objeto representa un concepto y tiene:\n"
         '- "concepto": "RENTA", "IVA" o "ICA"\n'
-        '- "razon_social": nombre completo del RETENEDOR\n'
+        '- "razon_social": nombre completo del RETENEDOR (quien retiene)\n'
         '- "nit": NIT del RETENEDOR solo dígitos sin puntos\n'
-        '- "dv": dígito de verificación del NIT (puede ser "")\n'
+        '- "dv": dígito de verificación del NIT del retenedor (puede ser "")\n'
         '- "tipo_doc": "31" si es empresa/NIT, "13" si es persona natural/cédula\n'
+        '- "retenido_razon_social": nombre de la empresa A LA QUE SE LE PRACTICÓ la retención\n'
+        '- "retenido_nit": NIT del retenido solo dígitos sin puntos\n'
         '- "base": base gravable como número (sin puntos de miles ni $)\n'
         '- "retencion": valor retenido como número (sin puntos de miles ni $)\n'
         '- "porcentaje": porcentaje como decimal (ej: 3.5 para 3,5%)\n'
@@ -1388,11 +1431,12 @@ def extract_many(path: "str | Path") -> list[dict]:
         base["es_escaneado"] = True
         return [base]
 
-    tipo_cert      = _cert_type(text)
-    razon, nit, dv = _extract_emisor(text)
-    ciudad         = _extract_ciudad_retencion(text)
-    direccion      = _extract_direccion(text)
-    tipo_doc       = _tipo_doc_from_context(nit, text)
+    tipo_cert                    = _cert_type(text)
+    razon, nit, dv               = _extract_emisor(text)
+    ciudad                       = _extract_ciudad_retencion(text)
+    direccion                    = _extract_direccion(text)
+    tipo_doc                     = _tipo_doc_from_context(nit, text)
+    retenido_razon, retenido_nit = _extract_retenido(text)
 
     # Para persona natural (tipo_doc=13) extraer apellidos y nombres
     ap1 = ap2 = nom1 = otros = ""
@@ -1411,26 +1455,28 @@ def extract_many(path: "str | Path") -> list[dict]:
     def _make_row(concepto: str, porcentaje: float, b: float, r: float) -> dict:
         tasa_calc = round(r / b * 100, 2) if b else 0.0
         return {
-            "razon_social":      razon if tipo_doc == "31" else "",
-            "nit":               nit,
-            "dv":                dv,
-            "tipo_doc":          tipo_doc,
-            "primer_apellido":   ap1,
-            "segundo_apellido":  ap2,
-            "primer_nombre":     nom1,
-            "otros_nombres":     otros,
-            "direccion":         direccion,
-            "ciudad_retencion":  ciudad,
-            "concepto":          concepto,
-            "base":              b,
-            "retencion":         r,
-            "porcentaje":        porcentaje,
-            "validacion_tasa":   tasa_calc,
-            "es_escaneado":      False,
-            "tipo_cert":         tipo_cert,
-            "fuente":            fuente,
-            "archivo":           path.name,
-            "error":             "",
+            "razon_social":           razon if tipo_doc == "31" else "",
+            "nit":                    nit,
+            "dv":                     dv,
+            "tipo_doc":               tipo_doc,
+            "primer_apellido":        ap1,
+            "segundo_apellido":       ap2,
+            "primer_nombre":          nom1,
+            "otros_nombres":          otros,
+            "direccion":              direccion,
+            "ciudad_retencion":       ciudad,
+            "retenido_razon_social":  retenido_razon,
+            "retenido_nit":           retenido_nit,
+            "concepto":               concepto,
+            "base":                   b,
+            "retencion":              r,
+            "porcentaje":             porcentaje,
+            "validacion_tasa":        tasa_calc,
+            "es_escaneado":           False,
+            "tipo_cert":              tipo_cert,
+            "fuente":                 fuente,
+            "archivo":                path.name,
+            "error":                  "",
         }
 
     def _ratio_ok(base_val: float, ret_val: float) -> bool:
@@ -1457,6 +1503,10 @@ def extract_many(path: "str | Path") -> list[dict]:
             row["ciudad_retencion"] = str(llm_row.get("ciudad_retencion", "") or "")
         if not row["direccion"]:
             row["direccion"] = str(llm_row.get("direccion", "") or "")
+        if not row.get("retenido_razon_social"):
+            row["retenido_razon_social"] = str(llm_row.get("retenido_razon_social", "") or "")
+        if not row.get("retenido_nit"):
+            row["retenido_nit"] = re.sub(r"\D", "", str(llm_row.get("retenido_nit", "") or ""))
 
     # ── ICA → fila única ──────────────────────────────────────────────────────
     if tipo_cert == "ICA":
@@ -1504,18 +1554,22 @@ def extract_many(path: "str | Path") -> list[dict]:
                     continue
                 lcon = str(lr.get("concepto", concepto) or concepto).upper()
                 lpct = round(fr / fb * 100, 2) if fb else float(lr.get("porcentaje", porcentaje) or porcentaje)
-                lraz = str(lr.get("razon_social", razon) or razon)
-                lnit = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
-                ldv  = str(lr.get("dv", dv) or dv).strip()
-                ltip = str(lr.get("tipo_doc", tipo_doc) or tipo_doc)
-                ldir = str(lr.get("direccion", direccion) or direccion)
-                lcdd = str(lr.get("ciudad_retencion", ciudad) or ciudad)
+                lraz  = str(lr.get("razon_social", razon) or razon)
+                lnit  = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
+                ldv   = str(lr.get("dv", dv) or dv).strip()
+                ltip  = str(lr.get("tipo_doc", tipo_doc) or tipo_doc)
+                ldir  = str(lr.get("direccion", direccion) or direccion)
+                lcdd  = str(lr.get("ciudad_retencion", ciudad) or ciudad)
+                lret_razon = str(lr.get("retenido_razon_social", retenido_razon) or retenido_razon)
+                lret_nit   = re.sub(r"\D", "", str(lr.get("retenido_nit", retenido_nit) or retenido_nit))
                 results.append({
-                    "razon_social":    lraz if ltip == "31" else "",
+                    "razon_social":          lraz if ltip == "31" else "",
                     "nit": lnit, "dv": ldv, "tipo_doc": ltip,
                     "primer_apellido": "", "segundo_apellido": "",
                     "primer_nombre":   "", "otros_nombres": "",
                     "direccion": ldir, "ciudad_retencion": lcdd,
+                    "retenido_razon_social": lret_razon,
+                    "retenido_nit":          lret_nit,
                     "concepto":    lcon,
                     "base":        fb,
                     "retencion":   fr,
