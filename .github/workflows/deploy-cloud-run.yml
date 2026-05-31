@@ -22,6 +22,17 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
+    paths:
+      # Código que va dentro de la imagen Docker → rebuild necesario
+      - 'api/**'
+      - 'pipeline/**'
+      - 'exogenas/**'
+      - 'services/**'
+      - 'db/**'
+      - 'manage.py'
+      - 'home_gate.py'
+      # El propio workflow — cambios de configuración de deploy
+      - '.github/workflows/deploy-cloud-run.yml'
 
 env:
   REGION: us-central1
@@ -75,4 +86,4 @@ jobs:
           echo "### Deploy exitoso ✅" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: $URL" >> $GITHUB_STEP_SUMMARY
           echo "- **Imagen**: \`$IMAGE\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **RAM**: 1 GB | **Timeout**: 600s | **Instancias**: máx 1" >> $GITHUB_STEP_SUMMARY
+          echo "- **RAM**: 2 GB | **Timeout**: 600s | **Instancias**: máx 1" >> $GITHUB_STEP_SUMMARY
