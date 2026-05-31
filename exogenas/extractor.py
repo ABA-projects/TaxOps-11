@@ -1433,83 +1433,117 @@ def extract_many(path: "str | Path") -> list[dict]:
             "error":             "",
         }
 
-    # ICA → fila única (va a tabla separada)
+    def _ratio_ok(base_val: float, ret_val: float) -> bool:
+        return base_val > 100 and ret_val > 0 and 0.001 < ret_val / base_val < 0.35
+
+    def _best_amounts(rb: float, rr: float, lb: float, lr_: float) -> tuple[float, float]:
+        """Elige el par (base, retencion) con ratio más válido. LLM gana en empate."""
+        r_ok = _ratio_ok(rb, rr)
+        l_ok = _ratio_ok(lb, lr_)
+        if l_ok and not r_ok:   return lb, lr_
+        if r_ok and not l_ok:   return rb, rr
+        if l_ok and r_ok:       return lb, lr_   # ambos válidos → LLM
+        return (lb or rb), (lr_ or rr)            # ninguno válido → no-cero
+
+    def _enrich_identity(row: dict, llm_row: dict) -> None:
+        """Rellena campos de identidad en `row` con lo que LLM encontró."""
+        if not row["razon_social"]:
+            row["razon_social"] = str(llm_row.get("razon_social", "") or "")
+        if not row["nit"]:
+            row["nit"] = re.sub(r"\D", "", str(llm_row.get("nit", "") or ""))
+        if not row["dv"]:
+            row["dv"] = str(llm_row.get("dv", "") or "").strip()
+        if not row["ciudad_retencion"]:
+            row["ciudad_retencion"] = str(llm_row.get("ciudad_retencion", "") or "")
+        if not row["direccion"]:
+            row["direccion"] = str(llm_row.get("direccion", "") or "")
+
+    # ── ICA → fila única ──────────────────────────────────────────────────────
     if tipo_cert == "ICA":
         b, r = _extract_amounts(text, tipo_cert, nit_hint=nit)
-        r = _fix_pct_as_amount(b, r)
-        return [_make_row("ICA", 0.0, b, r)]
+        r    = _fix_pct_as_amount(b, r)
+        fila = _make_row("ICA", 0.0, b, r)
+        llm  = _llm_extract(text, path.name) or []
+        if llm:
+            lr0 = llm[0]
+            lb  = _parse_money(str(lr0.get("base", 0)))
+            lr_ = _parse_money(str(lr0.get("retencion", 0)))
+            fb, fr        = _best_amounts(b, r, lb, lr_)
+            fila["base"]  = fb
+            fila["retencion"] = fr
+            _enrich_identity(fila, lr0)
+        return [fila]
 
-    # Intentar múltiples filas de concepto
+    # ── Multi-concepto ────────────────────────────────────────────────────────
     multi = _extract_concepto_rows(text, tipo_cert)
     if multi:
-        return [_make_row(concepto, pct, b, _fix_pct_as_amount(b, r)) for concepto, pct, b, r in multi]
+        filas = [_make_row(con, pct, mb, _fix_pct_as_amount(mb, mr))
+                 for con, pct, mb, mr in multi]
+        # LLM enriquece identidad (nombres/NIT que regex no capturó)
+        llm = _llm_extract(text, path.name) or []
+        if llm:
+            for f in filas:
+                _enrich_identity(f, llm[0])
+        return filas
 
-    # Fallback: fila única
+    # ── Fila única: ambos extractores corren, mejor resultado gana ────────────
     concepto, porcentaje = _detect_concepto(text, tipo_cert)
     b, r                 = _extract_amounts(text, tipo_cert, nit_hint=nit)
     r = _fix_pct_as_amount(b, r)
-    # Si encontró montos pero no el nombre/NIT del retenedor → LLM solo para esos campos
-    if b > 0 and razon == "":
-        llm_rows = _llm_extract(text, path.name)
-        if llm_rows:
-            lr0 = llm_rows[0]
-            lraz = str(lr0.get("razon_social", "") or "").strip()
-            if lraz:
-                razon = lraz
-            lnit = re.sub(r"\D", "", str(lr0.get("nit", nit) or nit))
-            if lnit and not nit:
-                nit = lnit
-            ldv = str(lr0.get("dv", dv) or dv).strip()
-            if ldv and not dv:
-                dv = ldv
 
-    if b == 0 and r == 0:
-        llm_rows = _llm_extract(text, path.name)
-        if llm_rows:
-            results: list[dict] = []
-            for lr in llm_rows:
-                try:
-                    lb  = _parse_money(str(lr.get("base", 0)))
-                    lr_ = _parse_money(str(lr.get("retencion", 0)))
-                    if lb == 0 and lr_ == 0:
-                        continue
-                    lcon = str(lr.get("concepto", concepto) or concepto).upper()
-                    lpct = float(lr.get("porcentaje", 0) or 0)
-                    lraz = str(lr.get("razon_social", razon) or razon)
-                    lnit = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
-                    ldv  = str(lr.get("dv", dv) or dv).strip()
-                    ltip = str(lr.get("tipo_doc", tipo_doc) or tipo_doc)
-                    ldir = str(lr.get("direccion", direccion) or direccion)
-                    lcdd = str(lr.get("ciudad_retencion", ciudad) or ciudad)
-                    results.append({
-                        "razon_social":    lraz if ltip == "31" else "",
-                        "nit": lnit, "dv": ldv, "tipo_doc": ltip,
-                        "primer_apellido": "", "segundo_apellido": "",
-                        "primer_nombre":   "", "otros_nombres": "",
-                        "direccion": ldir, "ciudad_retencion": lcdd,
-                        "concepto":    lcon,
-                        "base":        lb,
-                        "retencion":   lr_,
-                        "porcentaje":  lpct,
-                        "validacion_tasa": round(lr_ / lb * 100, 2) if lb else 0.0,
-                        "es_escaneado": False,
-                        "tipo_cert":   tipo_cert,
-                        "fuente":      fuente,
-                        "archivo":     path.name,
-                        "error":       "",
-                    })
-                except Exception:
+    llm_rows = _llm_extract(text, path.name) or []
+
+    if llm_rows:
+        results: list[dict] = []
+        for lr in llm_rows:
+            try:
+                lb   = _parse_money(str(lr.get("base", 0)))
+                lr_  = _parse_money(str(lr.get("retencion", 0)))
+                fb, fr = _best_amounts(b, r, lb, lr_)
+                if fb == 0 and fr == 0:
                     continue
-            if results:
-                return results
-        base["error"] = "No se encontraron montos"
-        base.update({"razon_social": razon if tipo_doc == "31" else "",
-                     "nit": nit, "dv": dv, "tipo_doc": tipo_doc,
-                     "primer_apellido": ap1, "segundo_apellido": ap2,
-                     "primer_nombre": nom1, "otros_nombres": otros,
-                     "ciudad_retencion": ciudad, "tipo_cert": tipo_cert})
-        return [base]
-    return [_make_row(concepto, porcentaje, b, r)]
+                lcon = str(lr.get("concepto", concepto) or concepto).upper()
+                lpct = round(fr / fb * 100, 2) if fb else float(lr.get("porcentaje", porcentaje) or porcentaje)
+                lraz = str(lr.get("razon_social", razon) or razon)
+                lnit = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
+                ldv  = str(lr.get("dv", dv) or dv).strip()
+                ltip = str(lr.get("tipo_doc", tipo_doc) or tipo_doc)
+                ldir = str(lr.get("direccion", direccion) or direccion)
+                lcdd = str(lr.get("ciudad_retencion", ciudad) or ciudad)
+                results.append({
+                    "razon_social":    lraz if ltip == "31" else "",
+                    "nit": lnit, "dv": ldv, "tipo_doc": ltip,
+                    "primer_apellido": "", "segundo_apellido": "",
+                    "primer_nombre":   "", "otros_nombres": "",
+                    "direccion": ldir, "ciudad_retencion": lcdd,
+                    "concepto":    lcon,
+                    "base":        fb,
+                    "retencion":   fr,
+                    "porcentaje":  lpct,
+                    "validacion_tasa": lpct,
+                    "es_escaneado": False,
+                    "tipo_cert":   tipo_cert,
+                    "fuente":      fuente,
+                    "archivo":     path.name,
+                    "error":       "",
+                })
+            except Exception:
+                continue
+        if results:
+            return results
+
+    # LLM no aportó → usar regex si tiene montos
+    if b > 0:
+        return [_make_row(concepto, porcentaje, b, r)]
+
+    # Sin montos en ningún extractor
+    base["error"] = "No se encontraron montos"
+    base.update({"razon_social": razon if tipo_doc == "31" else "",
+                 "nit": nit, "dv": dv, "tipo_doc": tipo_doc,
+                 "primer_apellido": ap1, "segundo_apellido": ap2,
+                 "primer_nombre": nom1, "otros_nombres": otros,
+                 "ciudad_retencion": ciudad, "tipo_cert": tipo_cert})
+    return [base]
 
 
 def extract_one(path: "str | Path") -> dict:
