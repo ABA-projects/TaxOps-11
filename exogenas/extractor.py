@@ -1177,7 +1177,7 @@ def _ocr_pdf_pages(path: Path) -> tuple[str, bool]:
         with pdfplumber.open(path) as pdf:
             for page in pdf.pages[:_MAX_PAGES]:
                 img = page.to_image(resolution=200).original
-                t = pytesseract.image_to_string(img, lang="spa")
+                t = pytesseract.image_to_string(img, lang="spa", timeout=60)
                 if t.strip():
                     parts.append(t)
         text = "\n".join(parts)
@@ -1282,7 +1282,7 @@ def _read_image(path: Path) -> tuple[str, bool]:
     for variant in variants:
         for cfg in configs:
             try:
-                t = pytesseract.image_to_string(variant, lang="spa", config=cfg)
+                t = pytesseract.image_to_string(variant, lang="spa", config=cfg, timeout=60)
             except Exception:
                 continue
             if len(re.sub(r"\W+", "", t)) > len(re.sub(r"\W+", "", best)):
