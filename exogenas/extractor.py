@@ -1306,6 +1306,63 @@ def _read_text(path: Path) -> tuple[str, bool]:
     return _read_pdf(path)
 
 
+def _llm_extract(text: str, filename: str) -> list[dict] | None:
+    """
+    Fallback LLM via Groq cuando los patrones regex no encontraron montos.
+    Retorna lista de dicts parciales o None si Groq no está disponible / falla.
+    """
+    import os
+    import json as _json
+
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from groq import Groq
+    except ImportError:
+        return None
+
+    prompt = (
+        f"Eres experto en contabilidad colombiana. Analiza este certificado de retención "
+        f"en la fuente y extrae TODOS los conceptos de retención presentes.\n\n"
+        f"ARCHIVO: {filename}\n\n"
+        f"TEXTO DEL DOCUMENTO:\n{text[:6000]}\n\n"
+        "CONTEXTO IMPORTANTE:\n"
+        "- El RETENEDOR es la empresa que PAGA y RETIENE el impuesto (emite el certificado).\n"
+        "- El RETENIDO es quien recibió el pago (no lo extraigas).\n"
+        "- Extrae siempre los datos del RETENEDOR y los montos retenidos.\n\n"
+        "Devuelve ÚNICAMENTE un JSON array. Cada objeto representa un concepto y tiene:\n"
+        '- "concepto": "RENTA", "IVA" o "ICA"\n'
+        '- "razon_social": nombre completo del RETENEDOR\n'
+        '- "nit": NIT del RETENEDOR solo dígitos sin puntos\n'
+        '- "dv": dígito de verificación del NIT (puede ser "")\n'
+        '- "tipo_doc": "31" si es empresa/NIT, "13" si es persona natural/cédula\n'
+        '- "base": base gravable como número (sin puntos de miles ni $)\n'
+        '- "retencion": valor retenido como número (sin puntos de miles ni $)\n'
+        '- "porcentaje": porcentaje como decimal (ej: 3.5 para 3,5%)\n'
+        '- "direccion": dirección del retenedor o ""\n'
+        '- "ciudad_retencion": ciudad donde se practicó la retención o ""\n'
+        "Si hay múltiples conceptos o períodos incluye un objeto por cada uno.\n"
+        'Si un campo no aparece usa "" o 0. Solo el JSON array, sin texto adicional.'
+    )
+
+    try:
+        client = Groq(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=1500,
+        )
+        raw = resp.choices[0].message.content.strip()
+        m = re.search(r"\[.*\]", raw, re.DOTALL)
+        if not m:
+            return None
+        return _json.loads(m.group())
+    except Exception:
+        return None
+
+
 def extract_many(path: "str | Path") -> list[dict]:
     """
     Extrae TODOS los registros de un certificado de retención.
@@ -1392,6 +1449,44 @@ def extract_many(path: "str | Path") -> list[dict]:
     b, r                 = _extract_amounts(text, tipo_cert, nit_hint=nit)
     r = _fix_pct_as_amount(b, r)
     if b == 0 and r == 0:
+        llm_rows = _llm_extract(text, path.name)
+        if llm_rows:
+            results: list[dict] = []
+            for lr in llm_rows:
+                try:
+                    lb  = _parse_money(str(lr.get("base", 0)))
+                    lr_ = _parse_money(str(lr.get("retencion", 0)))
+                    if lb == 0 and lr_ == 0:
+                        continue
+                    lcon = str(lr.get("concepto", concepto) or concepto).upper()
+                    lpct = float(lr.get("porcentaje", 0) or 0)
+                    lraz = str(lr.get("razon_social", razon) or razon)
+                    lnit = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
+                    ldv  = str(lr.get("dv", dv) or dv).strip()
+                    ltip = str(lr.get("tipo_doc", tipo_doc) or tipo_doc)
+                    ldir = str(lr.get("direccion", direccion) or direccion)
+                    lcdd = str(lr.get("ciudad_retencion", ciudad) or ciudad)
+                    results.append({
+                        "razon_social":    lraz if ltip == "31" else "",
+                        "nit": lnit, "dv": ldv, "tipo_doc": ltip,
+                        "primer_apellido": "", "segundo_apellido": "",
+                        "primer_nombre":   "", "otros_nombres": "",
+                        "direccion": ldir, "ciudad_retencion": lcdd,
+                        "concepto":    lcon,
+                        "base":        lb,
+                        "retencion":   lr_,
+                        "porcentaje":  lpct,
+                        "validacion_tasa": round(lr_ / lb * 100, 2) if lb else 0.0,
+                        "es_escaneado": False,
+                        "tipo_cert":   tipo_cert,
+                        "fuente":      fuente,
+                        "archivo":     path.name,
+                        "error":       "",
+                    })
+                except Exception:
+                    continue
+            if results:
+                return results
         base["error"] = "No se encontraron montos"
         base.update({"razon_social": razon if tipo_doc == "31" else "",
                      "nit": nit, "dv": dv, "tipo_doc": tipo_doc,
