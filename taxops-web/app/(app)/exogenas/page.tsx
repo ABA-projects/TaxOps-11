@@ -67,23 +67,52 @@ function BarRow({ label, value, max, color = "bg-brand-orange" }: { label: strin
   );
 }
 
-function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
+const COL_LABELS: Record<string, string> = {
+  concepto: "Concepto", tipo_doc: "Tipo", nit: "NIT", dv: "DV",
+  razon_social: "Razón Social", primer_apellido: "Apellido 1", segundo_apellido: "Apellido 2",
+  primer_nombre: "Nombre 1", otros_nombres: "Otros Nombres",
+  direccion: "Dirección", ciudad_retencion: "Ciudad", cod_dpto: "Dpto", cod_mpio: "Mpio",
+  base: "Base ($)", retencion: "Retención ($)", porcentaje: "% Ret",
+  retenido_razon_social: "Retenido (Empresa)", retenido_nit: "Retenido (NIT)",
+  tipo_cert: "Tipo Cert", archivo: "Archivo", error: "Error", validacion_tasa: "Tasa Real",
+};
+const MONEY_COLS = new Set(["base", "retencion"]);
+const HIDDEN_COLS = new Set(["es_escaneado", "fuente", "primer_apellido", "segundo_apellido", "primer_nombre", "otros_nombres"]);
+const PRIORITY_1003 = ["concepto","nit","dv","razon_social","base","retencion","porcentaje","ciudad_retencion","cod_dpto","cod_mpio","tipo_doc","direccion"];
+const PRIORITY_DETALLE = ["archivo","tipo_cert","nit","razon_social","concepto","base","retencion","porcentaje","ciudad_retencion","retenido_razon_social","retenido_nit","error","direccion"];
+
+function fmtCell(col: string, val: unknown): string {
+  if (MONEY_COLS.has(col)) {
+    const n = parseFloat(String(val ?? "0").replace(/[^0-9.-]/g, ""));
+    return isNaN(n) ? "" : new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+  }
+  return String(val ?? "");
+}
+
+function DataTable({ rows, priority }: { rows: Record<string, unknown>[]; priority?: string[] }) {
   if (!rows.length) return <p className="p-6 text-sm text-gray-400 text-center">Sin datos</p>;
-  const cols = Object.keys(rows[0]);
+  const allCols = Object.keys(rows[0]).filter((c) => !HIDDEN_COLS.has(c));
+  const ordered = priority
+    ? [...priority.filter((c) => allCols.includes(c)), ...allCols.filter((c) => !priority.includes(c))]
+    : allCols;
   return (
     <table className="text-xs w-full">
       <thead>
         <tr className="bg-gray-50 border-b border-gray-200">
-          {cols.map((c) => (
-            <th key={c} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{c}</th>
+          {ordered.map((c) => (
+            <th key={c} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">
+              {COL_LABELS[c] ?? c}
+            </th>
           ))}
         </tr>
       </thead>
       <tbody>
         {rows.slice(0, 300).map((row, i) => (
           <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-            {cols.map((c) => (
-              <td key={c} className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(row[c] ?? "")}</td>
+            {ordered.map((c) => (
+              <td key={c} className={`px-3 py-1.5 whitespace-nowrap ${MONEY_COLS.has(c) ? "text-right font-mono text-gray-800" : "text-gray-700"}`}>
+                {fmtCell(c, row[c])}
+              </td>
             ))}
           </tr>
         ))}
@@ -451,7 +480,10 @@ export default function ExogenasPage() {
             {/* ── Tablas ── */}
             {(tab === "exogenas" || tab === "detalle") && (
               <div className="overflow-x-auto">
-                <DataTable rows={tab === "exogenas" ? f1003 : detalle} />
+                <DataTable
+                  rows={tab === "exogenas" ? f1003 : detalle}
+                  priority={tab === "exogenas" ? PRIORITY_1003 : PRIORITY_DETALLE}
+                />
               </div>
             )}
           </div>

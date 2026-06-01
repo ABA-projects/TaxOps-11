@@ -386,9 +386,9 @@ def _extract_emisor(text: str) -> tuple[str, str, str]:
     def _make_result(razon: str, nit_raw: str, dv_raw: str) -> tuple[str, str, str]:
         nit = _clean_nit(nit_raw)
         d = dv_raw if dv_raw else (calcular_dv(nit) if nit else "")
-        # Strip label prefixes (Retenedor:, Señores:, RETENIDO:, etc.)
+        # Strip label prefixes (Retenedor:, Señores:, RETENIDO:, RETENIDO A:, etc.)
         razon = re.sub(
-            r"(?i)^(?:retenedor|retenido|señores?|señor|estimados?)\s*:\s*",
+            r"(?i)^(?:retenedor|retenido(?:\s+a)?|señores?|señor|estimados?)\s*:\s*",
             "", razon,
         ).strip()
         razon = re.sub(r"(?i)(agente\s+retenedor|razón?\s+social|nombre\s+comercial|empresa)[:\s]*", "", razon).strip()
@@ -1188,7 +1188,7 @@ def _base_row(path: Path, error: str = "") -> dict:
     }
 
 
-_MAX_PAGES = 10  # Certificados de retención no superan 10 páginas
+_MAX_PAGES = 3  # Certificados de retención raramente superan 3 páginas
 
 
 def _read_pdf(path: Path) -> tuple[str, bool]:
@@ -1214,11 +1214,14 @@ def _ocr_pdf_pages(path: Path) -> tuple[str, bool]:
         import pytesseract
         parts: list[str] = []
         with pdfplumber.open(path) as pdf:
-            for page in pdf.pages[:_MAX_PAGES]:
+            for page_num, page in enumerate(pdf.pages[:_MAX_PAGES]):
                 img = page.to_image(resolution=200).original
                 t = pytesseract.image_to_string(img, lang="spa", timeout=60)
                 if t.strip():
                     parts.append(t)
+                elif page_num == 0:
+                    # Primera página sin texto → imagen ilegible para tesseract, no seguir
+                    break
         text = "\n".join(parts)
         return text, not text.strip()
     except Exception:
@@ -1391,7 +1394,9 @@ def _llm_extract(text: str, filename: str) -> list[dict] | None:
         "Suele aparecer en 'Señores:', 'A:', 'Retenido:', 'Beneficiario:' o al inicio del cuerpo.\n"
         "- Extrae AMBOS con sus NITs y también los montos.\n\n"
         "Devuelve ÚNICAMENTE un JSON array. Cada objeto representa un concepto y tiene:\n"
-        '- "concepto": "RENTA", "IVA" o "ICA"\n'
+        '- "concepto": código DIAN Formato 1003 — "1302" compras, "1303" servicios, '
+        '"1304" honorarios, "1305" comisiones, "1306" intereses, "1307" arrendamientos, '
+        '"1309" retención IVA, "ICA" para ICA. Si dudas usa "1303" servicios o "1302" compras.\n'
         '- "razon_social": nombre completo del RETENEDOR (quien retiene)\n'
         '- "nit": NIT del RETENEDOR solo dígitos sin puntos\n'
         '- "dv": dígito de verificación del NIT del retenedor (puede ser "")\n'
@@ -1575,7 +1580,12 @@ def extract_many(path: "str | Path") -> list[dict]:
                 fb, fr = _best_amounts(b, r, lb, lr_)
                 if fb == 0 and fr == 0:
                     continue
-                lcon = str(lr.get("concepto", concepto) or concepto).upper()
+                lcon = str(lr.get("concepto", concepto) or concepto).upper().strip()
+                # Normalizar tipos de certificado a códigos DIAN
+                if lcon in ("RENTA", ""):
+                    lcon = concepto
+                elif lcon == "IVA":
+                    lcon = "1309"
                 lpct = round(fr / fb * 100, 2) if fb else float(lr.get("porcentaje", porcentaje) or porcentaje)
                 lraz  = str(lr.get("razon_social", razon) or razon)
                 lnit  = re.sub(r"\D", "", str(lr.get("nit", nit) or nit))
