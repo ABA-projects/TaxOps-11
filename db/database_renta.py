@@ -56,7 +56,7 @@ def insert_contribuyente(data: dict, org_id: str) -> dict:
                 ) VALUES (
                     :id, :org_id, :responsable_id, :tipo_doc, :numero_doc,
                     :nombre_completo, :email, :telefono, :direccion, :ciudad,
-                    :año_gravable, :observaciones, :datos_tributarios::jsonb
+                    :año_gravable, :observaciones, CAST(:datos_tributarios AS jsonb)
                 )
             """),
             {
