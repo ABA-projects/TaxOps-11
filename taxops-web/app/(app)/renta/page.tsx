@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronRight, RefreshCw, User, FileText, AlertCircle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Plus, Trash2, ChevronRight, RefreshCw, User, FileText,
+  AlertCircle, Upload, Loader2, CheckCircle, FolderOpen, Eye,
+} from "lucide-react";
 import { useApi } from "@/lib/api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Contribuyente = {
   id: string;
@@ -28,6 +33,22 @@ type ContribuyenteInfo = {
   inconsistencias: unknown[];
 };
 
+type Documento = {
+  id: string;
+  filename: string;
+  categoria: string;
+  carpeta_virtual: string;
+  confianza_clasificacion: number;
+  estado_ocr: string;
+  estado_validacion: string;
+  size_bytes: number | null;
+  mime_type: string | null;
+  datos_extraidos: Record<string, unknown>;
+  created_at: string;
+};
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const ESTADO_LABELS: Record<string, { label: string; color: string }> = {
   pendiente_docs: { label: "Pendiente docs", color: "bg-yellow-100 text-yellow-800" },
   en_proceso:     { label: "En proceso",     color: "bg-blue-100 text-blue-800" },
@@ -37,16 +58,49 @@ const ESTADO_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const TIPO_DOC_LABELS: Record<string, string> = {
-  "13": "Cédula",
-  "22": "Cédula Extrangería",
-  "41": "Pasaporte",
-  "31": "NIT",
+  "13": "Cédula", "22": "Cédula Extranjería", "41": "Pasaporte", "31": "NIT",
+};
+
+const CATEGORIA_LABELS: Record<string, string> = {
+  identificacion: "Identificación",
+  ingresos:       "Ingresos",
+  bancos:         "Bancos",
+  patrimonio:     "Patrimonio",
+  bienes:         "Bienes",
+  salud:          "Salud",
+  pensiones:      "Pensiones",
+  tributario:     "Tributario",
+  otros:          "Otros",
+};
+
+const OCR_COLORS: Record<string, string> = {
+  pendiente:   "text-yellow-600",
+  procesando:  "text-blue-600",
+  completado:  "text-green-600",
+  error:       "text-red-600",
 };
 
 const AÑOS = [2025, 2024, 2023];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtBytes(b: number | null): string {
+  if (!b) return "";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function ConfidenceBadge({ v }: { v: number }) {
+  const pct = Math.round(v * 100);
+  const color = pct >= 80 ? "bg-green-100 text-green-700" : pct >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500";
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${color}`}>{pct}%</span>;
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function RentaPage() {
-  const { get, post, del } = useApi();
+  const { get, post, postForm, del } = useApi();
 
   const [contribuyentes, setContribuyentes] = useState<Contribuyente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,148 +110,184 @@ export default function RentaPage() {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Contribuyente | null>(null);
   const [info, setInfo] = useState<ContribuyenteInfo | null>(null);
+  const [docs, setDocs] = useState<Documento[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
+  // Upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadJobId, setUploadJobId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState("");
+
+  // Form state
   const [form, setForm] = useState({
-    tipo_doc: "13",
-    numero_doc: "",
-    nombre_completo: "",
-    email: "",
-    telefono: "",
-    ciudad: "",
-    año_gravable: 2025,
-    observaciones: "",
+    tipo_doc: "13", numero_doc: "", nombre_completo: "",
+    email: "", telefono: "", ciudad: "", año_gravable: 2025, observaciones: "",
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  async function loadContribuyentes() {
-    setLoading(true);
-    setError("");
+  // ── Load contribuyentes ────────────────────────────────────────────────────
+
+  const loadContribuyentes = useCallback(async () => {
+    setLoading(true); setError("");
     try {
       let path = "/renta/contribuyentes?";
       if (filtroAño) path += `año_gravable=${filtroAño}&`;
       if (filtroEstado) path += `estado=${filtroEstado}&`;
-      const data = await get<Contribuyente[]>(path);
-      setContribuyentes(data);
+      setContribuyentes(await get<Contribuyente[]>(path));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error al cargar contribuyentes");
-    } finally {
-      setLoading(false);
-    }
-  }
+      setError(e instanceof Error ? e.message : "Error al cargar");
+    } finally { setLoading(false); }
+  }, [filtroAño, filtroEstado]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadContribuyentes(); }, [filtroAño, filtroEstado]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadContribuyentes(); }, [loadContribuyentes]);
+
+  // ── Select contribuyente ──────────────────────────────────────────────────
 
   async function handleSelect(c: Contribuyente) {
-    setSelected(c);
-    setInfo(null);
-    try {
-      const d = await get<ContribuyenteInfo>(`/renta/contribuyentes/${c.id}/info`);
-      setInfo(d);
-    } catch {
-      // info is optional
-    }
+    setSelected(c); setInfo(null); setDocs([]); setUploadFiles([]); setUploadError("");
+    try { setInfo(await get<ContribuyenteInfo>(`/renta/contribuyentes/${c.id}/info`)); } catch { /* optional */ }
+    await loadDocs(c.id);
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.numero_doc || !form.nombre_completo) {
-      setFormError("Documento y nombre son obligatorios");
-      return;
+  async function loadDocs(contrib_id: string) {
+    setDocsLoading(true);
+    try { setDocs(await get<Documento[]>(`/renta/contribuyentes/${contrib_id}/documentos`)); }
+    catch { /* silent */ } finally { setDocsLoading(false); }
+  }
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+
+  function addFiles(fileList: FileList | null) {
+    if (!fileList) return;
+    const newFiles = Array.from(fileList);
+    setUploadFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...newFiles.filter(f => !names.has(f.name))];
+    });
+  }
+
+  async function handleUpload() {
+    if (!selected || !uploadFiles.length) return;
+    setUploading(true); setUploadError(""); setUploadProgress(0);
+    try {
+      const fd = new FormData();
+      uploadFiles.forEach(f => fd.append("files", f));
+      const { job_id } = await postForm<{ job_id: string; total: number }>(
+        `/renta/contribuyentes/${selected.id}/documentos/upload`, fd
+      );
+      setUploadJobId(job_id);
+      setUploadFiles([]);
+      await pollJob(job_id, selected.id);
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : "Error al subir");
+    } finally { setUploading(false); }
+  }
+
+  async function pollJob(job_id: string, contrib_id: string) {
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const job = await get<{ status: string; progreso: number }>
+          (`/renta/contribuyentes/${contrib_id}/documentos/jobs/${job_id}`);
+        setUploadProgress(job.progreso);
+        if (job.status === "done") { setUploadJobId(null); await loadDocs(contrib_id); return; }
+        if (job.status === "error") { setUploadError("Error procesando documentos"); return; }
+      } catch { break; }
     }
-    setSaving(true);
-    setFormError("");
+    setUploadJobId(null);
+    await loadDocs(contrib_id);
+  }
+
+  async function handleDeleteDoc(doc_id: string) {
+    if (!selected) return;
+    if (!confirm("¿Eliminar este documento?")) return;
+    try {
+      await del(`/renta/contribuyentes/${selected.id}/documentos/${doc_id}`);
+      setDocs(prev => prev.filter(d => d.id !== doc_id));
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
+  }
+
+  function openPreview(doc_id: string) {
+    if (!selected) return;
+    window.open(`/api-proxy/renta/contribuyentes/${selected.id}/documentos/${doc_id}/preview`, "_blank");
+  }
+
+  // ── Create contribuyente ──────────────────────────────────────────────────
+
+  async function handleCreate(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!form.numero_doc || !form.nombre_completo) { setFormError("Documento y nombre son obligatorios"); return; }
+    setSaving(true); setFormError("");
     try {
       await post("/renta/contribuyentes", {
         ...form,
-        email: form.email || null,
-        telefono: form.telefono || null,
-        ciudad: form.ciudad || null,
-        observaciones: form.observaciones || null,
+        email: form.email || null, telefono: form.telefono || null,
+        ciudad: form.ciudad || null, observaciones: form.observaciones || null,
       });
       setShowForm(false);
       setForm({ tipo_doc: "13", numero_doc: "", nombre_completo: "", email: "", telefono: "", ciudad: "", año_gravable: 2025, observaciones: "" });
       loadContribuyentes();
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
+    } catch (e: unknown) { setFormError(e instanceof Error ? e.message : "Error al guardar"); }
+    finally { setSaving(false); }
   }
 
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar este contribuyente y todos sus documentos?")) return;
-    try {
-      await del(`/renta/contribuyentes/${id}`);
-      if (selected?.id === id) setSelected(null);
-      loadContribuyentes();
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Error al eliminar");
-    }
+    try { await del(`/renta/contribuyentes/${id}`); if (selected?.id === id) setSelected(null); loadContribuyentes(); }
+    catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
   }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-full gap-4">
-      {/* ─── Lista de contribuyentes ─── */}
+      {/* ─── Lista ─── */}
       <div className="w-80 flex-shrink-0 flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-900">Renta Personas</h1>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14]"
-          >
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Renta Personas</h1>
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14]">
             <Plus size={14} /> Nuevo
           </button>
         </div>
 
-        {/* Filtros */}
         <div className="flex gap-2">
-          <select
-            value={filtroAño}
-            onChange={(e) => setFiltroAño(e.target.value ? Number(e.target.value) : "")}
-            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
-          >
+          <select value={filtroAño} onChange={e => setFiltroAño(e.target.value ? Number(e.target.value) : "")}
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]">
             <option value="">Todos los años</option>
-            {AÑOS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {AÑOS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
-          >
+          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]">
             <option value="">Todos los estados</option>
-            {Object.entries(ESTADO_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
+            {Object.entries(ESTADO_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
           <button onClick={loadContribuyentes} className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50">
             <RefreshCw size={14} />
           </button>
         </div>
 
-        {/* Lista */}
         <div className="flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-white">
           {loading ? (
             <div className="flex h-32 items-center justify-center text-sm text-gray-400">Cargando…</div>
           ) : error ? (
-            <div className="flex h-32 items-center justify-center gap-2 text-sm text-red-500">
-              <AlertCircle size={16} /> {error}
-            </div>
+            <div className="flex h-32 items-center justify-center gap-2 text-sm text-red-500"><AlertCircle size={16} /> {error}</div>
           ) : contribuyentes.length === 0 ? (
             <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-gray-400">
-              <User size={24} className="text-gray-300" />
-              <span>No hay contribuyentes</span>
+              <User size={24} className="text-gray-300" /><span>No hay contribuyentes</span>
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {contribuyentes.map((c) => {
+              {contribuyentes.map(c => {
                 const est = ESTADO_LABELS[c.estado] ?? { label: c.estado, color: "bg-gray-100 text-gray-600" };
                 return (
                   <li key={c.id}>
-                    <button
-                      onClick={() => handleSelect(c)}
-                      className={`w-full px-3 py-2.5 text-left transition-colors hover:bg-orange-50 ${selected?.id === c.id ? "bg-orange-50 border-l-2 border-[#E05519]" : ""}`}
-                    >
+                    <button onClick={() => handleSelect(c)}
+                      className={`w-full px-3 py-2.5 text-left transition-colors hover:bg-orange-50 ${selected?.id === c.id ? "bg-orange-50 border-l-2 border-[#E05519]" : ""}`}>
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-gray-900">{c.nombre_completo}</p>
@@ -218,34 +308,31 @@ export default function RentaPage() {
         </div>
       </div>
 
-      {/* ─── Detalle contribuyente ─── */}
-      <div className="flex-1 overflow-y-auto">
+      {/* ─── Detalle ─── */}
+      <div className="flex-1 overflow-y-auto space-y-4">
         {!selected ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-gray-400">
             <FileText size={48} className="text-gray-200" />
             <p className="text-sm">Selecciona un contribuyente para ver su expediente</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <>
             {/* Header */}
             <div className="flex items-start justify-between rounded-xl border border-gray-200 bg-white p-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">{selected.nombre_completo}</h2>
                 <p className="text-sm text-gray-500">
-                  {TIPO_DOC_LABELS[selected.tipo_doc] ?? selected.tipo_doc}: {selected.numero_doc} · Año gravable {selected.año_gravable}
+                  {TIPO_DOC_LABELS[selected.tipo_doc] ?? selected.tipo_doc}: {selected.numero_doc} · Año {selected.año_gravable}
                 </p>
-                {selected.email && <p className="mt-0.5 text-xs text-gray-400">{selected.email}</p>}
+                {selected.email && <p className="text-xs text-gray-400">{selected.email}</p>}
                 {selected.ciudad && <p className="text-xs text-gray-400">{selected.ciudad}</p>}
               </div>
               <div className="flex items-center gap-2">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_LABELS[selected.estado]?.color ?? "bg-gray-100 text-gray-600"}`}>
                   {ESTADO_LABELS[selected.estado]?.label ?? selected.estado}
                 </span>
-                <button
-                  onClick={() => handleDelete(selected.id)}
-                  className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                  title="Eliminar contribuyente"
-                >
+                <button onClick={() => handleDelete(selected.id)}
+                  className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Eliminar">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -261,18 +348,124 @@ export default function RentaPage() {
               </div>
             )}
 
-            {/* Observaciones */}
-            {selected.observaciones && (
-              <div className="rounded-lg border border-yellow-100 bg-yellow-50 p-3 text-sm text-yellow-800">
-                {selected.observaciones}
-              </div>
-            )}
+            {/* Upload panel */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 text-sm font-semibold text-gray-800">Cargar documentos</h3>
 
-            {/* Próximamente: upload documentos, declaración, chatbot tributario */}
-            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-400">
-              Carga de documentos, OCR y motor de declaración — Semana 2
+              <div
+                onDragOver={e => { e.preventDefault(); }}
+                onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 p-6 text-center hover:border-[#E05519] hover:bg-orange-50 transition-colors"
+              >
+                <Upload size={24} className="text-gray-400" />
+                <p className="text-sm text-gray-500">Arrastra archivos o <span className="text-[#E05519] font-medium">haz clic</span></p>
+                <p className="text-xs text-gray-400">PDF · JPG · PNG · DOCX · XLSX — máx. 20 MB</p>
+              </div>
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.webp,.docx,.xlsx,.xls"
+                className="hidden" onChange={e => addFiles(e.target.files)} />
+
+              {uploadFiles.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {uploadFiles.map(f => (
+                    <li key={f.name} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5 text-xs text-gray-700">
+                      <span className="truncate max-w-xs">{f.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">{fmtBytes(f.size)}</span>
+                        <button onClick={() => setUploadFiles(prev => prev.filter(x => x.name !== f.name))}
+                          className="text-gray-400 hover:text-red-500">✕</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {uploadError && (
+                <p className="mt-2 flex items-center gap-1 text-xs text-red-500"><AlertCircle size={12} /> {uploadError}</p>
+              )}
+
+              {uploadJobId && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span className="flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Procesando…</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-100">
+                    <div className="h-1.5 rounded-full bg-[#E05519] transition-all" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {uploadFiles.length > 0 && !uploading && (
+                <button onClick={handleUpload}
+                  className="mt-3 w-full rounded-lg bg-[#E05519] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14]">
+                  Subir {uploadFiles.length} archivo{uploadFiles.length > 1 ? "s" : ""}
+                </button>
+              )}
             </div>
-          </div>
+
+            {/* Documentos list */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <FolderOpen size={15} /> Expediente ({docs.length})
+                </h3>
+                {selected && (
+                  <button onClick={() => loadDocs(selected.id)} className="text-gray-400 hover:text-gray-600">
+                    <RefreshCw size={13} />
+                  </button>
+                )}
+              </div>
+
+              {docsLoading ? (
+                <div className="flex h-16 items-center justify-center text-sm text-gray-400">
+                  <Loader2 size={16} className="animate-spin mr-2" /> Cargando documentos…
+                </div>
+              ) : docs.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-4">Sin documentos cargados</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {docs.map(doc => (
+                    <li key={doc.id} className="flex items-center justify-between py-2 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-800">{doc.filename}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-xs text-gray-500">{CATEGORIA_LABELS[doc.categoria] ?? doc.categoria}</span>
+                          {doc.confianza_clasificacion > 0 && <ConfidenceBadge v={doc.confianza_clasificacion} />}
+                          <span className={`text-xs font-medium ${OCR_COLORS[doc.estado_ocr] ?? "text-gray-500"}`}>
+                            {doc.estado_ocr === "completado" ? <CheckCircle size={11} className="inline mr-0.5" /> : null}
+                            {doc.estado_ocr}
+                          </span>
+                          {doc.size_bytes && <span className="text-xs text-gray-400">{fmtBytes(doc.size_bytes)}</span>}
+                        </div>
+                        {doc.datos_extraidos && Object.keys(doc.datos_extraidos).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {Object.entries(doc.datos_extraidos).slice(0, 3).map(([k, v]) => (
+                              <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                                {k}: {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {doc.estado_ocr === "completado" && (
+                          <button onClick={() => openPreview(doc.id)}
+                            className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-500" title="Ver documento">
+                            <Eye size={15} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteDoc(doc.id)}
+                          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Eliminar">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -285,102 +478,63 @@ export default function RentaPage() {
               <div className="flex gap-2">
                 <div className="w-36">
                   <label className="mb-1 block text-xs text-gray-600">Tipo doc</label>
-                  <select
-                    value={form.tipo_doc}
-                    onChange={(e) => setForm({ ...form, tipo_doc: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                  >
-                    {Object.entries(TIPO_DOC_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
+                  <select value={form.tipo_doc} onChange={e => setForm({ ...form, tipo_doc: e.target.value })}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]">
+                    {Object.entries(TIPO_DOC_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Número documento *</label>
-                  <input
-                    value={form.numero_doc}
-                    onChange={(e) => setForm({ ...form, numero_doc: e.target.value })}
+                  <input value={form.numero_doc} onChange={e => setForm({ ...form, numero_doc: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                    placeholder="1000123456"
-                    required
-                  />
+                    placeholder="1000123456" required />
                 </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Nombre completo *</label>
-                <input
-                  value={form.nombre_completo}
-                  onChange={(e) => setForm({ ...form, nombre_completo: e.target.value })}
+                <input value={form.nombre_completo} onChange={e => setForm({ ...form, nombre_completo: e.target.value })}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                  placeholder="Nombre Apellido"
-                  required
-                />
+                  placeholder="Nombre Apellido" required />
               </div>
 
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                    placeholder="correo@ejemplo.com"
-                  />
+                    placeholder="correo@ejemplo.com" />
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Ciudad</label>
-                  <input
-                    value={form.ciudad}
-                    onChange={(e) => setForm({ ...form, ciudad: e.target.value })}
+                  <input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                    placeholder="Bogotá"
-                  />
+                    placeholder="Bogotá" />
                 </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Año gravable</label>
-                <select
-                  value={form.año_gravable}
-                  onChange={(e) => setForm({ ...form, año_gravable: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                >
-                  {AÑOS.map((a) => <option key={a} value={a}>{a}</option>)}
+                <select value={form.año_gravable} onChange={e => setForm({ ...form, año_gravable: Number(e.target.value) })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]">
+                  {AÑOS.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
 
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Observaciones</label>
-                <textarea
-                  value={form.observaciones}
-                  onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
-                  rows={2}
+                <textarea value={form.observaciones} onChange={e => setForm({ ...form, observaciones: e.target.value })} rows={2}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
-                  placeholder="Notas adicionales…"
-                />
+                  placeholder="Notas adicionales…" />
               </div>
 
-              {formError && (
-                <p className="flex items-center gap-1 text-xs text-red-500">
-                  <AlertCircle size={12} /> {formError}
-                </p>
-              )}
+              {formError && <p className="flex items-center gap-1 text-xs text-red-500"><AlertCircle size={12} /> {formError}</p>}
 
               <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setShowForm(false); setFormError(""); }}
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg bg-[#E05519] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14] disabled:opacity-50"
-                >
+                <button type="button" onClick={() => { setShowForm(false); setFormError(""); }}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+                <button type="submit" disabled={saving}
+                  className="rounded-lg bg-[#E05519] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14] disabled:opacity-50">
                   {saving ? "Guardando…" : "Guardar"}
                 </button>
               </div>
