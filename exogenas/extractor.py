@@ -1362,7 +1362,7 @@ def _get_groq_client():
         return None
     try:
         from groq import Groq
-        _groq_client = Groq(api_key=api_key)
+        _groq_client = Groq(api_key=api_key, max_retries=0)
         return _groq_client
     except ImportError:
         return None
@@ -1383,7 +1383,7 @@ def _llm_extract(text: str, filename: str) -> list[dict] | None:
         f"Eres experto en contabilidad colombiana. Analiza este certificado de retención "
         f"en la fuente y extrae TODOS los conceptos de retención presentes.\n\n"
         f"ARCHIVO: {filename}\n\n"
-        f"TEXTO DEL DOCUMENTO:\n{text[:6000]}\n\n"
+        f"TEXTO DEL DOCUMENTO:\n{text[:3000]}\n\n"
         "CONTEXTO IMPORTANTE:\n"
         "- El RETENEDOR es la empresa que PAGA y RETIENE el impuesto (emite el certificado). "
         "Su nombre/NIT suele aparecer en el encabezado, membrete o sección 'Retenedor:'.\n"
@@ -1412,7 +1412,8 @@ def _llm_extract(text: str, filename: str) -> list[dict] | None:
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            max_tokens=1500,
+            max_tokens=800,
+            timeout=12,
         )
         raw = resp.choices[0].message.content.strip()
         m = re.search(r"\[.*\]", raw, re.DOTALL)
