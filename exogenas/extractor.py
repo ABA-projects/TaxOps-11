@@ -1345,20 +1345,33 @@ def _read_text(path: Path) -> tuple[str, bool]:
     return _read_pdf(path)
 
 
-def _llm_extract(text: str, filename: str) -> list[dict] | None:
-    """
-    Fallback LLM via Groq cuando los patrones regex no encontraron montos.
-    Retorna lista de dicts parciales o None si Groq no está disponible / falla.
-    """
-    import os
-    import json as _json
+_groq_client = None  # singleton — se inicializa la primera vez que se necesita
 
+def _get_groq_client():
+    global _groq_client
+    if _groq_client is not None:
+        return _groq_client
+    import os
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return None
     try:
         from groq import Groq
+        _groq_client = Groq(api_key=api_key)
+        return _groq_client
     except ImportError:
+        return None
+
+
+def _llm_extract(text: str, filename: str) -> list[dict] | None:
+    """
+    Fallback LLM via Groq. Solo se llama cuando regex no encontró montos O identidad.
+    Retorna lista de dicts parciales o None si Groq no está disponible / falla.
+    """
+    import json as _json
+
+    client = _get_groq_client()
+    if client is None:
         return None
 
     prompt = (
@@ -1390,7 +1403,6 @@ def _llm_extract(text: str, filename: str) -> list[dict] | None:
     )
 
     try:
-        client = Groq(api_key=api_key)
         resp = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
@@ -1513,15 +1525,17 @@ def extract_many(path: "str | Path") -> list[dict]:
         b, r = _extract_amounts(text, tipo_cert, nit_hint=nit)
         r    = _fix_pct_as_amount(b, r)
         fila = _make_row("ICA", 0.0, b, r)
-        llm  = _llm_extract(text, path.name) or []
-        if llm:
-            lr0 = llm[0]
-            lb  = _parse_money(str(lr0.get("base", 0)))
-            lr_ = _parse_money(str(lr0.get("retencion", 0)))
-            fb, fr        = _best_amounts(b, r, lb, lr_)
-            fila["base"]  = fb
-            fila["retencion"] = fr
-            _enrich_identity(fila, lr0)
+        # LLM solo si regex no encontró montos o identidad
+        if b == 0 or not razon:
+            llm  = _llm_extract(text, path.name) or []
+            if llm:
+                lr0 = llm[0]
+                lb  = _parse_money(str(lr0.get("base", 0)))
+                lr_ = _parse_money(str(lr0.get("retencion", 0)))
+                fb, fr        = _best_amounts(b, r, lb, lr_)
+                fila["base"]  = fb
+                fila["retencion"] = fr
+                _enrich_identity(fila, lr0)
         return [fila]
 
     # ── Multi-concepto ────────────────────────────────────────────────────────
@@ -1529,19 +1543,22 @@ def extract_many(path: "str | Path") -> list[dict]:
     if multi:
         filas = [_make_row(con, pct, mb, _fix_pct_as_amount(mb, mr))
                  for con, pct, mb, mr in multi]
-        # LLM enriquece identidad (nombres/NIT que regex no capturó)
-        llm = _llm_extract(text, path.name) or []
-        if llm:
-            for f in filas:
-                _enrich_identity(f, llm[0])
+        # LLM solo si regex no encontró identidad (nombre/NIT del retenedor)
+        if not razon or not nit:
+            llm = _llm_extract(text, path.name) or []
+            if llm:
+                for f in filas:
+                    _enrich_identity(f, llm[0])
         return filas
 
-    # ── Fila única: ambos extractores corren, mejor resultado gana ────────────
+    # ── Fila única: regex primero; LLM solo si faltan montos o identidad ──────
     concepto, porcentaje = _detect_concepto(text, tipo_cert)
     b, r                 = _extract_amounts(text, tipo_cert, nit_hint=nit)
     r = _fix_pct_as_amount(b, r)
 
-    llm_rows = _llm_extract(text, path.name) or []
+    # Invocar LLM solo cuando regex no encontró algo crítico
+    _need_llm = (b == 0) or (not razon) or (not nit)
+    llm_rows = (_llm_extract(text, path.name) or []) if _need_llm else []
 
     if llm_rows:
         results: list[dict] = []
