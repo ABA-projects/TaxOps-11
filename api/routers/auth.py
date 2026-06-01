@@ -10,7 +10,7 @@ from jose import JWTError
 
 from core.security import create_access_token, create_refresh_token, decode_token
 from dependencies import get_current_user
-from schemas import AccessTokenResponse, LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
+from schemas import AcceptInviteRequest, AccessTokenResponse, LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -315,12 +315,12 @@ async def get_invite_info(token: str) -> dict:
 
 
 @router.post("/invite/{token}/accept", response_model=TokenResponse, status_code=201)
-async def accept_invite(token: str, body: "AcceptInviteRequest") -> TokenResponse:
+async def accept_invite(token: str, body: AcceptInviteRequest) -> TokenResponse:
     """Crea el usuario a partir de una invitación y retorna tokens de acceso."""
     from db.database import get_db
     from db.auth import hash_password
     from sqlalchemy import text
-    from schemas import AcceptInviteRequest  # noqa: F401
+
 
     with get_db() as db:
         invite = db.execute(

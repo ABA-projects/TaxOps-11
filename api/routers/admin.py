@@ -11,6 +11,7 @@ from dependencies import get_current_user, require_admin, require_owner, require
 from schemas import (
     AdminStats,
     AuditLogEntry,
+    ChangeRoleRequest,
     ClientResponse,
     CreateClientRequest,
     CreateOrgRequest,
@@ -375,11 +376,10 @@ async def list_admin_requests(admin: dict = Depends(require_admin)) -> list[dict
 @router.patch("/users/{user_id}/role")
 async def change_user_role(
     user_id: str,
-    body: "ChangeRoleRequest",
+    body: ChangeRoleRequest,
     admin: dict = Depends(require_admin),
 ) -> dict:
     """Cambia el rol de un usuario. Owner puede asignar cualquier rol; admin solo roles base."""
-    from schemas import ADMIN_ROLES, BASE_ROLES, ChangeRoleRequest  # noqa: F401
     caller_role = admin["role"]
 
     if body.role in ADMIN_ROLES and caller_role != "owner":
@@ -752,11 +752,10 @@ async def superadmin_list_users(_: dict = Depends(require_superadmin)) -> list[d
 @router.patch("/superadmin/users/{user_id}/role")
 async def superadmin_change_role(
     user_id: str,
-    body: "ChangeRoleRequest",
+    body: ChangeRoleRequest,
     _: dict = Depends(require_superadmin),
 ) -> dict:
     """Superadmin cambia el rol de cualquier usuario en cualquier org."""
-    from schemas import ChangeRoleRequest  # noqa: F401
     get_db = _get_db()
     with get_db() as db:
         result = db.execute(

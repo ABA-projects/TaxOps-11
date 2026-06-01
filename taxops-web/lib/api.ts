@@ -37,6 +37,7 @@ async function handleResponse<T>(res: Response, blob = false): Promise<T> {
     throw new Error(err.detail || `Error ${res.status}`);
   }
   if (blob) return (await res.blob()) as unknown as T;
+  if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
 }
 
@@ -95,6 +96,16 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return handleResponse<T>(res);
 }
 
+/** PUT con JSON body */
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetchWithRefresh(`${API_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return handleResponse<T>(res);
+}
+
 /** DELETE */
 async function del<T>(path: string): Promise<T> {
   const res = await fetchWithRefresh(`${API_URL}${path}`, {
@@ -106,5 +117,5 @@ async function del<T>(path: string): Promise<T> {
 
 /** Hook de conveniencia para usarlo en componentes */
 export function useApi() {
-  return { get, post, postForm, patch, del };
+  return { get, post, postForm, patch, put, del };
 }
