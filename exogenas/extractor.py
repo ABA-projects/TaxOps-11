@@ -1301,10 +1301,13 @@ def _preprocess_for_ocr(img: "Image.Image") -> list["Image.Image"]:
     return variants
 
 
+_OCR_GOOD_ENOUGH = 120  # caracteres alfanuméricos mínimos para aceptar resultado sin probar más variantes
+
+
 def _read_image(path: Path) -> tuple[str, bool]:
     """
     OCR sobre imagen (JPG/PNG/TIFF) con pytesseract.
-    Intenta múltiples preprocesados y devuelve el que extrae más texto.
+    Intenta preprocesados en orden de calidad; para en cuanto obtiene texto suficiente.
     """
     try:
         from PIL import Image
@@ -1317,15 +1320,17 @@ def _read_image(path: Path) -> tuple[str, bool]:
     img.close()
 
     best = ""
-    configs = ["--oem 3 --psm 6", "--oem 3 --psm 11"]
+    # Solo psm 6 (una columna densa de texto) — el más común en certificados
+    # psm 11 solo si el primero falla completamente
     for variant in variants:
-        for cfg in configs:
-            try:
-                t = pytesseract.image_to_string(variant, lang="spa", config=cfg, timeout=60)
-            except Exception:
-                continue
-            if len(re.sub(r"\W+", "", t)) > len(re.sub(r"\W+", "", best)):
-                best = t
+        try:
+            t = pytesseract.image_to_string(variant, lang="spa", config="--oem 3 --psm 6", timeout=60)
+        except Exception:
+            t = ""
+        if len(re.sub(r"\W+", "", t)) > len(re.sub(r"\W+", "", best)):
+            best = t
+        if len(re.sub(r"\W+", "", best)) >= _OCR_GOOD_ENOUGH:
+            break  # texto suficiente — no probar más variantes
     return best, not best.strip()
 
 
