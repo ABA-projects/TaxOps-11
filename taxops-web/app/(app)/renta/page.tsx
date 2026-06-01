@@ -155,7 +155,7 @@ export default function RentaPage() {
           <select
             value={filtroAño}
             onChange={(e) => setFiltroAño(e.target.value ? Number(e.target.value) : "")}
-            className="flex-1 rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
           >
             <option value="">Todos los años</option>
             {AÑOS.map((a) => <option key={a} value={a}>{a}</option>)}
@@ -163,7 +163,7 @@ export default function RentaPage() {
           <select
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value)}
-            className="flex-1 rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
           >
             <option value="">Todos los estados</option>
             {Object.entries(ESTADO_LABELS).map(([k, v]) => (
@@ -288,7 +288,7 @@ export default function RentaPage() {
                   <select
                     value={form.tipo_doc}
                     onChange={(e) => setForm({ ...form, tipo_doc: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                   >
                     {Object.entries(TIPO_DOC_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
@@ -300,7 +300,7 @@ export default function RentaPage() {
                   <input
                     value={form.numero_doc}
                     onChange={(e) => setForm({ ...form, numero_doc: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                     placeholder="1000123456"
                     required
                   />
@@ -312,7 +312,7 @@ export default function RentaPage() {
                 <input
                   value={form.nombre_completo}
                   onChange={(e) => setForm({ ...form, nombre_completo: e.target.value })}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                   placeholder="Nombre Apellido"
                   required
                 />
@@ -325,7 +325,7 @@ export default function RentaPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                     placeholder="correo@ejemplo.com"
                   />
                 </div>
@@ -334,7 +334,7 @@ export default function RentaPage() {
                   <input
                     value={form.ciudad}
                     onChange={(e) => setForm({ ...form, ciudad: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                     placeholder="Bogotá"
                   />
                 </div>
@@ -345,7 +345,7 @@ export default function RentaPage() {
                 <select
                   value={form.año_gravable}
                   onChange={(e) => setForm({ ...form, año_gravable: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                 >
                   {AÑOS.map((a) => <option key={a} value={a}>{a}</option>)}
                 </select>
@@ -357,7 +357,7 @@ export default function RentaPage() {
                   value={form.observaciones}
                   onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
                   placeholder="Notas adicionales…"
                 />
               </div>
