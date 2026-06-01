@@ -5,14 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install dependencies (Streamlit app)
+# Install dependencies
 pip install -r requirements.txt
 
 # Install as editable package (exposes `taxops` CLI entry point)
 pip install -e .
-
-# Run Streamlit app (entry point: Home.py)
-python -m streamlit run Home.py
 
 # Run FastAPI server (from api/ directory)
 cd api && uvicorn main:app --reload --port 8000
@@ -63,7 +60,7 @@ FastAPI always requires auth (JWT Bearer). Required env vars for SaaS: see `api/
 TaxOps procesa facturas electrónicas DIAN (PDF/XML) colombianas en un pipeline:
 `pipeline/extractor.py` → `pipeline/validator.py` → `pipeline/prorateo.py` → `pipeline/excel_writer.py` / PostgreSQL
 
-**Stack:** Streamlit · FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · Render · Vercel
+**Stack:** FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · Cloud Run · Vercel
 
 ### Module responsibilities
 
