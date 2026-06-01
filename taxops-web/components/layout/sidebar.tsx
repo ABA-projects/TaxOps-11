@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Calculator,
   CalendarDays,
+  BookOpen,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Facturas DIAN", href: "/facturas", icon: <FileText size={18} /> },
   { label: "Exógenas", href: "/exogenas", icon: <ClipboardList size={18} /> },
   { label: "Nómina", href: "/nomina", icon: <Calculator size={18} /> },
+  { label: "Renta", href: "/renta", icon: <BookOpen size={18} /> },
   { label: "Calendario DIAN", href: "/calendario", icon: <CalendarDays size={18} /> },
   { label: "Chatbot", href: "/chatbot", icon: <Bot size={18} /> },
 ];

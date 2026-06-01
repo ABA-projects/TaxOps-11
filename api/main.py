@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
-from routers import admin, auth, calendario, chatbot, exogenas, invoices, nomina
+from routers import admin, auth, calendario, chatbot, exogenas, invoices, nomina, renta
 
 settings = get_settings()
 
@@ -80,6 +80,7 @@ app.include_router(chatbot.router)
 app.include_router(admin.router)
 app.include_router(nomina.router)
 app.include_router(calendario.router)
+app.include_router(renta.router)
 
 
 @app.get("/health", tags=["Health"])
