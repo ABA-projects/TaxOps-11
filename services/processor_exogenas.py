@@ -95,22 +95,31 @@ def procesar_exogenas(
     lock = threading.Lock()
 
     def _process_one(p: Path) -> None:
+        import time
         local_rows: list[dict] = []
         local_warn: list[str] = []
         local_err = 0
+        t0 = time.time()
         try:
-            # pytesseract.image_to_string tiene timeout=60 en el extractor,
-            # que mata el subproceso Tesseract si se cuelga.
             rows = extract_many(p)
+            elapsed = time.time() - t0
             for row in rows:
                 row["_archivo"] = Path(p).name
                 if row.get("error"):
                     local_err += 1
                     local_warn.append(f"⚠️ {Path(p).name}: {row['error']}")
                 local_rows.append(row)
+            if elapsed > 3:
+                fuente = rows[0].get("fuente", "?") if rows else "?"
+                escaneado = rows[0].get("es_escaneado", False) if rows else False
+                local_warn.append(
+                    f"⏱️ {Path(p).name}: {elapsed:.1f}s "
+                    f"[{'OCR' if escaneado or fuente == 'IMAGEN' else fuente}]"
+                )
         except Exception as e:
+            elapsed = time.time() - t0
             local_err = 1
-            local_warn = [f"❌ {Path(p).name}: {e}"]
+            local_warn = [f"❌ {Path(p).name}: {e} ({elapsed:.1f}s)"]
         with lock:
             shared["filas"].extend(local_rows)
             shared["errores"] += local_err
