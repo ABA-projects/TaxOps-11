@@ -4,13 +4,14 @@ from __future__ import annotations
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from dependencies import get_current_user, require_admin
 from schemas_renta import (
     ContribuyenteCreate,
     ContribuyenteOut,
     ContribuyenteUpdate,
+    DatosTributariosIn,
     DeclaracionOut,
     DocumentoOut,
     RiesgoOut,
@@ -122,6 +123,7 @@ async def get_declaracion(
 @router.post("/contribuyentes/{id}/declaracion/calcular", response_model=DeclaracionOut)
 async def calcular_declaracion_endpoint(
     id: UUID,
+    body: dict = Body(default={}),
     user: dict = Depends(get_current_user),
 ):
     from db.database_renta import get_contribuyente, upsert_declaracion
@@ -131,10 +133,59 @@ async def calcular_declaracion_endpoint(
     if not contrib:
         raise HTTPException(404, "Contribuyente no encontrado")
     try:
-        data = calcular_declaracion(str(id), contrib["año_gravable"])
+        ajuste_manual = body.get("ajuste_manual") if body else None
+        data = calcular_declaracion(str(id), contrib["año_gravable"], ajuste_manual)
         return upsert_declaracion(str(id), contrib["año_gravable"], data)
     except Exception as e:
         raise HTTPException(500, f"Error calculando declaración: {e}")
+
+
+# ─── Guardar datos tributarios (PATCH) ───────────────────────────────────────
+
+@router.patch("/contribuyentes/{id}/declaracion/datos", response_model=DeclaracionOut)
+async def patch_datos_declaracion_endpoint(
+    id: UUID,
+    body: DatosTributariosIn,
+    user: dict = Depends(get_current_user),
+):
+    from db.database_renta import get_contribuyente, patch_datos_declaracion
+    contrib = get_contribuyente(str(id), user["org_id"])
+    if not contrib:
+        raise HTTPException(404, "Contribuyente no encontrado")
+    data = body.model_dump(exclude_none=True)
+    try:
+        return patch_datos_declaracion(str(id), contrib["año_gravable"], data)
+    except Exception as e:
+        raise HTTPException(500, f"Error guardando datos: {e}")
+
+
+# ─── Descargar Formulario 210 PDF ────────────────────────────────────────────
+
+@router.get("/contribuyentes/{id}/declaracion/pdf")
+async def descargar_formulario_210(id: UUID, user: dict = Depends(get_current_user)):
+    from db.database_renta import get_contribuyente, get_declaracion
+    from services.renta.pdf_formulario210 import generar_pdf
+    from fastapi.responses import Response
+
+    contrib = get_contribuyente(str(id), user["org_id"])
+    if not contrib:
+        raise HTTPException(404, "Contribuyente no encontrado")
+
+    decl = get_declaracion(str(id), user["org_id"])
+    if not decl:
+        raise HTTPException(404, "No existe declaración calculada para este contribuyente")
+
+    try:
+        pdf_bytes = generar_pdf(decl, contrib)
+    except Exception as e:
+        raise HTTPException(500, f"Error generando PDF: {e}")
+
+    filename = f"Formulario210_{contrib['año_gravable']}_{contrib['numero_doc']}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─── Reglas tributarias ───────────────────────────────────────────────────────
