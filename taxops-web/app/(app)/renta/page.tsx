@@ -160,7 +160,7 @@ function ConfidenceBadge({ v }: { v: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RentaPage() {
-  const { get, post, patch, postForm, del } = useApi();
+  const { get, post, patch, postForm, del, getBlob } = useApi();
 
   const [contribuyentes, setContribuyentes] = useState<Contribuyente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,6 +172,8 @@ export default function RentaPage() {
   const [info, setInfo] = useState<ContribuyenteInfo | null>(null);
   const [docs, setDocs] = useState<Documento[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -239,7 +241,7 @@ export default function RentaPage() {
 
   async function handleSelect(c: Contribuyente) {
     setSelected(c); setInfo(null); setDocs([]); setDecl(null); setUploadFiles([]);
-    setUploadError(""); setDeclError(""); setOverrides({}); setEditingField(null);
+    setUploadError(""); setDeclError(""); setOverrides({}); setEditingField(null); setSelectedDocs(new Set());
     try { setInfo(await get<ContribuyenteInfo>(`/renta/contribuyentes/${c.id}/info`)); } catch { /* optional */ }
     await loadDocs(c.id);
     try {
@@ -366,6 +368,23 @@ export default function RentaPage() {
       await del(`/renta/contribuyentes/${selected.id}/documentos/${doc_id}`);
       setDocs(prev => prev.filter(d => d.id !== doc_id));
     } catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
+  }
+
+  async function handleBulkDelete() {
+    if (!selected || selectedDocs.size === 0) return;
+    if (!confirm(`¿Eliminar ${selectedDocs.size} documento(s) seleccionado(s)?`)) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all(
+        Array.from(selectedDocs).map(id =>
+          del(`/renta/contribuyentes/${selected.id}/documentos/${id}`).catch(() => null)
+        )
+      );
+      setDocs(prev => prev.filter(d => !selectedDocs.has(d.id)));
+      setSelectedDocs(new Set());
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   function openPreview(doc_id: string) {
@@ -863,7 +882,17 @@ export default function RentaPage() {
                   )}
                   <div className="flex gap-2 pt-1">
                     <button
-                      onClick={() => window.open(`/api-proxy/renta/contribuyentes/${selected!.id}/declaracion/pdf`, "_blank")}
+                      onClick={async () => {
+                        try {
+                          const blob = await getBlob(`/renta/contribuyentes/${selected!.id}/declaracion/pdf`);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `formulario210_${selected?.año_gravable ?? 2025}.pdf`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        } catch { /* silent */ }
+                      }}
                       className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
                       <Download size={12} /> Formulario 210
                     </button>
@@ -890,11 +919,22 @@ export default function RentaPage() {
                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                   <FolderOpen size={15} /> Expediente ({docs.length})
                 </h3>
-                {selected && (
-                  <button onClick={() => loadDocs(selected.id)} className="text-gray-400 hover:text-gray-600">
-                    <RefreshCw size={13} />
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedDocs.size > 0 && (
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={bulkDeleting}
+                      className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50">
+                      {bulkDeleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                      Eliminar ({selectedDocs.size})
+                    </button>
+                  )}
+                  {selected && (
+                    <button onClick={() => loadDocs(selected.id)} className="text-gray-400 hover:text-gray-600">
+                      <RefreshCw size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {docsLoading ? (
@@ -907,6 +947,16 @@ export default function RentaPage() {
                 <ul className="divide-y divide-gray-100">
                   {docs.map(doc => (
                     <li key={doc.id} className="flex items-center justify-between py-2 gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocs.has(doc.id)}
+                        onChange={e => setSelectedDocs(prev => {
+                          const next = new Set(prev);
+                          e.target.checked ? next.add(doc.id) : next.delete(doc.id);
+                          return next;
+                        })}
+                        className="flex-shrink-0 rounded border-gray-300 text-red-500 cursor-pointer"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-gray-800">{doc.filename}</p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">

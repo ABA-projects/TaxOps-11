@@ -115,7 +115,16 @@ async function del<T>(path: string): Promise<T> {
   return handleResponse<T>(res);
 }
 
+/** GET que devuelve un Blob (para descargas de archivos binarios como PDFs) */
+async function getBlob(path: string): Promise<Blob> {
+  const res = await fetchWithRefresh(`${API_URL}${path}`, {
+    headers: { ...authHeaders() },
+    cache: "no-store",
+  });
+  return handleResponse<Blob>(res, true);
+}
+
 /** Hook de conveniencia para usarlo en componentes */
 export function useApi() {
-  return { get, post, postForm, patch, put, del };
+  return { get, post, postForm, patch, put, del, getBlob };
 }
