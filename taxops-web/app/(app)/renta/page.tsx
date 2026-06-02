@@ -684,7 +684,7 @@ export default function RentaPage() {
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()}
                 placeholder="Pregunta sobre renta personas naturales..."
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
               />
               <button onClick={sendChat} disabled={!chatInput.trim() || chatLoading}
                 className="rounded-lg bg-[#E05519] px-3 py-1.5 text-white hover:bg-[#c44a14] disabled:opacity-50">
