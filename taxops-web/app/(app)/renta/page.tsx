@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, Trash2, ChevronRight, RefreshCw, User, FileText,
   AlertCircle, Upload, Loader2, CheckCircle, FolderOpen, Eye, Calculator,
+  Bot, Send, ChevronDown,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
 
@@ -69,6 +70,8 @@ type Declaracion = {
   detalle_calculo: Record<string, unknown>;
   updated_at: string;
 };
+
+type ChatMsg = { role: "user" | "assistant"; content: string };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -148,6 +151,20 @@ export default function RentaPage() {
   const [decl, setDecl] = useState<Declaracion | null>(null);
   const [declLoading, setDeclLoading] = useState(false);
   const [declError, setDeclError] = useState("");
+
+  // Chatbot state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([{
+    role: "assistant",
+    content: "Hola, soy tu asistente de renta. Puedo ayudarte con el Art. 241 ET 2025, tabla de UVT, cédula general, rentas exentas y deducciones admisibles para personas naturales. ¿Qué necesitas?",
+  }]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMsgs]);
 
   // Form state
   const [form, setForm] = useState({
@@ -280,6 +297,36 @@ export default function RentaPage() {
     if (!confirm("¿Eliminar este contribuyente y todos sus documentos?")) return;
     try { await del(`/renta/contribuyentes/${id}`); if (selected?.id === id) setSelected(null); loadContribuyentes(); }
     catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
+  }
+
+  // ── Chatbot ───────────────────────────────────────────────────────────────
+
+  async function sendChat() {
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    setChatInput("");
+    const userMsg: ChatMsg = { role: "user", content: text };
+    setChatMsgs(p => [...p, userMsg]);
+    setChatLoading(true);
+
+    const contextNote = selected
+      ? `\n\n[Contexto: contribuyente "${selected.nombre_completo}", año gravable ${selected.año_gravable}${decl ? `, impuesto a cargo ${decl.impuesto_cargo.toLocaleString("es-CO")} COP` : ""}.]`
+      : "";
+
+    try {
+      const res = await post<{ content: string }>("/chatbot/ask", {
+        message: text + contextNote,
+        provider: "groq",
+        model: "llama-3.3-70b-versatile",
+        history: chatMsgs.slice(-8),
+        system_prompt: "Eres un experto contable colombiano especializado en declaración de renta personas naturales. Conoces el Art. 241 ET 2025, la tabla progresiva en UVT ($49,799), cédula general, rentas exentas Art. 206 numeral 10, deducciones admisibles, patrimonio y el sistema de retenciones en la fuente. Responde de forma clara y práctica.",
+      });
+      setChatMsgs(p => [...p, { role: "assistant", content: res.content }]);
+    } catch {
+      setChatMsgs(p => [...p, { role: "assistant", content: "Error de conexión. Intenta de nuevo." }]);
+    } finally {
+      setChatLoading(false);
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -597,6 +644,62 @@ export default function RentaPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* ─── Chatbot flotante ─── */}
+      <div className="fixed bottom-6 right-6 z-50">
+        {chatOpen && (
+          <div className="mb-3 w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ height: "480px" }}>
+            <div className="bg-[#0F172A] px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot size={18} className="text-[#E05519]" />
+                <span className="text-white text-sm font-semibold">Asistente Renta</span>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="text-slate-400 hover:text-white">
+                <ChevronDown size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+              {chatMsgs.map((m, i) => (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-xs whitespace-pre-wrap ${
+                    m.role === "user" ? "bg-[#E05519] text-white" : "bg-white border border-gray-200 text-gray-700"
+                  }`}>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-400">Escribiendo...</div>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            <div className="p-3 border-t border-gray-200 flex gap-2">
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()}
+                placeholder="Pregunta sobre renta personas naturales..."
+                className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+              />
+              <button onClick={sendChat} disabled={!chatInput.trim() || chatLoading}
+                className="rounded-lg bg-[#E05519] px-3 py-1.5 text-white hover:bg-[#c44a14] disabled:opacity-50">
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => setChatOpen(p => !p)}
+          className="w-14 h-14 rounded-full bg-[#E05519] shadow-lg flex items-center justify-center hover:bg-[#c44a14] transition-colors"
+        >
+          {chatOpen ? <ChevronDown size={22} className="text-white" /> : <Bot size={24} className="text-white" />}
+        </button>
       </div>
 
       {/* ─── Modal nuevo contribuyente ─── */}

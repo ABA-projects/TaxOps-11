@@ -70,6 +70,12 @@ const FEATURES = [
     desc: "Descarga reportes formateados en Excel: facturas procesadas, base de exógenas, nómina mensual y liquidaciones.",
     tag: "✅ Disponible",
   },
+  {
+    icon: <TrendingUp size={24} className="text-rose-400" />,
+    title: "Declaración de Renta",
+    desc: "Expediente digital por contribuyente. Carga documentos, aplica Art. 241 ET 2025 con tabla progresiva UVT y liquida renta personas naturales automáticamente.",
+    tag: "✅ Disponible",
+  },
 ];
 
 const PLANS = [
