@@ -894,7 +894,22 @@ export default function RentaPage() {
                         } catch { /* silent */ }
                       }}
                       className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                      <Download size={12} /> Formulario 210
+                      <Download size={12} /> PDF
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const blob = await getBlob(`/renta/contribuyentes/${selected!.id}/declaracion/excel`);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `formulario210_${selected?.año_gravable ?? 2025}.xlsx`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        } catch { /* silent */ }
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-green-200 px-3 py-1.5 text-xs text-green-700 hover:bg-green-50">
+                      <Download size={12} /> Excel
                     </button>
                     <button
                       onClick={async () => {

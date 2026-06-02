@@ -188,6 +188,33 @@ async def descargar_formulario_210(id: UUID, user: dict = Depends(get_current_us
     )
 
 
+@router.get("/contribuyentes/{id}/declaracion/excel")
+async def descargar_formulario_210_excel(id: UUID, user: dict = Depends(get_current_user)):
+    from db.database_renta import get_contribuyente, get_declaracion
+    from services.renta.excel_formulario210 import generar_excel
+    from fastapi.responses import Response
+
+    contrib = get_contribuyente(str(id), user["org_id"])
+    if not contrib:
+        raise HTTPException(404, "Contribuyente no encontrado")
+
+    decl = get_declaracion(str(id), user["org_id"])
+    if not decl:
+        raise HTTPException(404, "No existe declaración calculada para este contribuyente")
+
+    try:
+        xls_bytes = generar_excel(decl, contrib)
+    except Exception as e:
+        raise HTTPException(500, f"Error generando Excel: {e}")
+
+    filename = f"Formulario210_{contrib['año_gravable']}_{contrib['numero_doc']}.xlsx"
+    return Response(
+        content=xls_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ─── Reglas tributarias ───────────────────────────────────────────────────────
 
 @router.get("/reglas/{año_gravable}")
