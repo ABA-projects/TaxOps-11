@@ -175,6 +175,83 @@ def get_declaracion(contribuyente_id: str, org_id: str) -> dict | None:
     return dict(row._mapping) if row else None
 
 
+# ─── Declaraciones upsert ────────────────────────────────────────────────────
+
+def upsert_declaracion(contribuyente_id: str, año: int, data: dict) -> dict:
+    from sqlalchemy import text
+    import json
+
+    decl_id = str(uuid.uuid4())
+    with get_db() as db:
+        db.execute(
+            text("""
+                INSERT INTO renta_declaraciones (
+                    id, contribuyente_id, año_gravable,
+                    patrimonio_bruto, patrimonio_liquido,
+                    ingresos_laborales, rentas_capital, rentas_no_laborales,
+                    dividendos, ganancias_ocasionales,
+                    rentas_exentas, deducciones, retenciones,
+                    impuesto_cargo, saldo_pagar, saldo_favor,
+                    estado,
+                    inconsistencias, detalle_calculo
+                ) VALUES (
+                    :id, :contribuyente_id, :año_gravable,
+                    :patrimonio_bruto, :patrimonio_liquido,
+                    :ingresos_laborales, :rentas_capital, :rentas_no_laborales,
+                    :dividendos, :ganancias_ocasionales,
+                    :rentas_exentas, :deducciones, :retenciones,
+                    :impuesto_cargo, :saldo_pagar, :saldo_favor,
+                    :estado,
+                    CAST(:inconsistencias AS jsonb), CAST(:detalle_calculo AS jsonb)
+                )
+                ON CONFLICT (contribuyente_id, año_gravable) DO UPDATE SET
+                    patrimonio_bruto        = EXCLUDED.patrimonio_bruto,
+                    patrimonio_liquido      = EXCLUDED.patrimonio_liquido,
+                    ingresos_laborales      = EXCLUDED.ingresos_laborales,
+                    rentas_capital          = EXCLUDED.rentas_capital,
+                    rentas_no_laborales     = EXCLUDED.rentas_no_laborales,
+                    dividendos              = EXCLUDED.dividendos,
+                    ganancias_ocasionales   = EXCLUDED.ganancias_ocasionales,
+                    rentas_exentas          = EXCLUDED.rentas_exentas,
+                    deducciones             = EXCLUDED.deducciones,
+                    retenciones             = EXCLUDED.retenciones,
+                    impuesto_cargo          = EXCLUDED.impuesto_cargo,
+                    saldo_pagar             = EXCLUDED.saldo_pagar,
+                    saldo_favor             = EXCLUDED.saldo_favor,
+                    estado                  = EXCLUDED.estado,
+                    inconsistencias         = EXCLUDED.inconsistencias,
+                    detalle_calculo         = EXCLUDED.detalle_calculo,
+                    updated_at              = NOW()
+            """),
+            {
+                "id":                   decl_id,
+                "contribuyente_id":     contribuyente_id,
+                "año_gravable":         año,
+                "patrimonio_bruto":     data.get("patrimonio_bruto", 0),
+                "patrimonio_liquido":   data.get("patrimonio_liquido", 0),
+                "ingresos_laborales":   data.get("ingresos_laborales", 0),
+                "rentas_capital":       data.get("rentas_capital", 0),
+                "rentas_no_laborales":  data.get("rentas_no_laborales", 0),
+                "dividendos":           data.get("dividendos", 0),
+                "ganancias_ocasionales": data.get("ganancias_ocasionales", 0),
+                "rentas_exentas":       data.get("rentas_exentas", 0),
+                "deducciones":          data.get("deducciones", 0),
+                "retenciones":          data.get("retenciones", 0),
+                "impuesto_cargo":       data.get("impuesto_cargo", 0),
+                "saldo_pagar":          data.get("saldo_pagar", 0),
+                "saldo_favor":          data.get("saldo_favor", 0),
+                "estado":               data.get("estado", "borrador"),
+                "inconsistencias":      json.dumps(data.get("inconsistencias", [])),
+                "detalle_calculo":      json.dumps(data.get("detalle_calculo", {})),
+            },
+        )
+        row = db.execute(
+            text("SELECT * FROM renta_declaraciones WHERE contribuyente_id = :cid AND año_gravable = :año"),
+            {"cid": contribuyente_id, "año": año},
+        ).fetchone()
+    return dict(row._mapping) if row else {}
+
+
 # ─── Reglas tributarias ───────────────────────────────────────────────────────
 
 def get_reglas_tributarias(año_gravable: int) -> list[dict]:

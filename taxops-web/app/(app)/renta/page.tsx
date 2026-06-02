@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, Trash2, ChevronRight, RefreshCw, User, FileText,
-  AlertCircle, Upload, Loader2, CheckCircle, FolderOpen, Eye,
+  AlertCircle, Upload, Loader2, CheckCircle, FolderOpen, Eye, Calculator,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
 
@@ -45,6 +45,29 @@ type Documento = {
   mime_type: string | null;
   datos_extraidos: Record<string, unknown>;
   created_at: string;
+};
+
+type Declaracion = {
+  id: string;
+  contribuyente_id: string;
+  año_gravable: number;
+  patrimonio_bruto: number;
+  patrimonio_liquido: number;
+  ingresos_laborales: number;
+  rentas_capital: number;
+  rentas_no_laborales: number;
+  dividendos: number;
+  ganancias_ocasionales: number;
+  rentas_exentas: number;
+  deducciones: number;
+  retenciones: number;
+  impuesto_cargo: number;
+  saldo_pagar: number;
+  saldo_favor: number;
+  estado: string;
+  inconsistencias: { nivel: string; codigo: string; mensaje: string }[];
+  detalle_calculo: Record<string, unknown>;
+  updated_at: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -121,6 +144,11 @@ export default function RentaPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState("");
 
+  // Declaración state
+  const [decl, setDecl] = useState<Declaracion | null>(null);
+  const [declLoading, setDeclLoading] = useState(false);
+  const [declError, setDeclError] = useState("");
+
   // Form state
   const [form, setForm] = useState({
     tipo_doc: "13", numero_doc: "", nombre_completo: "",
@@ -148,9 +176,22 @@ export default function RentaPage() {
   // ── Select contribuyente ──────────────────────────────────────────────────
 
   async function handleSelect(c: Contribuyente) {
-    setSelected(c); setInfo(null); setDocs([]); setUploadFiles([]); setUploadError("");
+    setSelected(c); setInfo(null); setDocs([]); setDecl(null); setUploadFiles([]); setUploadError(""); setDeclError("");
     try { setInfo(await get<ContribuyenteInfo>(`/renta/contribuyentes/${c.id}/info`)); } catch { /* optional */ }
     await loadDocs(c.id);
+    try { setDecl(await get<Declaracion | null>(`/renta/contribuyentes/${c.id}/declaracion`)); } catch { /* optional */ }
+  }
+
+  async function handleCalcular() {
+    if (!selected) return;
+    setDeclLoading(true); setDeclError("");
+    try {
+      const result = await post<Declaracion>(`/renta/contribuyentes/${selected.id}/declaracion/calcular`, {});
+      setDecl(result);
+      try { setInfo(await get<ContribuyenteInfo>(`/renta/contribuyentes/${selected.id}/info`)); } catch { /* optional */ }
+    } catch (e: unknown) {
+      setDeclError(e instanceof Error ? e.message : "Error calculando declaración");
+    } finally { setDeclLoading(false); }
   }
 
   async function loadDocs(contrib_id: string) {
@@ -404,6 +445,95 @@ export default function RentaPage() {
               )}
             </div>
 
+            {/* ─── Declaración panel ─── */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <Calculator size={15} /> Liquidación Art. 241 ET
+                </h3>
+                <button
+                  onClick={handleCalcular}
+                  disabled={declLoading}
+                  className="flex items-center gap-1.5 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14] disabled:opacity-50"
+                >
+                  {declLoading ? <Loader2 size={12} className="animate-spin" /> : <Calculator size={12} />}
+                  {decl ? "Recalcular" : "Calcular declaración"}
+                </button>
+              </div>
+
+              {declError && (
+                <p className="mb-3 flex items-center gap-1 text-xs text-red-500"><AlertCircle size={12} /> {declError}</p>
+              )}
+
+              {decl ? (
+                <div className="space-y-4">
+                  {/* Resultado principal */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg bg-gray-50 p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Renta gravable</p>
+                      <p className="text-base font-bold text-gray-900">{fmtCOP((decl.detalle_calculo as Record<string, Record<string, number>>)?.consolidado?.renta_gravable ?? 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Impuesto a cargo</p>
+                      <p className="text-base font-bold text-gray-900">{fmtCOP(decl.impuesto_cargo)}</p>
+                    </div>
+                    <div className={`rounded-lg p-3 text-center ${decl.saldo_pagar > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
+                        {decl.saldo_pagar > 0 ? "Saldo a pagar" : "Saldo a favor"}
+                      </p>
+                      <p className={`text-base font-bold ${decl.saldo_pagar > 0 ? "text-red-600" : "text-green-600"}`}>
+                        {fmtCOP(decl.saldo_pagar > 0 ? decl.saldo_pagar : decl.saldo_favor)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tabla de cédula */}
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y divide-gray-100">
+                      <DeclRow label="Ingresos laborales"    value={decl.ingresos_laborales} />
+                      <DeclRow label="Rentas de capital"     value={decl.rentas_capital} />
+                      <DeclRow label="Rentas no laborales"   value={decl.rentas_no_laborales} />
+                      <DeclRow label="(−) Rentas exentas"    value={decl.rentas_exentas}  negative />
+                      <DeclRow label="(−) Deducciones"       value={decl.deducciones}     negative />
+                      <DeclRow label="Retenciones en la fuente" value={decl.retenciones} />
+                      <DeclRow label="Patrimonio bruto"      value={decl.patrimonio_bruto} />
+                      <DeclRow label="Patrimonio líquido"    value={decl.patrimonio_liquido} />
+                    </tbody>
+                  </table>
+
+                  {/* Tramo aplicado */}
+                  {(decl.detalle_calculo as Record<string, Record<string, unknown>>)?.tramo_aplicado && (
+                    <p className="text-[10px] text-gray-400">
+                      Tramo: {((decl.detalle_calculo as Record<string, Record<string, number>>).tramo_aplicado.renta_en_uvt ?? 0).toFixed(1)} UVT
+                      · Tarifa marginal {(((decl.detalle_calculo as Record<string, Record<string, number>>).tramo_aplicado.tarifa_marginal ?? 0) * 100).toFixed(0)}%
+                      · UVT {fmtCOP((decl.detalle_calculo as Record<string, number>).uvt as number ?? 49799)}
+                    </p>
+                  )}
+
+                  {/* Inconsistencias */}
+                  {decl.inconsistencias.length > 0 && (
+                    <div className="space-y-1">
+                      {decl.inconsistencias.map((inc, i) => (
+                        <div key={i} className={`flex items-start gap-2 rounded-lg p-2 text-xs ${inc.nivel === "advertencia" ? "bg-yellow-50 text-yellow-800" : "bg-blue-50 text-blue-700"}`}>
+                          <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
+                          <span>{inc.mensaje}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-gray-400 text-right">
+                    Estado: <span className="font-medium">{decl.estado}</span>
+                    {" · "}Actualizado: {new Date(decl.updated_at).toLocaleString("es-CO")}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-center text-sm text-gray-400 py-4">
+                  Presiona &quot;Calcular declaración&quot; para liquidar con los documentos cargados
+                </p>
+              )}
+            </div>
+
             {/* Documentos list */}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="flex items-center justify-between mb-3">
@@ -552,5 +682,19 @@ function InfoCard({ label, value, highlight }: { label: string; value: number | 
       <p className={`text-2xl font-bold ${highlight ? "text-red-600" : "text-gray-900"}`}>{value}</p>
       <p className="mt-0.5 text-xs text-gray-500">{label}</p>
     </div>
+  );
+}
+
+function fmtCOP(v: number): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(v);
+}
+
+function DeclRow({ label, value, negative }: { label: string; value: number; negative?: boolean }) {
+  if (value === 0) return null;
+  return (
+    <tr>
+      <td className="py-1 text-gray-500">{label}</td>
+      <td className={`py-1 text-right font-medium ${negative ? "text-red-600" : "text-gray-800"}`}>{fmtCOP(value)}</td>
+    </tr>
   );
 }

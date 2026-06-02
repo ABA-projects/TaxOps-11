@@ -117,6 +117,26 @@ async def get_declaracion(
     return get_declaracion(str(id), user["org_id"])
 
 
+# ─── Calcular declaración ────────────────────────────────────────────────────
+
+@router.post("/contribuyentes/{id}/declaracion/calcular", response_model=DeclaracionOut)
+async def calcular_declaracion_endpoint(
+    id: UUID,
+    user: dict = Depends(get_current_user),
+):
+    from db.database_renta import get_contribuyente, upsert_declaracion
+    from services.renta.tax_engine import calcular_declaracion
+
+    contrib = get_contribuyente(str(id), user["org_id"])
+    if not contrib:
+        raise HTTPException(404, "Contribuyente no encontrado")
+    try:
+        data = calcular_declaracion(str(id), contrib["año_gravable"])
+        return upsert_declaracion(str(id), contrib["año_gravable"], data)
+    except Exception as e:
+        raise HTTPException(500, f"Error calculando declaración: {e}")
+
+
 # ─── Reglas tributarias ───────────────────────────────────────────────────────
 
 @router.get("/reglas/{año_gravable}")
