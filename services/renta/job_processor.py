@@ -25,28 +25,36 @@ def process_documento_job(
       4. UPDATE renta_documentos in DB
       5. UPDATE in-memory job status
     """
+    import logging
+    log = logging.getLogger("taxops.renta")
+
     def _update_job(progreso: int, **kwargs):
         if job_id in in_memory_jobs:
             in_memory_jobs[job_id].update({"progreso": progreso, **kwargs})
 
     try:
-        _update_job(10, status="uploading")
-
-        # 1. Upload to GCS
+        # 1. Upload to GCS — non-fatal: OCR/classify still run if GCS fails
         from services.renta.storage import upload_to_gcs
-        gcs_key = upload_to_gcs(
-            file_bytes=file_bytes,
-            org_id=org_id,
-            contrib_id=contrib_id,
-            año=año,
-            filename=filename,
-            content_type=mime_type or "application/octet-stream",
-        )
+        gcs_key = f"pending/{doc_id}"
+        try:
+            _update_job(10, status="uploading")
+            gcs_key = upload_to_gcs(
+                file_bytes=file_bytes,
+                org_id=org_id,
+                contrib_id=contrib_id,
+                año=año,
+                filename=filename,
+                content_type=mime_type or "application/octet-stream",
+            )
+        except Exception as gcs_exc:
+            log.warning("GCS upload failed for %s: %s — continuing without storage", filename, gcs_exc)
+
         _update_job(30, status="ocr")
 
         # 2. OCR
         from services.renta.ocr_agent import extract_text
         text = extract_text(file_bytes, filename, mime_type)
+        log.info("OCR '%s': %d chars extracted", filename, len(text))
         _update_job(60, status="classifying")
 
         # 3. Classify
@@ -70,6 +78,7 @@ def process_documento_job(
         )
 
     except Exception as exc:
+        log.error("Job %s failed for doc %s: %s", job_id, doc_id, exc, exc_info=True)
         _update_job(0, status="error", error=str(exc))
         _mark_doc_error(doc_id, str(exc))
 
@@ -114,8 +123,13 @@ def _mark_doc_error(doc_id: str, error: str) -> None:
         from db.database import get_db
         with get_db() as db:
             db.execute(
-                text("UPDATE renta_documentos SET estado_ocr = 'error' WHERE id = :id"),
-                {"id": doc_id},
+                text("""
+                    UPDATE renta_documentos
+                    SET estado_ocr = 'error',
+                        datos_extraidos = CAST(:err AS jsonb)
+                    WHERE id = :id
+                """),
+                {"id": doc_id, "err": json.dumps({"_error": error[:500]})},
             )
     except Exception:
         pass
