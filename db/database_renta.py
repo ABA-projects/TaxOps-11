@@ -193,7 +193,10 @@ def upsert_declaracion(contribuyente_id: str, año: int, data: dict) -> dict:
                     rentas_exentas, deducciones, retenciones,
                     impuesto_cargo, saldo_pagar, saldo_favor,
                     estado,
-                    inconsistencias, detalle_calculo
+                    inconsistencias, detalle_calculo,
+                    aportes_pension, afc_fvp, intereses_vivienda,
+                    medicina_prepagada, dependientes, tipo_ganancia,
+                    pasivos, ajuste_manual
                 ) VALUES (
                     :id, :contribuyente_id, :año_gravable,
                     :patrimonio_bruto, :patrimonio_liquido,
@@ -202,7 +205,10 @@ def upsert_declaracion(contribuyente_id: str, año: int, data: dict) -> dict:
                     :rentas_exentas, :deducciones, :retenciones,
                     :impuesto_cargo, :saldo_pagar, :saldo_favor,
                     :estado,
-                    CAST(:inconsistencias AS jsonb), CAST(:detalle_calculo AS jsonb)
+                    CAST(:inconsistencias AS jsonb), CAST(:detalle_calculo AS jsonb),
+                    :aportes_pension, :afc_fvp, :intereses_vivienda,
+                    :medicina_prepagada, :dependientes, :tipo_ganancia,
+                    :pasivos, CAST(:ajuste_manual AS jsonb)
                 )
                 ON CONFLICT (contribuyente_id, año_gravable) DO UPDATE SET
                     patrimonio_bruto        = EXCLUDED.patrimonio_bruto,
@@ -221,29 +227,99 @@ def upsert_declaracion(contribuyente_id: str, año: int, data: dict) -> dict:
                     estado                  = EXCLUDED.estado,
                     inconsistencias         = EXCLUDED.inconsistencias,
                     detalle_calculo         = EXCLUDED.detalle_calculo,
+                    aportes_pension         = EXCLUDED.aportes_pension,
+                    afc_fvp                 = EXCLUDED.afc_fvp,
+                    intereses_vivienda      = EXCLUDED.intereses_vivienda,
+                    medicina_prepagada      = EXCLUDED.medicina_prepagada,
+                    dependientes            = EXCLUDED.dependientes,
+                    tipo_ganancia           = EXCLUDED.tipo_ganancia,
+                    pasivos                 = EXCLUDED.pasivos,
+                    ajuste_manual           = EXCLUDED.ajuste_manual,
                     updated_at              = NOW()
             """),
             {
-                "id":                   decl_id,
-                "contribuyente_id":     contribuyente_id,
-                "año_gravable":         año,
-                "patrimonio_bruto":     data.get("patrimonio_bruto", 0),
-                "patrimonio_liquido":   data.get("patrimonio_liquido", 0),
-                "ingresos_laborales":   data.get("ingresos_laborales", 0),
-                "rentas_capital":       data.get("rentas_capital", 0),
-                "rentas_no_laborales":  data.get("rentas_no_laborales", 0),
-                "dividendos":           data.get("dividendos", 0),
+                "id":                    decl_id,
+                "contribuyente_id":      contribuyente_id,
+                "año_gravable":          año,
+                "patrimonio_bruto":      data.get("patrimonio_bruto", 0),
+                "patrimonio_liquido":    data.get("patrimonio_liquido", 0),
+                "ingresos_laborales":    data.get("ingresos_laborales", 0),
+                "rentas_capital":        data.get("rentas_capital", 0),
+                "rentas_no_laborales":   data.get("rentas_no_laborales", 0),
+                "dividendos":            data.get("dividendos", 0),
                 "ganancias_ocasionales": data.get("ganancias_ocasionales", 0),
-                "rentas_exentas":       data.get("rentas_exentas", 0),
-                "deducciones":          data.get("deducciones", 0),
-                "retenciones":          data.get("retenciones", 0),
-                "impuesto_cargo":       data.get("impuesto_cargo", 0),
-                "saldo_pagar":          data.get("saldo_pagar", 0),
-                "saldo_favor":          data.get("saldo_favor", 0),
-                "estado":               data.get("estado", "borrador"),
-                "inconsistencias":      json.dumps(data.get("inconsistencias", [])),
-                "detalle_calculo":      json.dumps(data.get("detalle_calculo", {})),
+                "rentas_exentas":        data.get("rentas_exentas", 0),
+                "deducciones":           data.get("deducciones", 0),
+                "retenciones":           data.get("retenciones", 0),
+                "impuesto_cargo":        data.get("impuesto_cargo", 0),
+                "saldo_pagar":           data.get("saldo_pagar", 0),
+                "saldo_favor":           data.get("saldo_favor", 0),
+                "estado":                data.get("estado", "borrador"),
+                "inconsistencias":       json.dumps(data.get("inconsistencias", [])),
+                "detalle_calculo":       json.dumps(data.get("detalle_calculo", {})),
+                "aportes_pension":       data.get("aportes_pension", 0),
+                "afc_fvp":               data.get("afc_fvp", 0),
+                "intereses_vivienda":    data.get("intereses_vivienda", 0),
+                "medicina_prepagada":    data.get("medicina_prepagada", 0),
+                "dependientes":          data.get("dependientes", 0),
+                "tipo_ganancia":         data.get("tipo_ganancia"),
+                "pasivos":               data.get("pasivos", 0),
+                "ajuste_manual":         json.dumps(data.get("ajuste_manual")) if data.get("ajuste_manual") else None,
             },
+        )
+        row = db.execute(
+            text("SELECT * FROM renta_declaraciones WHERE contribuyente_id = :cid AND año_gravable = :año"),
+            {"cid": contribuyente_id, "año": año},
+        ).fetchone()
+    return dict(row._mapping) if row else {}
+
+
+def patch_datos_declaracion(contribuyente_id: str, año: int, data: dict) -> dict:
+    """Upsert parcial — solo actualiza los campos presentes en data."""
+    from sqlalchemy import text
+    import json
+
+    ALLOWED = {
+        "ingresos_laborales", "rentas_capital", "rentas_no_laborales",
+        "aportes_pension", "afc_fvp", "retenciones", "intereses_vivienda",
+        "medicina_prepagada", "dependientes", "dividendos", "ganancias_ocasionales",
+        "tipo_ganancia", "pasivos", "patrimonio_bruto", "ajuste_manual", "estado",
+    }
+    campos = {k: v for k, v in data.items() if k in ALLOWED and v is not None}
+
+    if not campos:
+        with get_db() as db:
+            row = db.execute(
+                text("SELECT * FROM renta_declaraciones WHERE contribuyente_id = :cid AND año_gravable = :año"),
+                {"cid": contribuyente_id, "año": año},
+            ).fetchone()
+        if row:
+            return dict(row._mapping)
+        return upsert_declaracion(contribuyente_id, año, {"estado": "borrador"})
+
+    jsonb_fields = {"ajuste_manual"}
+    set_parts = []
+    params: dict = {"cid": contribuyente_id, "año": año}
+
+    for k, v in campos.items():
+        if k in jsonb_fields:
+            set_parts.append(f"{k} = CAST(:{k} AS jsonb)")
+            params[k] = json.dumps(v)
+        else:
+            set_parts.append(f"{k} = :{k}")
+            params[k] = v
+
+    set_parts.append("updated_at = NOW()")
+    set_sql = ", ".join(set_parts)
+
+    with get_db() as db:
+        db.execute(
+            text(f"""
+                INSERT INTO renta_declaraciones (contribuyente_id, año_gravable, estado)
+                VALUES (:cid, :año, 'borrador')
+                ON CONFLICT (contribuyente_id, año_gravable) DO UPDATE SET {set_sql}
+            """),
+            params,
         )
         row = db.execute(
             text("SELECT * FROM renta_declaraciones WHERE contribuyente_id = :cid AND año_gravable = :año"),

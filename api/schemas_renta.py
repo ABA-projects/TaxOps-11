@@ -101,6 +101,15 @@ class DeclaracionOut(BaseModel):
     impuesto_cargo: float
     saldo_pagar: float
     saldo_favor: float
+    # Campos Semana 4:
+    aportes_pension: float = 0.0
+    afc_fvp: float = 0.0
+    intereses_vivienda: float = 0.0
+    medicina_prepagada: float = 0.0
+    dependientes: int = 0
+    tipo_ganancia: Optional[str] = None
+    pasivos: float = 0.0
+    ajuste_manual: Optional[dict[str, Any]] = None
     estado: str
     pdf_path: Optional[str]
     inconsistencias: list[Any]
@@ -109,6 +118,27 @@ class DeclaracionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─── Datos tributarios (PATCH /datos) ─────────────────────────────────────────
+
+class DatosTributariosIn(BaseModel):
+    ingresos_laborales: Optional[float] = None
+    rentas_capital: Optional[float] = None
+    rentas_no_laborales: Optional[float] = None
+    aportes_pension: Optional[float] = None
+    afc_fvp: Optional[float] = None
+    retenciones: Optional[float] = None
+    intereses_vivienda: Optional[float] = None
+    medicina_prepagada: Optional[float] = None
+    dependientes: Optional[int] = None
+    dividendos: Optional[float] = None
+    ganancias_ocasionales: Optional[float] = None
+    tipo_ganancia: Optional[str] = Field(None, pattern=r"^(venta_activo|herencia|loteria)$")
+    pasivos: Optional[float] = None
+    patrimonio_bruto: Optional[float] = None
+    ajuste_manual: Optional[dict[str, Any]] = None
+    estado: Optional[str] = Field(None, pattern=r"^(borrador|revision|presentado)$")
 
 
 # ─── Riesgo / info contribuyente ─────────────────────────────────────────────
