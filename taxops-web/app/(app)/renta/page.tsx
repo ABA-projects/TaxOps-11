@@ -142,6 +142,23 @@ const OCR_COLORS: Record<string, string> = {
 
 const AÑOS = [2025, 2024, 2023];
 
+const CAT_ORDER = [
+  "ingresos", "tributario", "pensiones", "salud",
+  "patrimonio", "bienes", "bancos", "identificacion", "otros",
+];
+
+const CATEGORIA_ACCENT: Record<string, string> = {
+  ingresos:       "border-l-green-400 bg-green-50",
+  bancos:         "border-l-indigo-400 bg-indigo-50",
+  tributario:     "border-l-gray-400 bg-gray-50",
+  pensiones:      "border-l-purple-400 bg-purple-50",
+  salud:          "border-l-red-400 bg-red-50",
+  patrimonio:     "border-l-amber-400 bg-amber-50",
+  bienes:         "border-l-orange-400 bg-orange-50",
+  identificacion: "border-l-blue-400 bg-blue-50",
+  otros:          "border-l-gray-200 bg-gray-50",
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtBytes(b: number | null): string {
@@ -174,6 +191,7 @@ export default function RentaPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(CAT_ORDER));
 
   // Estado del contribuyente — flags derivados
   const isEditable  = !["revision", "completado", "presentado"].includes(selected?.estado ?? "");
@@ -372,6 +390,14 @@ export default function RentaPage() {
       await del(`/renta/contribuyentes/${selected.id}/documentos/${doc_id}`);
       setDocs(prev => prev.filter(d => d.id !== doc_id));
     } catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
+  }
+
+  function toggleCat(cat: string) {
+    setExpandedCats(prev => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
   }
 
   async function handleEstado(nuevoEstado: string) {
@@ -995,7 +1021,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               );
             })()}
 
-            {/* Documentos list */}
+            {/* ─── Expediente agrupado por categoría ─── */}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -1026,55 +1052,84 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               ) : docs.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-4">Sin documentos cargados</p>
               ) : (
-                <ul className="divide-y divide-gray-100">
-                  {docs.map(doc => (
-                    <li key={doc.id} className="flex items-center justify-between py-2 gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedDocs.has(doc.id)}
-                        onChange={e => setSelectedDocs(prev => {
-                          const next = new Set(prev);
-                          e.target.checked ? next.add(doc.id) : next.delete(doc.id);
-                          return next;
-                        })}
-                        className="flex-shrink-0 rounded border-gray-300 text-red-500 cursor-pointer"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-gray-800">{doc.filename}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="text-xs text-gray-500">{CATEGORIA_LABELS[doc.categoria] ?? doc.categoria}</span>
-                          {doc.confianza_clasificacion > 0 && <ConfidenceBadge v={doc.confianza_clasificacion} />}
-                          <span className={`text-xs font-medium ${OCR_COLORS[doc.estado_ocr] ?? "text-gray-500"}`}>
-                            {doc.estado_ocr === "completado" ? <CheckCircle size={11} className="inline mr-0.5" /> : null}
-                            {doc.estado_ocr}
-                          </span>
-                          {doc.size_bytes && <span className="text-xs text-gray-400">{fmtBytes(doc.size_bytes)}</span>}
-                        </div>
-                        {doc.datos_extraidos && Object.keys(doc.datos_extraidos).length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {Object.entries(doc.datos_extraidos).slice(0, 3).map(([k, v]) => (
-                              <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
-                                {k}: {String(v)}
+                <div className="space-y-2">
+                  {CAT_ORDER
+                    .filter(cat => docs.some(d => (d.categoria || "otros") === cat))
+                    .map(cat => {
+                      const catDocs = docs.filter(d => (d.categoria || "otros") === cat);
+                      const isOpen = expandedCats.has(cat);
+                      return (
+                        <div key={cat} className="rounded-lg border border-gray-100 overflow-hidden">
+                          {/* Acordeón header */}
+                          <button
+                            onClick={() => toggleCat(cat)}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left border-l-4 ${CATEGORIA_ACCENT[cat] ?? "border-l-gray-200 bg-gray-50"}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-gray-700">
+                                {CATEGORIA_LABELS[cat] ?? cat}
                               </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {doc.estado_ocr === "completado" && (
-                          <button onClick={() => openPreview(doc.id)}
-                            className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-500" title="Ver documento">
-                            <Eye size={15} />
+                              <span className="rounded-full bg-white border border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                {catDocs.length}
+                              </span>
+                            </div>
+                            <ChevronRight size={13} className={`text-gray-400 transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`} />
                           </button>
-                        )}
-                        <button onClick={() => handleDeleteDoc(doc.id)}
-                          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Eliminar">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+
+                          {/* Acordeón body */}
+                          {isOpen && (
+                            <ul className="divide-y divide-gray-100 px-1">
+                              {catDocs.map(doc => (
+                                <li key={doc.id} className="flex items-center justify-between py-2 gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDocs.has(doc.id)}
+                                    onChange={e => setSelectedDocs(prev => {
+                                      const next = new Set(prev);
+                                      e.target.checked ? next.add(doc.id) : next.delete(doc.id);
+                                      return next;
+                                    })}
+                                    className="flex-shrink-0 rounded border-gray-300 text-red-500 cursor-pointer"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium text-gray-800">{doc.filename}</p>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      {doc.confianza_clasificacion > 0 && <ConfidenceBadge v={doc.confianza_clasificacion} />}
+                                      <span className={`text-xs font-medium ${OCR_COLORS[doc.estado_ocr] ?? "text-gray-500"}`}>
+                                        {doc.estado_ocr === "completado" ? <CheckCircle size={11} className="inline mr-0.5" /> : null}
+                                        {doc.estado_ocr}
+                                      </span>
+                                      {doc.size_bytes && <span className="text-xs text-gray-400">{fmtBytes(doc.size_bytes)}</span>}
+                                    </div>
+                                    {doc.datos_extraidos && Object.keys(doc.datos_extraidos).length > 0 && (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {Object.entries(doc.datos_extraidos).slice(0, 3).map(([k, v]) => (
+                                          <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                                            {k}: {String(v)}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {doc.estado_ocr === "completado" && (
+                                      <button onClick={() => openPreview(doc.id)}
+                                        className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-500" title="Ver documento">
+                                        <Eye size={15} />
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleDeleteDoc(doc.id)}
+                                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Eliminar">
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
               )}
             </div>
           </>
