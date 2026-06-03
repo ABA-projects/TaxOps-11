@@ -160,7 +160,7 @@ function ConfidenceBadge({ v }: { v: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RentaPage() {
-  const { get, post, patch, postForm, del, getBlob } = useApi();
+  const { get, post, patch, put, postForm, del, getBlob } = useApi();
 
   const [contribuyentes, setContribuyentes] = useState<Contribuyente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +174,10 @@ export default function RentaPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Estado del contribuyente — flags derivados
+  const isEditable  = !["revision", "completado", "presentado"].includes(selected?.estado ?? "");
+  const isPresented = ["completado", "presentado"].includes(selected?.estado ?? "");
 
   // Upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -370,6 +374,17 @@ export default function RentaPage() {
     } catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
   }
 
+  async function handleEstado(nuevoEstado: string) {
+    if (!selected) return;
+    try {
+      const updated = await put<Contribuyente>(`/renta/contribuyentes/${selected.id}`, { estado: nuevoEstado });
+      setSelected(updated);
+      setContribuyentes(prev => prev.map(c => c.id === updated.id ? updated : c));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al actualizar estado");
+    }
+  }
+
   async function handleBulkDelete() {
     if (!selected || selectedDocs.size === 0) return;
     if (!confirm(`¿Eliminar ${selectedDocs.size} documento(s) seleccionado(s)?`)) return;
@@ -533,10 +548,40 @@ export default function RentaPage() {
                 {selected.email && <p className="text-xs text-gray-400">{selected.email}</p>}
                 {selected.ciudad && <p className="text-xs text-gray-400">{selected.ciudad}</p>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_LABELS[selected.estado]?.color ?? "bg-gray-100 text-gray-600"}`}>
                   {ESTADO_LABELS[selected.estado]?.label ?? selected.estado}
                 </span>
+                {/* Transiciones de estado */}
+                {isEditable && (
+                  <button
+                    onClick={() => handleEstado("revision")}
+                    className="rounded-lg bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700"
+                    title="Bloquear edición y enviar a revisión">
+                    → Revisión
+                  </button>
+                )}
+                {selected.estado === "revision" && (
+                  <>
+                    <button
+                      onClick={() => handleEstado("en_proceso")}
+                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50">
+                      ← Borrador
+                    </button>
+                    <button
+                      onClick={() => handleEstado("presentado")}
+                      className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700">
+                      → Presentado
+                    </button>
+                  </>
+                )}
+                {isPresented && (
+                  <button
+                    onClick={() => handleEstado("revision")}
+                    className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">
+                    ← Revisión
+                  </button>
+                )}
                 <button onClick={() => handleDelete(selected.id)}
                   className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500" title="Eliminar">
                   <Trash2 size={16} />
@@ -622,6 +667,12 @@ export default function RentaPage() {
 
               {datosOpen && (
                 <div className="mt-3">
+                  {!isEditable && (
+                    <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-purple-100 bg-purple-50 px-3 py-2 text-xs text-purple-700">
+                      <AlertCircle size={12} />
+                      {isPresented ? "Declaración presentada — datos en solo lectura" : "En revisión — datos bloqueados para edición"}
+                    </div>
+                  )}
                   <div className="flex gap-1 mb-3 border-b border-gray-200">
                     {(["general", "dividendos", "ganancias", "patrimonio"] as const).map(tab => (
                       <button key={tab} onClick={() => setDatosTab(tab)}
@@ -647,7 +698,8 @@ export default function RentaPage() {
                           <label className="block text-[10px] text-gray-500 mb-0.5">{label}</label>
                           <input type="number" value={datosForm[k]}
                             onChange={e => setDatosForm(p => ({ ...p, [k]: e.target.value }))}
-                            className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                            disabled={!isEditable}
+                            className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                             placeholder="0" />
                         </div>
                       ))}
@@ -655,7 +707,8 @@ export default function RentaPage() {
                         <label className="block text-[10px] text-gray-500 mb-0.5">Dependientes económicos</label>
                         <input type="number" min="0" max="4" value={datosForm.dependientes}
                           onChange={e => setDatosForm(p => ({ ...p, dependientes: e.target.value }))}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                          disabled={!isEditable}
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -666,7 +719,8 @@ export default function RentaPage() {
                       <label className="block text-[10px] text-gray-500 mb-0.5">Dividendos gravados 2017+ (cas. 107)</label>
                       <input type="number" value={datosForm.dividendos}
                         onChange={e => setDatosForm(p => ({ ...p, dividendos: e.target.value }))}
-                        className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                        disabled={!isEditable}
+                        className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                         placeholder="0" />
                       <p className="mt-2 text-[10px] text-gray-400">Tarifa: 0% hasta 300 UVT · 15% sobre el exceso (Art. 242 ET)</p>
                     </div>
@@ -678,7 +732,8 @@ export default function RentaPage() {
                         <label className="block text-[10px] text-gray-500 mb-0.5">Tipo de ganancia</label>
                         <select value={datosForm.tipo_ganancia}
                           onChange={e => setDatosForm(p => ({ ...p, tipo_ganancia: e.target.value }))}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]">
+                          disabled={!isEditable}
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:cursor-not-allowed">
                           <option value="venta_activo">Venta activo fijo &gt;2 años — 10%</option>
                           <option value="herencia">Herencia / donación — 10%</option>
                           <option value="loteria">Lotería / rifa — 20%</option>
@@ -688,7 +743,8 @@ export default function RentaPage() {
                         <label className="block text-[10px] text-gray-500 mb-0.5">Valor ganancia ocasional</label>
                         <input type="number" value={datosForm.ganancias_ocasionales}
                           onChange={e => setDatosForm(p => ({ ...p, ganancias_ocasionales: e.target.value }))}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                          disabled={!isEditable}
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -700,14 +756,16 @@ export default function RentaPage() {
                         <label className="block text-[10px] text-gray-500 mb-0.5">Patrimonio bruto (cas. 29)</label>
                         <input type="number" value={datosForm.patrimonio_bruto}
                           onChange={e => setDatosForm(p => ({ ...p, patrimonio_bruto: e.target.value }))}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                          disabled={!isEditable}
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                       <div>
                         <label className="block text-[10px] text-gray-500 mb-0.5">Pasivos / deudas (cas. 30)</label>
                         <input type="number" value={datosForm.pasivos}
                           onChange={e => setDatosForm(p => ({ ...p, pasivos: e.target.value }))}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                          disabled={!isEditable}
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -717,8 +775,8 @@ export default function RentaPage() {
                     <p className="mt-2 flex items-center gap-1 text-xs text-red-500"><AlertCircle size={12} /> {datosError}</p>
                   )}
 
-                  <button onClick={handleGuardarDatos} disabled={datosSaving}
-                    className="mt-3 w-full rounded-lg bg-gray-800 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50">
+                  <button onClick={handleGuardarDatos} disabled={datosSaving || !isEditable}
+                    className="mt-3 w-full rounded-lg bg-gray-800 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-40">
                     {datosSaving ? "Guardando…" : "Guardar datos tributarios"}
                   </button>
                 </div>
@@ -740,7 +798,8 @@ export default function RentaPage() {
                   )}
                   <button
                     onClick={handleCalcular}
-                    disabled={declLoading}
+                    disabled={declLoading || isPresented}
+                    title={isPresented ? "Declaración presentada — no se puede recalcular" : undefined}
                     className="flex items-center gap-1.5 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14] disabled:opacity-50"
                   >
                     {declLoading ? <Loader2 size={12} className="animate-spin" /> : <Calculator size={12} />}
@@ -910,18 +969,6 @@ export default function RentaPage() {
                       }}
                       className="flex items-center gap-1.5 rounded-lg border border-green-200 px-3 py-1.5 text-xs text-green-700 hover:bg-green-50">
                       <Download size={12} /> Excel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selected || bloqueos.length > 0) return;
-                        try {
-                          const result = await patch<Declaracion>(`/renta/contribuyentes/${selected.id}/declaracion/datos`, { estado: "revision" });
-                          setDecl(result);
-                        } catch { /* silent */ }
-                      }}
-                      disabled={bloqueos.length > 0}
-                      className="flex-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-40">
-                      {decl?.estado === "revision" ? "✓ Lista para presentar" : "Marcar lista para presentar"}
                     </button>
                   </div>
                 </div>
