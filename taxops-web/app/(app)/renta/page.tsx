@@ -447,12 +447,32 @@ export default function RentaPage() {
       : "";
 
     try {
-      const res = await post<{ content: string }>("/chatbot/ask", {
+      const res = await post<{ content: string }>("/chatbot/contextual", {
         message: text + contextNote,
         provider: "groq",
         model: "llama-3.3-70b-versatile",
         history: chatMsgs.slice(-8),
-        system_prompt: "Eres un experto contable colombiano especializado en declaración de renta personas naturales. Conoces el Art. 241 ET 2025, la tabla progresiva en UVT ($49,799), cédula general, rentas exentas Art. 206 numeral 10, deducciones admisibles, patrimonio y el sistema de retenciones en la fuente. Responde de forma clara y práctica.",
+        system_prompt: `Eres un experto contable colombiano especializado en declaración de renta de personas naturales residentes — Formulario 210 DIAN.
+
+TABLA ART. 241 ET 2025 (UVT = $49.799):
+- Hasta 1.090 UVT: 0%
+- >1.090 hasta 1.700 UVT: 19% sobre exceso de 1.090
+- >1.700 hasta 4.100 UVT: 28% sobre exceso de 1.700 + 115,9 UVT
+- >4.100 hasta 8.670 UVT: 33% sobre exceso de 4.100 + 787,9 UVT
+- >8.670 hasta 18.970 UVT: 35% sobre exceso de 8.670 + 2.296 UVT
+- >18.970 hasta 31.000 UVT: 37% sobre exceso de 18.970 + 5.901 UVT
+- >31.000 UVT: 39% sobre exceso de 31.000 + 10.352,5 UVT
+
+REGLAS CLAVE:
+- Rentas exentas 25% núm.10 Art.206 ET: límite 240 UVT/mes (2.880 UVT/año = $143.580.720)
+- AFC/FVP/AVC: deducible hasta 30% del ingreso laboral sin superar 3.800 UVT/año
+- Límite Art.336 ET: rentas exentas + deducciones ≤ 40% ingresos netos Y ≤ 1.340 UVT ($66.730.860)
+- Dividendos Art.242 ET: 0% hasta 300 UVT, 15% sobre exceso
+- Ganancias ocasionales: 10% (venta activo fijo >2 años, herencias), 20% (loterías, rifas)
+- Dependientes: hasta 10% del ingreso laboral y máx. 32 UVT por dependiente (máx. 4)
+- Medicina prepagada: deducible hasta 16 UVT/mes por familia
+
+Responde de forma clara, práctica y con números concretos cuando el contribuyente tenga contexto activo. Si hay dudas sobre un caso específico, menciona el artículo ET aplicable.`,
       });
       setChatMsgs(p => [...p, { role: "assistant", content: res.content }]);
     } catch {
