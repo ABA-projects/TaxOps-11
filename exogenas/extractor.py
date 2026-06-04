@@ -229,6 +229,13 @@ _RE_PARRAFO_MAYOR2 = re.compile(
     r"suma\s+de\s+(?:\(?\$\s*)?([\d.,]+)[^.]{0,100}?(\d+[.,]\d+)\s*%[^.]{0,80}?(?:\(?\$\s*)?([\d.,]+)",
     re.I,
 )
+# Párrafo narrativo multilinea: "suma de ($ ret ) m/l \n...\n equivalente al pct% de $ base"
+# \s*\)? maneja espacio interno antes del cierre de paréntesis: "($ 4.286.890 ) m/l"
+_RE_PARRAFO_EQUIV = re.compile(
+    r"suma\s+de\s+\(?[\$\s]*([\d.,]+)\s*\)?\s*m/?l[\s\S]{0,500}?"
+    r"equivalente\s+al\s+([\d.,]+)\s*%\s+de\s+\$?\s*([\d.,]+)",
+    re.I,
+)
 
 # Tabla bimestre IVA (PROTECTION CLOUD): Bimestre | Base | IVA | Cuantía | %
 _RE_BIMESTRE = re.compile(
@@ -948,6 +955,14 @@ def _extract_amounts(text: str, tipo_cert: str, nit_hint: str = "") -> tuple[flo
     if m:
         return _parse_money(m.group(3)), _parse_money(m.group(1))
 
+    # 4b. Párrafo multilinea: "suma de ($ ret) m/l \n ... equivalente al pct% de $ base"
+    m = _RE_PARRAFO_EQUIV.search(text)
+    if m:
+        r_val = _parse_money(m.group(1))
+        b_val = _parse_money(m.group(3))
+        if b_val > r_val > 0 and 0.001 < r_val / b_val < 0.35:
+            return b_val, r_val
+
     # 5. Tabla bimestre ROSARIO (IVA por bimestre con totales)
     ros = _RE_BIMESTRE_ROSARIO.findall(text)
     if ros:
@@ -1254,24 +1269,64 @@ def _read_pdf(path: Path) -> tuple[str, bool]:
     return _ocr_pdf_pages(path)
 
 
+def _tesseract_on_image(img: "Image.Image", psm: int = 6) -> str:
+    """
+    Ejecuta tesseract sobre una imagen PIL. Intenta primero pytesseract; si falla
+    por el bug macOS/ARM (leptonica no resuelve symlink /tmp), cae a subprocess
+    guardando la imagen en ~/.cache/taxops_ocr/ con ruta absoluta.
+    """
+    import subprocess as _sp
+    try:
+        import pytesseract
+        return pytesseract.image_to_string(img, lang="spa", config=f"--oem 3 --psm {psm}", timeout=60)
+    except UnicodeDecodeError:
+        # macOS ARM: leptonica no puede leer /tmp (symlink); guardar en ruta real
+        pass
+    except Exception:
+        return ""
+
+    # Fallback: subprocess con ruta absoluta
+    try:
+        import shutil
+        if not shutil.which("tesseract"):
+            return ""
+        tmp_dir = Path.home() / ".cache" / "taxops_ocr"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_png = tmp_dir / f"ocr_{psm}.png"
+        img.save(str(tmp_png))
+        r = _sp.run(
+            ["tesseract", str(tmp_png), "stdout", "-l", "spa", "--oem", "3", "--psm", str(psm)],
+            capture_output=True, timeout=60,
+        )
+        tmp_png.unlink(missing_ok=True)
+        return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
 def _ocr_pdf_pages(path: Path) -> tuple[str, bool]:
     """OCR sobre páginas de PDF escaneado usando pdfplumber + pytesseract."""
     try:
-        import pytesseract
+        import pytesseract  # noqa: F401 — verificar disponibilidad
+    except ImportError:
+        return "", True
+
+    try:
         parts: list[str] = []
         with pdfplumber.open(path) as pdf:
             for page_num, page in enumerate(pdf.pages[:_MAX_PAGES]):
-                img = page.to_image(resolution=200).original
-                t = pytesseract.image_to_string(img, lang="spa", timeout=60)
+                img = page.to_image(resolution=300).original
+                t = _tesseract_on_image(img, psm=6)
+                if not t.strip():
+                    t = _tesseract_on_image(img, psm=3)
                 if t.strip():
                     parts.append(t)
                 elif page_num == 0:
-                    # Primera página sin texto → imagen ilegible para tesseract, no seguir
                     break
         text = "\n".join(parts)
         return text, not text.strip()
     except Exception:
-        return "", True  # Tesseract no disponible o PDF corrupto
+        return "", True
 
 
 def _read_docx(path: Path) -> tuple[str, bool]:
@@ -1355,31 +1410,30 @@ _OCR_GOOD_ENOUGH = 120  # caracteres alfanuméricos mínimos para aceptar result
 
 def _read_image(path: Path) -> tuple[str, bool]:
     """
-    OCR sobre imagen (JPG/PNG/TIFF) con pytesseract.
-    Intenta preprocesados en orden de calidad; para en cuanto obtiene texto suficiente.
+    OCR sobre imagen (JPG/PNG/TIFF).
+    Intenta preprocesados en orden de calidad; prueba psm 6 y 3 por variante.
+    Usa _tesseract_on_image que maneja el bug macOS/ARM de leptonica + /tmp.
     """
     try:
         from PIL import Image
-        import pytesseract
+        import pytesseract  # noqa: F401
     except ImportError:
-        return "", True  # sin pytesseract → tratar como escaneado
+        return "", True
 
     img = Image.open(path).convert("RGB")
     variants = _preprocess_for_ocr(img)
     img.close()
 
     best = ""
-    # Solo psm 6 (una columna densa de texto) — el más común en certificados
-    # psm 11 solo si el primero falla completamente
     for variant in variants:
-        try:
-            t = pytesseract.image_to_string(variant, lang="spa", config="--oem 3 --psm 6", timeout=60)
-        except Exception:
-            t = ""
-        if len(re.sub(r"\W+", "", t)) > len(re.sub(r"\W+", "", best)):
-            best = t
+        for psm in (6, 3):
+            t = _tesseract_on_image(variant, psm=psm)
+            if len(re.sub(r"\W+", "", t)) > len(re.sub(r"\W+", "", best)):
+                best = t
+            if len(re.sub(r"\W+", "", best)) >= _OCR_GOOD_ENOUGH:
+                break
         if len(re.sub(r"\W+", "", best)) >= _OCR_GOOD_ENOUGH:
-            break  # texto suficiente — no probar más variantes
+            break
     return best, not best.strip()
 
 
