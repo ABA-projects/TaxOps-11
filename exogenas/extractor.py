@@ -401,10 +401,46 @@ def _extract_emisor(text: str) -> tuple[str, str, str]:
         return (razon if len(razon) >= 3 else ""), nit, d
 
     # ── PRIORIDAD 1: SAP bilingüe (varias variantes de etiqueta) (EL BUCANERO) ──
-    # El NIT aparece al FINAL de la línea siguiente al header de retenedor
+
+    # 1a. NIT en la MISMA línea del header: "Company Code Tax No. 8001974634"
+    #     Layout IVA — el nombre suele aparecer antes o después del header.
+    m_sap_nit = _RE_SAP_COMPANY_NIT.search(text)
+    if m_sap_nit:
+        nit_raw = m_sap_nit.group(1)
+        razon = ""
+
+        def _looks_like_company(ln: str) -> bool:
+            """True si la línea es un nombre de empresa (no monto, no dirección, no cert)."""
+            return (
+                bool(ln)
+                and not _is_junk_line(ln)
+                and not re.search(r"[\d.,]{5,}", ln)   # líneas con montos → descartar
+                and not re.search(r"^(?:TOTAL|CERTIFICADO|RETENCI|CUANTIA|MONTO)", ln, re.I)
+            )
+
+        # Primero: líneas ANTERIORES al header (nombre del membrete)
+        prev_lines = [l.strip() for l in text[:m_sap_nit.start()].split("\n") if l.strip()]
+        for ln in reversed(prev_lines[-10:]):
+            if _looks_like_company(ln):
+                razon = ln
+                break
+
+        # Fallback: línea SIGUIENTE al header si el nombre no está antes
+        if not razon:
+            after_header = text[m_sap_nit.end():m_sap_nit.end() + 200]
+            for ln in after_header.split("\n"):
+                ln = ln.strip()
+                if _looks_like_company(ln):
+                    razon = ln
+                    break
+
+        return _make_result(razon, nit_raw, "")
+
+    # 1b. NIT en la línea SIGUIENTE al header (layout RENTA y variantes)
     for _sap_pat in (
         r"Company\s+Code\s+Tax\s+No\.?[^\n]*\n([^\n]+)",
         r"Company\s+Code\s+Name\s+NIT[^\n]*\n([^\n]+)",
+        r"Razon\s+social\s+quien[^\n]*\n([^\n]+)",
     ):
         m = re.search(_sap_pat, text, re.I)
         if m:
@@ -415,22 +451,21 @@ def _extract_emisor(text: str) -> tuple[str, str, str]:
                 nit_raw = nit_m.group(1)
                 razon = next_line[:nit_m.start()].strip()
                 return _make_result(razon, nit_raw, "")
-            # NIT en cualquier posición de la línea (layout IVA u otras variantes)
+            # NIT en cualquier posición de la línea
             nit_m = re.search(r"(\d{7,12})", next_line)
             if nit_m:
                 nit_raw = nit_m.group(1)
                 razon = next_line[:nit_m.start()].strip()
                 if not razon:
-                    # Buscar nombre en líneas anteriores al header SAP
+                    # Buscar nombre en líneas anteriores al header SAP (ampliar a 10)
                     prev_lines = [l.strip() for l in text[:m.start()].split("\n") if l.strip()]
-                    for ln in reversed(prev_lines[-5:]):
+                    for ln in reversed(prev_lines[-10:]):
                         if not _is_junk_line(ln):
                             razon = ln
                             break
                 return _make_result(razon, nit_raw, "")
-            # Header SAP encontrado pero sin NIT reconocible: NO hacer break,
-            # dejar que las prioridades siguientes intenten extraer
-    # (no break aquí — continuar con prioridades 2..5 si SAP no sirvió)
+            # Header SAP encontrado pero sin NIT reconocible: continuar
+    # (no break — continuar con prioridades 2..5 si SAP no sirvió)
 
     # ── PRIORIDAD 2: "Razón Social del Agente Retenedor" sección (MEDIFE) ──────
     m = _RE_AGENTE_RETENEDOR_HEADER.search(text)
@@ -536,7 +571,11 @@ def _extract_emisor(text: str) -> tuple[str, str, str]:
         for look_back in range(1, min(nit_line_idx + 1, 6)):
             candidate = lines[nit_line_idx - look_back]
             if _RE_NIT_DV.search(candidate) or _RE_NIT_NODV.search(candidate):
-                razon = re.split(r"N\.?I\.?T", candidate, flags=re.I)[0].strip()
+                candidate_razon = re.split(r"N\.?I\.?T", candidate, flags=re.I)[0].strip()
+                # Rechazar si es una ciudad (e.g. "GIRON NIT 3144113024" → "GIRON")
+                cod_mpio, _ = buscar_municipio(candidate_razon)
+                if not cod_mpio and len(candidate_razon) >= 3:
+                    razon = candidate_razon
                 break
             if _is_junk_line(candidate):
                 continue
@@ -853,12 +892,19 @@ def _extract_amounts(text: str, tipo_cert: str, nit_hint: str = "") -> tuple[flo
         m_ica = _RE_ICA_MONTO_TOTAL.search(text)
         if m_ica:
             b, r = _parse_money(m_ica.group(1)), _parse_money(m_ica.group(2))
-            if b > r > 0:
+            # Validar ratio ICA (0.1%–2.5%) — evita confundir años (2025) con retención
+            if b > r > 0 and 0.001 < r / b < 0.025:
                 return b, r
         bims_ica = _RE_BIMESTRE_ICA.findall(text)
         if bims_ica:
-            base_sum = sum(_parse_money(b) for b, _ in bims_ica)
-            ret_sum  = sum(_parse_money(r) for _, r in bims_ica)
+            base_sum = ret_sum = 0.0
+            for bs, rs in bims_ica:
+                b_val = _parse_money(bs)
+                r_val = _parse_money(rs)
+                # Exigir ratio ICA real (0.1%–2.5%) para no confundir años o códigos con montos
+                if b_val > 1_000 and r_val > 100 and b_val > r_val and 0.001 < r_val / b_val < 0.025:
+                    base_sum += b_val
+                    ret_sum  += r_val
             if base_sum > 0:
                 return base_sum, ret_sum
 
