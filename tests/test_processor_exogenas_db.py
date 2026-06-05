@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 
 def _fake_extract(path):
-    return {
+    return [{
         "archivo": Path(path).name,
         "tipo_cert": "renta",
         "razon_social": "ACME S.A.",
@@ -23,9 +23,13 @@ def _fake_extract(path):
         "porcentaje": 6.0,
         "ciudad_retencion": "Bogotá",
         "direccion": "Calle 1 # 2-3",
+        "primer_apellido": "",
+        "segundo_apellido": "",
+        "primer_nombre": "",
+        "otros_nombres": "",
         "error": None,
         "anio": 2025,
-    }
+    }]
 
 
 class TestProcesarExogenasDB:
@@ -34,17 +38,14 @@ class TestProcesarExogenasDB:
     def test_insert_called_when_org_id_and_db_available(self):
         """When org_id is provided and DB is up, insert_exogenas_batch must be called."""
         with (
-            patch("exogenas.extractor.extract_one", side_effect=_fake_extract),
-            patch("exogenas.municipios.buscar_municipio", return_value=("11", "001")),
+            patch("services.processor_exogenas.extract_many", side_effect=_fake_extract),
+            patch("services.processor_exogenas.buscar_municipio", return_value=("11", "001")),
             patch("db.database.db_available", return_value=True),
             patch("db.database.insert_exogenas_batch") as mock_insert,
         ):
             from services.processor_exogenas import procesar_exogenas
-            import importlib, services.processor_exogenas
-            importlib.reload(services.processor_exogenas)
-            from services.processor_exogenas import procesar_exogenas as fresh
 
-            resultado = fresh([Path("cert1.pdf")], org_id="org-uuid-exo")
+            resultado = procesar_exogenas([Path("cert1.pdf")], org_id="org-uuid-exo")
 
         mock_insert.assert_called_once()
         # First positional arg is df_1003
@@ -54,8 +55,8 @@ class TestProcesarExogenasDB:
     def test_insert_not_called_when_no_org_id(self):
         """When org_id is None (default), insert must NOT be called."""
         with (
-            patch("exogenas.extractor.extract_one", side_effect=_fake_extract),
-            patch("exogenas.municipios.buscar_municipio", return_value=("11", "001")),
+            patch("services.processor_exogenas.extract_many", side_effect=_fake_extract),
+            patch("services.processor_exogenas.buscar_municipio", return_value=("11", "001")),
             patch("db.database.db_available", return_value=True),
             patch("db.database.insert_exogenas_batch") as mock_insert,
         ):
@@ -67,8 +68,8 @@ class TestProcesarExogenasDB:
     def test_insert_not_called_when_db_unavailable(self):
         """When db_available() returns False, insert must NOT be called."""
         with (
-            patch("exogenas.extractor.extract_one", side_effect=_fake_extract),
-            patch("exogenas.municipios.buscar_municipio", return_value=("11", "001")),
+            patch("services.processor_exogenas.extract_many", side_effect=_fake_extract),
+            patch("services.processor_exogenas.buscar_municipio", return_value=("11", "001")),
             patch("db.database.db_available", return_value=False),
             patch("db.database.insert_exogenas_batch") as mock_insert,
         ):
@@ -80,8 +81,8 @@ class TestProcesarExogenasDB:
     def test_db_error_does_not_raise(self):
         """If insert_exogenas_batch raises, procesar_exogenas() must still return a result."""
         with (
-            patch("exogenas.extractor.extract_one", side_effect=_fake_extract),
-            patch("exogenas.municipios.buscar_municipio", return_value=("11", "001")),
+            patch("services.processor_exogenas.extract_many", side_effect=_fake_extract),
+            patch("services.processor_exogenas.buscar_municipio", return_value=("11", "001")),
             patch("db.database.db_available", return_value=True),
             patch("db.database.insert_exogenas_batch", side_effect=Exception("DB down")),
         ):
