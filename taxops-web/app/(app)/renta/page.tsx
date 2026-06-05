@@ -221,6 +221,11 @@ export default function RentaPage() {
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   const [editingField, setEditingField] = useState<string | null>(null);
 
+  // Descarga PDF / Excel
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [xlsxLoading, setXlsxLoading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
   // Chatbot state
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([{
@@ -458,6 +463,36 @@ export default function RentaPage() {
     catch (e: unknown) { alert(e instanceof Error ? e.message : "Error"); }
   }
 
+  // ── Descargas con feedback ────────────────────────────────────────────────
+
+  async function handleDownloadPdf() {
+    if (!selected) return;
+    setPdfLoading(true); setDownloadError(null);
+    try {
+      const blob = await getBlob(`/renta/contribuyentes/${selected.id}/declaracion/pdf`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `formulario210_${selected.año_gravable}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setDownloadError(e instanceof Error ? e.message : "No se pudo generar el PDF");
+    } finally { setPdfLoading(false); }
+  }
+
+  async function handleDownloadXlsx() {
+    if (!selected) return;
+    setXlsxLoading(true); setDownloadError(null);
+    try {
+      const blob = await getBlob(`/renta/contribuyentes/${selected.id}/declaracion/excel`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `formulario210_${selected.año_gravable}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setDownloadError(e instanceof Error ? e.message : "No se pudo generar el Excel");
+    } finally { setXlsxLoading(false); }
+  }
+
   // ── Chatbot ───────────────────────────────────────────────────────────────
 
   async function sendChat() {
@@ -578,9 +613,45 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
       {/* ─── Detalle ─── */}
       <div className="flex-1 overflow-y-auto space-y-4">
         {!selected ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-gray-400">
-            <FileText size={48} className="text-gray-200" />
-            <p className="text-sm">Selecciona un contribuyente para ver su expediente</p>
+          <div className="flex h-full items-start justify-center pt-8">
+            <div className="w-full max-w-lg">
+              <div className="mb-6 text-center">
+                <h2 className="text-lg font-semibold text-gray-900">¿Cómo funciona Renta Personas?</h2>
+                <p className="mt-1 text-sm text-gray-500">Declara con precisión siguiendo estos 4 pasos</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                  <div className="mb-2 text-2xl">📁</div>
+                  <p className="text-xs font-bold text-orange-600">1. Agregar cliente</p>
+                  <p className="mt-1 text-xs text-gray-500">Registra nombre, cédula y año gravable</p>
+                </div>
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                  <div className="mb-2 text-2xl">📄</div>
+                  <p className="text-xs font-bold text-green-700">2. Cargar documentos</p>
+                  <p className="mt-1 text-xs text-gray-500">PDF, imágenes, Excel — OCR automático</p>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-2 text-2xl">🧮</div>
+                  <p className="text-xs font-bold text-blue-700">3. Calcular</p>
+                  <p className="mt-1 text-xs text-gray-500">Motor Art. 241 ET — cédulas + saldo</p>
+                </div>
+                <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                  <div className="mb-2 text-2xl">📊</div>
+                  <p className="text-xs font-bold text-purple-700">4. Exportar F210</p>
+                  <p className="mt-1 text-xs text-gray-500">PDF oficial + Excel con casillas DIAN</p>
+                </div>
+              </div>
+              {contribuyentes.length === 0 && !loading && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="mt-5 w-full rounded-xl bg-[#E05519] px-4 py-3 text-sm font-semibold text-white hover:bg-[#c44a14]">
+                  + Agregar primer contribuyente
+                </button>
+              )}
+              {contribuyentes.length > 0 && (
+                <p className="mt-4 text-center text-xs text-gray-400">Selecciona un contribuyente de la lista para continuar</p>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -635,15 +706,77 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               </div>
             </div>
 
-            {/* Info cards */}
-            {info && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <InfoCard label="Documentos" value={info.num_docs} />
-                <InfoCard label="Pendientes OCR" value={info.docs_pendientes} />
-                <InfoCard label="Declaración" value={info.tiene_declaracion ? "Borrador" : "Sin datos"} />
-                <InfoCard label="Inconsistencias" value={info.inconsistencias.length} highlight={info.inconsistencias.length > 0} />
-              </div>
-            )}
+            {/* Info cards + progress bar */}
+            {info && (() => {
+              const docsOk = info.num_docs - info.docs_pendientes;
+              const saldoCOP = decl
+                ? (decl.saldo_pagar > 0
+                  ? `${fmtCOP(decl.saldo_pagar)} a pagar`
+                  : `${fmtCOP(decl.saldo_favor)} a favor`)
+                : "Sin calcular";
+              const saldoColor = decl
+                ? (decl.saldo_pagar > 0 ? "text-red-600" : "text-green-600")
+                : "text-gray-400";
+
+              // Etapas del progreso
+              const step1 = info.num_docs > 0;
+              const step2 = info.docs_pendientes === 0 && info.num_docs > 0;
+              const step3 = info.tiene_declaracion;
+              const steps = [step1, step2, step3, false];
+              const stepLabels = ["Docs", "OCR", "Calculado", "Exportado"];
+
+              return (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {/* Documentos */}
+                    <div className={`rounded-xl border p-3 text-center ${info.num_docs > 0 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+                      <p className={`text-lg font-bold ${info.num_docs > 0 ? "text-green-700" : "text-gray-400"}`}>{info.num_docs}</p>
+                      <p className="text-[10px] text-gray-500">📄 Docs</p>
+                      {docsOk > 0 && <p className="text-[9px] text-green-600">{docsOk} listos</p>}
+                    </div>
+                    {/* OCR */}
+                    <div className={`rounded-xl border p-3 text-center ${info.docs_pendientes > 0 ? "bg-orange-50 border-orange-200" : "bg-gray-50 border-gray-200"}`}>
+                      <p className={`text-lg font-bold ${info.docs_pendientes > 0 ? "text-orange-600" : "text-gray-400"}`}>{info.docs_pendientes}</p>
+                      <p className="text-[10px] text-gray-500">⏳ OCR</p>
+                      {info.docs_pendientes > 0 && <p className="text-[9px] text-orange-500">pendiente</p>}
+                    </div>
+                    {/* Saldo */}
+                    <div className="rounded-xl border bg-blue-50 border-blue-200 p-3 text-center">
+                      <p className={`text-xs font-bold leading-tight ${saldoColor}`}>{saldoCOP}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">💰 Saldo</p>
+                    </div>
+                    {/* Alertas */}
+                    <div className={`rounded-xl border p-3 text-center ${info.inconsistencias.length > 0 ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+                      <p className={`text-lg font-bold ${info.inconsistencias.length > 0 ? "text-red-600" : "text-gray-400"}`}>
+                        {info.inconsistencias.length}
+                      </p>
+                      <p className="text-[10px] text-gray-500">⚠️ Alertas</p>
+                      {info.inconsistencias.length === 0 && <p className="text-[9px] text-green-600">Sin alertas</p>}
+                    </div>
+                  </div>
+
+                  {/* Progress bar 4 etapas */}
+                  <div className="rounded-xl border border-gray-200 bg-white px-4 py-2.5">
+                    <div className="flex items-center gap-1">
+                      {steps.map((done, i) => (
+                        <div key={i} className="flex items-center gap-1" style={{ flex: i < 3 ? "1" : "none" }}>
+                          <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold
+                            ${done ? "bg-green-500 text-white" : i === steps.indexOf(false) ? "bg-orange-400 text-white" : "bg-gray-200 text-gray-400"}`}>
+                            {done ? "✓" : i + 1}
+                          </div>
+                          {i < 3 && <div className={`h-0.5 flex-1 ${done && steps[i + 1] !== false ? "bg-green-400" : "bg-gray-200"}`} />}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-1 flex justify-between">
+                      {stepLabels.map((l, i) => (
+                        <span key={i} className={`text-[9px] ${steps[i] ? "text-green-600 font-medium" : "text-gray-400"}`}>{l}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Upload panel */}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -837,10 +970,9 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 </h3>
                 <div className="flex items-center gap-2">
                   {Object.keys(overrides).length > 0 && (
-                    <button onClick={handleCalcular} disabled={declLoading}
-                      className="text-xs text-[#E05519] underline hover:text-[#c44a14]">
-                      Recalcular con ajustes
-                    </button>
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                      {Object.keys(overrides).length} ajuste{Object.keys(overrides).length > 1 ? "s" : ""} manual{Object.keys(overrides).length > 1 ? "es" : ""}
+                    </span>
                   )}
                   <button
                     onClick={handleCalcular}
@@ -985,37 +1117,28 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                       <CheckCircle size={12} /> Sin inconsistencias detectadas
                     </p>
                   )}
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const blob = await getBlob(`/renta/contribuyentes/${selected!.id}/declaracion/pdf`);
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `formulario210_${selected?.año_gravable ?? 2025}.pdf`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        } catch { /* silent */ }
-                      }}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                      <Download size={12} /> PDF
-                    </button>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const blob = await getBlob(`/renta/contribuyentes/${selected!.id}/declaracion/excel`);
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `formulario210_${selected?.año_gravable ?? 2025}.xlsx`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        } catch { /* silent */ }
-                      }}
-                      className="flex items-center gap-1.5 rounded-lg border border-green-200 px-3 py-1.5 text-xs text-green-700 hover:bg-green-50">
-                      <Download size={12} /> Excel
-                    </button>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadPdf}
+                        disabled={pdfLoading}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+                        {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                        {pdfLoading ? "Generando…" : "PDF"}
+                      </button>
+                      <button
+                        onClick={handleDownloadXlsx}
+                        disabled={xlsxLoading}
+                        className="flex items-center gap-1.5 rounded-lg border border-green-200 px-3 py-1.5 text-xs text-green-700 hover:bg-green-50 disabled:opacity-60">
+                        {xlsxLoading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                        {xlsxLoading ? "Generando…" : "Excel"}
+                      </button>
+                    </div>
+                    {downloadError && (
+                      <p className="flex items-center gap-1 text-xs text-red-600">
+                        <AlertCircle size={12} /> {downloadError}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
