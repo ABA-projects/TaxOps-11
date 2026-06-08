@@ -195,7 +195,13 @@ export default function ExogenasPage() {
           setLoading(false);
           return;
         }
-        if (!res.ok) return; // transient error — keep polling
+        if (res.status === 401) {
+          stopPolling();
+          setError("Sesión expirada. Recarga la página e inicia sesión de nuevo.");
+          setLoading(false);
+          return;
+        }
+        if (!res.ok) return; // error transitorio — seguir intentando
 
         const data = await res.json();
 

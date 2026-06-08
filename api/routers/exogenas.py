@@ -128,10 +128,8 @@ async def process_exogenas(
 
 
 @router.get("/status/{job_id}")
-async def job_status(
-    job_id: str,
-    user: dict = Depends(get_current_user),
-) -> dict:
+async def job_status(job_id: str) -> dict:
+    # No auth required — job_id UUID acts as capability token.
     if job_id in _jobs:
         return _jobs[job_id]
     cached = _load_result(job_id)
