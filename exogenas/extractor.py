@@ -87,6 +87,12 @@ def _tipo_doc_from_context(nit: str, text: str) -> str:
                 return "13"
         if re.search(r"\bN\.?I\.?T\.?\b", context, re.I):
             return "31"
+    # NITs de 10 dígitos en Colombia suelen ser cédulas de extranjería o CC
+    # (los NITs empresariales tienen 9 dígitos + DV); usar contexto completo del doc
+    if len(digits) == 10:
+        if re.search(r"\bN\.?I\.?T\.?\b", text[:2000], re.I):
+            return "31"
+        return "13"
     return _tipo_doc(nit)
 
 
@@ -427,19 +433,27 @@ def _extract_emisor(text: str) -> tuple[str, str, str]:
 
         # Primero: líneas ANTERIORES al header (nombre del membrete)
         prev_lines = [l.strip() for l in text[:m_sap_nit.start()].split("\n") if l.strip()]
-        for ln in reversed(prev_lines[-10:]):
+        for ln in reversed(prev_lines[-20:]):
             if _looks_like_company(ln):
                 razon = ln
                 break
 
         # Fallback: línea SIGUIENTE al header si el nombre no está antes
         if not razon:
-            after_header = text[m_sap_nit.end():m_sap_nit.end() + 200]
+            after_header = text[m_sap_nit.end():m_sap_nit.end() + 400]
             for ln in after_header.split("\n"):
                 ln = ln.strip()
                 if _looks_like_company(ln):
                     razon = ln
                     break
+
+        # Fallback SAP IVA: "Razon social quien..." en cualquier parte del doc
+        if not razon:
+            m_rs = _RE_SAP_COMPANY_NAME.search(text)
+            if m_rs:
+                candidate = m_rs.group(1).strip()
+                if _looks_like_company(candidate):
+                    razon = candidate
 
         return _make_result(razon, nit_raw, "")
 
@@ -887,6 +901,7 @@ def _extract_amounts(text: str, tipo_cert: str, nit_hint: str = "") -> tuple[flo
         else:
             b, r = n1, n2
         if b > 0 and r > 0:
+            r = _fix_pct_as_amount(b, r)
             if tipo_cert == "ICA":
                 # ICA: tasas 0.3%–2%, bases reales > 10.000 COP
                 if b > 10_000 and r > 100 and 0.001 < r / b < 0.025:
@@ -900,7 +915,7 @@ def _extract_amounts(text: str, tipo_cert: str, nit_hint: str = "") -> tuple[flo
         if m_ica:
             b, r = _parse_money(m_ica.group(1)), _parse_money(m_ica.group(2))
             # Validar ratio ICA (0.1%–2.5%) — evita confundir años (2025) con retención
-            if b > r > 0 and 0.001 < r / b < 0.025:
+            if b > r > 0 and 0.001 < r / b < 0.025 and not (1990 <= r <= 2030):
                 return b, r
         bims_ica = _RE_BIMESTRE_ICA.findall(text)
         if bims_ica:
@@ -908,8 +923,10 @@ def _extract_amounts(text: str, tipo_cert: str, nit_hint: str = "") -> tuple[flo
             for bs, rs in bims_ica:
                 b_val = _parse_money(bs)
                 r_val = _parse_money(rs)
-                # Exigir ratio ICA real (0.1%–2.5%) para no confundir años o códigos con montos
-                if b_val > 1_000 and r_val > 100 and b_val > r_val and 0.001 < r_val / b_val < 0.025:
+                # Exigir ratio ICA real (0.1%–2.5%) y descartar años calendario como retención
+                if (b_val > 1_000 and r_val > 100 and b_val > r_val
+                        and 0.001 < r_val / b_val < 0.025
+                        and not (1990 <= r_val <= 2030)):
                     base_sum += b_val
                     ret_sum  += r_val
             if base_sum > 0:
@@ -1278,7 +1295,7 @@ def _tesseract_on_image(img: "Image.Image", psm: int = 6) -> str:
     import subprocess as _sp
     try:
         import pytesseract
-        return pytesseract.image_to_string(img, lang="spa", config=f"--oem 3 --psm {psm}", timeout=60)
+        return pytesseract.image_to_string(img, lang="spa", config=f"--oem 1 --psm {psm}", timeout=60)
     except UnicodeDecodeError:
         # macOS ARM: leptonica no puede leer /tmp (symlink); guardar en ruta real
         pass
@@ -1295,7 +1312,7 @@ def _tesseract_on_image(img: "Image.Image", psm: int = 6) -> str:
         tmp_png = tmp_dir / f"ocr_{psm}.png"
         img.save(str(tmp_png))
         r = _sp.run(
-            ["tesseract", str(tmp_png), "stdout", "-l", "spa", "--oem", "3", "--psm", str(psm)],
+            ["tesseract", str(tmp_png), "stdout", "-l", "spa", "--oem", "1", "--psm", str(psm)],
             capture_output=True, timeout=60,
         )
         tmp_png.unlink(missing_ok=True)
@@ -1306,6 +1323,10 @@ def _tesseract_on_image(img: "Image.Image", psm: int = 6) -> str:
 
 def _ocr_pdf_pages(path: Path) -> tuple[str, bool]:
     """OCR sobre páginas de PDF escaneado usando pdfplumber + pytesseract."""
+    cached = _ocr_cache_get(path)
+    if cached is not None:
+        return cached, not cached.strip()
+
     try:
         import pytesseract  # noqa: F401 — verificar disponibilidad
     except ImportError:
@@ -1324,6 +1345,7 @@ def _ocr_pdf_pages(path: Path) -> tuple[str, bool]:
                 elif page_num == 0:
                     break
         text = "\n".join(parts)
+        _ocr_cache_set(path, text)
         return text, not text.strip()
     except Exception:
         return "", True
@@ -1373,6 +1395,29 @@ def _read_excel(path: Path) -> tuple[str, bool]:
     return "\n".join(parts), False
 
 
+# ── OCR result cache (evita re-procesar el mismo archivo) ───────────────────
+_OCR_RESULT_CACHE: dict[tuple[str, float, int], str] = {}
+_OCR_CACHE_MAX = 128
+
+
+def _ocr_cache_get(path: Path) -> "str | None":
+    try:
+        st = path.stat()
+        return _OCR_RESULT_CACHE.get((str(path), st.st_mtime, st.st_size))
+    except OSError:
+        return None
+
+
+def _ocr_cache_set(path: Path, text: str) -> None:
+    try:
+        if len(_OCR_RESULT_CACHE) >= _OCR_CACHE_MAX:
+            del _OCR_RESULT_CACHE[next(iter(_OCR_RESULT_CACHE))]
+        st = path.stat()
+        _OCR_RESULT_CACHE[(str(path), st.st_mtime, st.st_size)] = text
+    except OSError:
+        pass
+
+
 def _preprocess_for_ocr(img: "Image.Image") -> list["Image.Image"]:
     """
     Genera variantes de preprocesamiento para mejorar el OCR en imágenes
@@ -1420,6 +1465,10 @@ def _read_image(path: Path) -> tuple[str, bool]:
     except ImportError:
         return "", True
 
+    cached = _ocr_cache_get(path)
+    if cached is not None:
+        return cached, not cached.strip()
+
     img = Image.open(path).convert("RGB")
     variants = _preprocess_for_ocr(img)
     img.close()
@@ -1434,6 +1483,7 @@ def _read_image(path: Path) -> tuple[str, bool]:
                 break
         if len(re.sub(r"\W+", "", best)) >= _OCR_GOOD_ENOUGH:
             break
+    _ocr_cache_set(path, best)
     return best, not best.strip()
 
 
