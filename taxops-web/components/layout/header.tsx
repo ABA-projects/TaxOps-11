@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Sun, Moon, X } from "lucide-react";
+import { Bell, Sun, Moon, Monitor, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
@@ -49,33 +49,61 @@ function getDianAlerts(): DianAlert[] {
   }).sort((a, b) => a.dias - b.dias);
 }
 
-function ThemeToggle() {
-  const [dark, setDark] = useState(false);
+type ThemeMode = "light" | "dark" | "auto";
 
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
-
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    if (next) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("taxops_theme", "dark");
+function applyTheme(mode: ThemeMode) {
+  const html = document.documentElement;
+  if (mode === "dark") {
+    html.classList.add("dark");
+    localStorage.setItem("taxops_theme", "dark");
+  } else if (mode === "light") {
+    html.classList.remove("dark");
+    localStorage.setItem("taxops_theme", "light");
+  } else {
+    localStorage.removeItem("taxops_theme");
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      html.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("taxops_theme", "light");
+      html.classList.remove("dark");
     }
   }
+}
+
+function ThemeToggle() {
+  const [mode, setMode] = useState<ThemeMode>("auto");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("taxops_theme");
+    if (saved === "dark") setMode("dark");
+    else if (saved === "light") setMode("light");
+    else setMode("auto");
+  }, []);
+
+  function cycle() {
+    const next: ThemeMode = mode === "light" ? "dark" : mode === "dark" ? "auto" : "light";
+    setMode(next);
+    applyTheme(next);
+  }
+
+  const ICONS: Record<ThemeMode, React.ReactNode> = {
+    light: <Sun size={18} />,
+    dark:  <Moon size={18} />,
+    auto:  <Monitor size={18} />,
+  };
+  const LABELS: Record<ThemeMode, string> = {
+    light: "Modo claro — click para oscuro",
+    dark:  "Modo oscuro — click para automático",
+    auto:  "Automático (sistema) — click para claro",
+  };
 
   return (
     <button
-      onClick={toggle}
+      onClick={cycle}
       className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:text-gray-200 rounded-lg transition-colors"
-      aria-label={dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-      title={dark ? "Modo claro" : "Modo oscuro"}
+      title={LABELS[mode]}
+      aria-label={LABELS[mode]}
     >
-      {dark ? <Sun size={18} /> : <Moon size={18} />}
+      {ICONS[mode]}
     </button>
   );
 }
