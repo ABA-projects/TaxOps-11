@@ -134,11 +134,14 @@ async def process_exogenas(
 async def job_status(job_id: str) -> dict:
     # No auth required — job_id UUID acts as capability token.
     if job_id in _jobs:
-        return _jobs[job_id]
+        state = _jobs[job_id]
+        # Libera RAM en cuanto el cliente lee el resultado final; /tmp es la copia durable.
+        if state.get("status") in ("done", "error"):
+            _jobs.pop(job_id, None)
+        return state
     cached = _load_result(job_id)
     if cached:
-        _jobs[job_id] = cached  # restore into memory for subsequent polls
-        return cached
+        return cached  # sirve desde /tmp; no re-cachear en _jobs para no acumular en RAM
     raise HTTPException(status_code=404, detail="Job no encontrado o servidor reiniciado")
 
 

@@ -96,12 +96,15 @@ def procesar_exogenas(
 
     def _process_one(p: Path) -> None:
         import time
+        import concurrent.futures as _cf
         local_rows: list[dict] = []
         local_warn: list[str] = []
         local_err = 0
         t0 = time.time()
         try:
-            rows = extract_many(p)
+            # Timeout por archivo: evita que un PDF corrupto o escaneado pesado bloquee todo el job
+            with _cf.ThreadPoolExecutor(max_workers=1) as _tpe:
+                rows = _tpe.submit(extract_many, p).result(timeout=90)
             elapsed = time.time() - t0
             for row in rows:
                 row["_archivo"] = Path(p).name
@@ -116,6 +119,10 @@ def procesar_exogenas(
                     f"⏱️ {Path(p).name}: {elapsed:.1f}s "
                     f"[{'OCR' if escaneado or fuente == 'IMAGEN' else fuente}]"
                 )
+        except (_cf.TimeoutError, TimeoutError):
+            elapsed = time.time() - t0
+            local_err = 1
+            local_warn = [f"⏱️ {Path(p).name}: timeout >90s — archivo omitido"]
         except Exception as e:
             elapsed = time.time() - t0
             local_err = 1
