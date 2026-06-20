@@ -19,7 +19,7 @@ router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
 # In-memory job store — keyed by job_id, lives for the server instance lifetime
 _jobs: dict[str, dict[str, Any]] = {}
-# One job at a time to avoid OOM on Cloud Run 2 GB (OCR is memory-intensive)
+# One job at a time — OCR es memory-intensive y Railway tiene límite ~512 MB
 _executor = ThreadPoolExecutor(max_workers=1)
 
 _RESULT_DIR = Path(tempfile.gettempdir()) / "taxops_jobs"
@@ -49,6 +49,7 @@ def _load_result(job_id: str) -> dict | None:
 def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
     """Runs in thread pool. Writes final state to _jobs[job_id] and /tmp."""
     try:
+        import gc
         from services.processor_exogenas import procesar_exogenas
 
         total = len(paths)
@@ -57,7 +58,9 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
             _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
             _jobs[job_id]["current_file"] = name
 
-        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=2)
+        # workers=1: evita 2 OCR simultáneos que exceden el límite de RAM en Railway (512 MB)
+        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=1)
+        gc.collect()
 
         state: dict[str, Any] = {
             "status": "done",
