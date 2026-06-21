@@ -58,8 +58,9 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
             _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
             _jobs[job_id]["current_file"] = name
 
-        # workers=2: Cloud Run tiene 2 GB RAM; seguros con el memory leak de _jobs ya corregido
-        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=2)
+        # workers=1 + no-cpu-throttling (en deploy): OCR secuencial evita pico ~1.8 GB con 2 PDFs
+        # escaneados simultáneos. Con CPU siempre asignado, 1 worker es tan rápido como 2.
+        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=1)
         gc.collect()
 
         state: dict[str, Any] = {
