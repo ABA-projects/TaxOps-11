@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import multiprocessing
 import shutil
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,21 @@ router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 # Temporary store: job_id → (paths, org_id, tmpdir)
 # Holds files only for the brief gap between POST and GET stream.
 _pending: dict[str, tuple[list[Path], str, str]] = {}
+
+# Use fork context on Linux (Cloud Run) — child inherits parent memory,
+# no re-import needed, asyncio event loop NOT used in child.
+_MP_CTX = multiprocessing.get_context("fork")
+
+
+def _extract_worker(path_str: str, q: "multiprocessing.Queue[Any]") -> None:
+    """Subprocess worker: runs extract_many and sends result through queue.
+    Must NOT use asyncio — it inherits parent's loop state via fork."""
+    try:
+        from exogenas.extractor import extract_many
+        rows = extract_many(Path(path_str))
+        q.put(("ok", rows))
+    except Exception as exc:
+        q.put(("err", str(exc)))
 
 
 @router.post("/process")
@@ -69,7 +86,7 @@ def _sse(data: Any) -> str:
 
 @router.get("/stream/{job_id}")
 async def stream_job(job_id: str) -> StreamingResponse:
-    """SSE endpoint: keeps Cloud Run request alive while OCR runs file by file."""
+    """SSE endpoint: procesa archivos en subprocesos que pueden ser terminados."""
     if job_id not in _pending:
         raise HTTPException(status_code=404, detail="Job no encontrado")
 
@@ -77,74 +94,93 @@ async def stream_job(job_id: str) -> StreamingResponse:
 
     async def generate():
         try:
-            import gc
-            import time
-
-            from exogenas.extractor import extract_many
             from exogenas.municipios import buscar_municipio
             from services.processor_exogenas import _agregar
         except Exception as exc:
             yield _sse({"type": "error", "error": f"Error de inicialización: {exc}"})
             return
 
+        import gc
+        import pandas as pd
+
         total = len(paths)
         all_rows: list[dict] = []
         errors = 0
         warnings: list[str] = []
-        loop = asyncio.get_running_loop()
 
         try:
             for i, p in enumerate(paths):
-                yield _sse({"type": "progress", "progress": round(i / total * 100), "current": p.name})
+                yield _sse({
+                    "type": "progress",
+                    "progress": round(i / total * 100),
+                    "current": p.name,
+                })
 
-                t0 = time.time()
-                fut = loop.run_in_executor(None, extract_many, p)
+                t0 = time.monotonic()
+                q: multiprocessing.Queue = _MP_CTX.Queue()
+                proc = _MP_CTX.Process(
+                    target=_extract_worker, args=(str(p), q), daemon=True
+                )
+                proc.start()
+
                 rows: list[dict] = []
+                timed_out = False
+                deadline = t0 + 90
+                last_keepalive = time.monotonic()
+
                 try:
-                    # Keepalive SSE comment cada 5 s mientras OCR corre;
-                    # límite global 90 s por archivo.
-                    deadline = time.monotonic() + 90
-                    while True:
+                    while proc.is_alive():
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
-                            fut.cancel()
-                            raise asyncio.TimeoutError()
-                        try:
-                            rows = await asyncio.wait_for(
-                                asyncio.shield(fut), timeout=min(5.0, remaining)
-                            )
+                            proc.terminate()
+                            await asyncio.sleep(2)
+                            if proc.is_alive():
+                                proc.kill()
+                            timed_out = True
                             break
-                        except asyncio.TimeoutError:
-                            if time.monotonic() >= deadline:
-                                fut.cancel()
-                                raise
-                            yield ":\n\n"  # SSE comment — keepalive, ignorado por el cliente
-                    elapsed = time.time() - t0
-                    for row in rows:
-                        row["_archivo"] = p.name
-                        if row.get("error"):
+                        await asyncio.sleep(min(1.0, remaining))
+                        if time.monotonic() - last_keepalive >= 5:
+                            yield ":\n\n"
+                            last_keepalive = time.monotonic()
+
+                    if not timed_out:
+                        try:
+                            status, value = q.get_nowait()
+                            if status == "ok":
+                                rows = value
+                                elapsed = time.monotonic() - t0
+                                if elapsed > 3:
+                                    fuente = rows[0].get("fuente", "?") if rows else "?"
+                                    escan = rows[0].get("es_escaneado", False) if rows else False
+                                    warnings.append(
+                                        f"⏱️ {p.name}: {elapsed:.1f}s "
+                                        f"[{'OCR' if escan or fuente == 'IMAGEN' else fuente}]"
+                                    )
+                            else:
+                                errors += 1
+                                warnings.append(f"❌ {p.name}: {value}")
+                        except Exception:
                             errors += 1
-                            warnings.append(f"⚠️ {p.name}: {row['error']}")
-                        all_rows.append(row)
-                    if elapsed > 3:
-                        fuente = rows[0].get("fuente", "?") if rows else "?"
-                        escaneado = rows[0].get("es_escaneado", False) if rows else False
-                        warnings.append(
-                            f"⏱️ {p.name}: {elapsed:.1f}s "
-                            f"[{'OCR' if escaneado or fuente == 'IMAGEN' else fuente}]"
-                        )
-                except asyncio.TimeoutError:
-                    errors += 1
-                    warnings.append(f"⏱️ {p.name}: timeout >90s — archivo omitido")
-                except Exception as e:
-                    errors += 1
-                    warnings.append(f"❌ {p.name}: {e}")
+                            warnings.append(f"❌ {p.name}: proceso sin resultado")
+                    else:
+                        errors += 1
+                        warnings.append(f"⏱️ {p.name}: timeout >90s — archivo omitido")
+
+                finally:
+                    if proc.is_alive():
+                        proc.terminate()
+                    proc.join(timeout=2)
+
+                for row in rows:
+                    row["_archivo"] = p.name
+                    if row.get("error"):
+                        errors += 1
+                        warnings.append(f"⚠️ {p.name}: {row['error']}")
+                    all_rows.append(row)
 
                 gc.collect()
 
-            # ── Post-processing ────────────────────────────────────────────
-            import pandas as pd
-
+            # ── Post-processing ───────────────────────────────────────────────
             if not all_rows:
                 yield _sse({
                     "type": "done",
