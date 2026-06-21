@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import multiprocessing
+import os
 import shutil
+import signal
+import sys
 import tempfile
 import time
 import uuid
@@ -20,23 +22,10 @@ from schemas import ExportExogenasRequest
 router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
 # Temporary store: job_id → (paths, org_id, tmpdir)
-# Holds files only for the brief gap between POST and GET stream.
 _pending: dict[str, tuple[list[Path], str, str]] = {}
 
-# Use fork context on Linux (Cloud Run) — child inherits parent memory,
-# no re-import needed, asyncio event loop NOT used in child.
-_MP_CTX = multiprocessing.get_context("fork")
-
-
-def _extract_worker(path_str: str, q: "multiprocessing.Queue[Any]") -> None:
-    """Subprocess worker: runs extract_many and sends result through queue.
-    Must NOT use asyncio — it inherits parent's loop state via fork."""
-    try:
-        from exogenas.extractor import extract_many
-        rows = extract_many(Path(path_str))
-        q.put(("ok", rows))
-    except Exception as exc:
-        q.put(("err", str(exc)))
+# Script que corre en subprocess aislado (evita bloqueos de pdfplumber/pytesseract)
+_EXTRACT_SCRIPT = Path(__file__).parent.parent / "extract_one.py"
 
 
 @router.post("/process")
@@ -84,9 +73,20 @@ def _sse(data: Any) -> str:
     return f"data: {json.dumps(data, default=str)}\n\n"
 
 
+def _kill_proc(pid: int) -> None:
+    """Mata el proceso y su grupo completo (incluye subprocesos de tesseract)."""
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except Exception:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except Exception:
+            pass
+
+
 @router.get("/stream/{job_id}")
 async def stream_job(job_id: str) -> StreamingResponse:
-    """SSE endpoint: procesa archivos en subprocesos que pueden ser terminados."""
+    """SSE: cada archivo en subprocess asyncio aislado — SIGKILL real en timeout."""
     if job_id not in _pending:
         raise HTTPException(status_code=404, detail="Job no encontrado")
 
@@ -96,12 +96,11 @@ async def stream_job(job_id: str) -> StreamingResponse:
         try:
             from exogenas.municipios import buscar_municipio
             from services.processor_exogenas import _agregar
+            import gc
+            import pandas as pd
         except Exception as exc:
             yield _sse({"type": "error", "error": f"Error de inicialización: {exc}"})
             return
-
-        import gc
-        import pandas as pd
 
         total = len(paths)
         all_rows: list[dict] = []
@@ -116,26 +115,29 @@ async def stream_job(job_id: str) -> StreamingResponse:
                     "current": p.name,
                 })
 
-                t0 = time.monotonic()
-                q: multiprocessing.Queue = _MP_CTX.Queue()
-                proc = _MP_CTX.Process(
-                    target=_extract_worker, args=(str(p), q), daemon=True
-                )
-                proc.start()
-
                 rows: list[dict] = []
-                timed_out = False
-                deadline = t0 + 90
-                last_keepalive = time.monotonic()
+                t0 = time.monotonic()
 
                 try:
-                    while proc.is_alive():
+                    # Subprocess aislado: no bloquea el event loop, SIGKILL real
+                    proc = await asyncio.create_subprocess_exec(
+                        sys.executable, str(_EXTRACT_SCRIPT), str(p),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
+                        preexec_fn=os.setsid,  # nuevo grupo de procesos → killpg mata todo
+                    )
+
+                    communicate_task = asyncio.create_task(proc.communicate())
+                    deadline = time.monotonic() + 90
+                    last_keepalive = time.monotonic()
+                    timed_out = False
+
+                    while not communicate_task.done():
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
-                            proc.terminate()
-                            await asyncio.sleep(2)
-                            if proc.is_alive():
-                                proc.kill()
+                            communicate_task.cancel()
+                            _kill_proc(proc.pid)
+                            await asyncio.sleep(0.5)
                             timed_out = True
                             break
                         await asyncio.sleep(min(1.0, remaining))
@@ -143,33 +145,36 @@ async def stream_job(job_id: str) -> StreamingResponse:
                             yield ":\n\n"
                             last_keepalive = time.monotonic()
 
-                    if not timed_out:
-                        try:
-                            status, value = q.get_nowait()
-                            if status == "ok":
-                                rows = value
-                                elapsed = time.monotonic() - t0
-                                if elapsed > 3:
-                                    fuente = rows[0].get("fuente", "?") if rows else "?"
-                                    escan = rows[0].get("es_escaneado", False) if rows else False
-                                    warnings.append(
-                                        f"⏱️ {p.name}: {elapsed:.1f}s "
-                                        f"[{'OCR' if escan or fuente == 'IMAGEN' else fuente}]"
-                                    )
-                            else:
-                                errors += 1
-                                warnings.append(f"❌ {p.name}: {value}")
-                        except Exception:
-                            errors += 1
-                            warnings.append(f"❌ {p.name}: proceso sin resultado")
-                    else:
+                    if timed_out:
                         errors += 1
                         warnings.append(f"⏱️ {p.name}: timeout >90s — archivo omitido")
+                    else:
+                        stdout, _ = communicate_task.result()
+                        elapsed = time.monotonic() - t0
+                        try:
+                            data = json.loads(stdout)
+                        except Exception:
+                            data = {"error": "JSON inválido del extractor"}
 
-                finally:
-                    if proc.is_alive():
-                        proc.terminate()
-                    proc.join(timeout=2)
+                        if isinstance(data, dict) and "error" in data:
+                            errors += 1
+                            warnings.append(f"❌ {p.name}: {data['error']}")
+                        elif isinstance(data, list):
+                            rows = data
+                            if elapsed > 3:
+                                fuente = rows[0].get("fuente", "?") if rows else "?"
+                                escan = rows[0].get("es_escaneado", False) if rows else False
+                                warnings.append(
+                                    f"⏱️ {p.name}: {elapsed:.1f}s "
+                                    f"[{'OCR' if escan or fuente == 'IMAGEN' else fuente}]"
+                                )
+                        else:
+                            errors += 1
+                            warnings.append(f"❌ {p.name}: respuesta inesperada del extractor")
+
+                except Exception as e:
+                    errors += 1
+                    warnings.append(f"❌ {p.name}: {e}")
 
                 for row in rows:
                     row["_archivo"] = p.name
@@ -180,7 +185,7 @@ async def stream_job(job_id: str) -> StreamingResponse:
 
                 gc.collect()
 
-            # ── Post-processing ───────────────────────────────────────────────
+            # ── Post-processing ───────────────────────────────────────────
             if not all_rows:
                 yield _sse({
                     "type": "done",
