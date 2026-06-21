@@ -29,7 +29,7 @@ def upgrade() -> None:
             email            VARCHAR(255) NOT NULL DEFAULT '',
             activo           BOOLEAN NOT NULL DEFAULT TRUE,
             created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
 

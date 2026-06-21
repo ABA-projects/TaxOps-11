@@ -24,6 +24,7 @@ from services.nomina import (
     SALARIO_INTEGRAL,
     calcular_liquidacion,
     calcular_nomina,
+    calcular_prima_semestral,
 )
 
 router = APIRouter(prefix="/nomina", tags=["Nómina"])
@@ -1195,6 +1196,108 @@ async def enviar_colillas_email(periodo: str, body: dict, user: dict = Depends(g
             errors.append(f"{det['nombre']}: error Resend — {exc}")
 
     return {"enviados": sent, "sin_email": skipped, "errores": errors}
+
+
+@router.post("/periodos/{semestre}/prima")
+async def calcular_prima_batch(semestre: str, body: dict, user: dict = Depends(get_current_user)) -> dict:
+    """
+    Calcula prima semestral para todos los empleados activos.
+    semestre: "2026-S1" (ene–jun, pago 30 jun) o "2026-S2" (jul–dic, pago 20 dic)
+    """
+    import re
+    m = re.match(r"^(\d{4})-(S[12])$", semestre)
+    if not m:
+        raise HTTPException(status_code=422, detail="Formato inválido. Use YYYY-S1 o YYYY-S2 (ej. 2026-S1)")
+
+    anio = int(m.group(1))
+    sem  = m.group(2)
+    dias = int(body.get("dias_trabajados", 180))
+
+    from sqlalchemy import text
+    get_db = _get_db()
+    org_id = user["org_id"]
+
+    with get_db() as db:
+        empleados_rows = db.execute(
+            text("SELECT * FROM empleados WHERE org_id = :org AND activo = TRUE ORDER BY nombre"),
+            {"org": org_id},
+        ).mappings().fetchall()
+
+    if not empleados_rows:
+        raise HTTPException(status_code=422, detail="No hay empleados activos")
+
+    resultados = []
+    total_prima = 0.0
+
+    for emp in empleados_rows:
+        try:
+            r = calcular_prima_semestral(
+                salario_basico  = float(emp["salario"]),
+                dias_trabajados = dias,
+                semestre        = sem,
+                anio            = anio,
+            )
+            row = {
+                "empleado_id":    str(emp["id"]),
+                "nombre":         emp["nombre"],
+                "cedula":         emp["cedula"],
+                "cargo":          emp["cargo"],
+                "email":          emp["email"],
+                "salario":        float(emp["salario"]),
+                "base_liquidacion": r.base_liquidacion,
+                "aplica_aux":     r.aplica_aux,
+                "dias_trabajados": r.dias_trabajados,
+                "prima":          r.prima,
+                "fecha_pago_limite": r.fecha_pago_limite,
+            }
+            total_prima += r.prima
+        except Exception as exc:
+            row = {
+                "empleado_id": str(emp["id"]),
+                "nombre": emp["nombre"],
+                "cedula": emp["cedula"],
+                "error": str(exc),
+                "prima": 0,
+            }
+        resultados.append(row)
+
+    # Persistir como período tipo "prima"
+    periodo_key = semestre  # "2026-S1"
+    with get_db() as db:
+        existing = db.execute(
+            text("SELECT id FROM nomina_periodos WHERE org_id = :org AND periodo = :p AND tipo = 'prima'"),
+            {"org": org_id, "p": periodo_key},
+        ).fetchone()
+        if existing:
+            periodo_id = str(existing[0])
+            db.execute(
+                text("""
+                    UPDATE nomina_periodos SET
+                        total_neto = :neto, empleados_count = :cnt, estado = 'calculado'
+                    WHERE id = :pid
+                """),
+                {"pid": periodo_id, "neto": total_prima, "cnt": len(resultados)},
+            )
+        else:
+            periodo_id = str(uuid4())
+            db.execute(
+                text("""
+                    INSERT INTO nomina_periodos
+                        (id, org_id, periodo, tipo, estado, total_neto, empleados_count)
+                    VALUES (:id, :org, :p, 'prima', 'calculado', :neto, :cnt)
+                """),
+                {"id": periodo_id, "org": org_id, "p": periodo_key,
+                 "neto": total_prima, "cnt": len(resultados)},
+            )
+        db.commit()
+
+    return {
+        "semestre":        semestre,
+        "empleados_count": len(resultados),
+        "total_prima":     total_prima,
+        "fecha_pago_limite": resultados[0]["fecha_pago_limite"] if resultados and "fecha_pago_limite" in resultados[0] else "",
+        "detalle":         resultados,
+    }
 
 
 async def _generar_colilla_pdf(resultado: dict, nombre: str, periodo: str) -> bytes:

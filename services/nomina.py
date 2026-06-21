@@ -400,3 +400,54 @@ def calcular_liquidacion(e: EntradaLiquidacion) -> ResultadoLiquidacion:
         dias_vacaciones_causadas     = round(dias_vac_causadas, 2),
         dias_vacaciones_a_pagar      = round(dias_vac_pagar, 2),
     )
+
+
+# ── Prima semestral (Art. 306 CST) ───────────────────────────────────────────
+
+@dataclass
+class ResultadoPrima:
+    salario_base:        int
+    aplica_aux:          bool
+    aux_transporte:      int
+    base_liquidacion:    int   # salario_base + aux (si aplica)
+    dias_trabajados:     int
+    prima:               int   # base_liquidacion × dias / 180
+    semestre:            str   # "S1" | "S2"
+    fecha_pago_limite:   str   # "30/06/YYYY" | "20/12/YYYY"
+
+
+def calcular_prima_semestral(
+    salario_basico: float,
+    dias_trabajados: int,
+    semestre: str,     # "S1" o "S2"
+    anio: int,
+) -> ResultadoPrima:
+    """
+    Calcula la prima de servicios semestral (Art. 306 CST).
+
+    - Primer semestre  (S1): Jan 1 → Jun 30 — pago límite 30 de junio.
+    - Segundo semestre (S2): Jul 1 → Dic 31 — pago límite 20 de diciembre.
+    - Base: salario básico + aux. transporte cuando salario ≤ 2 SMLMV.
+    - Días máximos del semestre: 180 (base 360).
+    """
+    if semestre not in ("S1", "S2"):
+        raise ValueError("semestre debe ser 'S1' o 'S2'")
+
+    dias = min(int(dias_trabajados), 180)
+    aplica_aux = salario_basico <= TOPE_AUX
+    aux = AUX_TRANSPORTE if aplica_aux else 0
+    base = _redondear(salario_basico) + aux
+    prima = _redondear(base * dias / 180)
+
+    fecha_limite = f"30/06/{anio}" if semestre == "S1" else f"20/12/{anio}"
+
+    return ResultadoPrima(
+        salario_base     = _redondear(salario_basico),
+        aplica_aux       = aplica_aux,
+        aux_transporte   = aux,
+        base_liquidacion = base,
+        dias_trabajados  = dias,
+        prima            = prima,
+        semestre         = semestre,
+        fecha_pago_limite= fecha_limite,
+    )

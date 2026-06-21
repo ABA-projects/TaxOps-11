@@ -190,6 +190,12 @@ export default function NominaPage() {
   const [periodoLoading, setPeriodoLoading] = useState(false);
   const [periodoDetalle, setPeriodoDetalle] = useState<PeriodoDetalle | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+  // Prima semestral
+  const [primaAnio, setPrimaAnio] = useState(() => String(new Date().getFullYear()));
+  const [primaSem, setPrimaSem] = useState<"S1"|"S2">(() => new Date().getMonth() < 6 ? "S1" : "S2");
+  const [primaDias, setPrimaDias] = useState("180");
+  const [primaLoading, setPrimaLoading] = useState(false);
+  const [primaResult, setPrimaResult] = useState<{semestre:string; empleados_count:number; total_prima:number; fecha_pago_limite:string; detalle: Array<{empleado_id:string;nombre:string;cedula:string;salario:number;base_liquidacion:number;dias_trabajados:number;prima:number;error?:string}>} | null>(null);
 
   const fetchEmpleados = useCallback(async () => {
     setEmpLoading(true);
@@ -392,6 +398,19 @@ export default function NominaPage() {
       a.href = url; a.download = `colilla_${nombre.replace(/ /g,"_")}_${periodoStr}.pdf`; a.click();
       URL.revokeObjectURL(url);
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error descargando colilla"); }
+  }
+
+  async function calcularPrima() {
+    setPrimaLoading(true); setError(""); setPrimaResult(null);
+    const semestre = `${primaAnio}-${primaSem}`;
+    try {
+      const res = await post<typeof primaResult>(`/nomina/periodos/${semestre}/prima`, {
+        dias_trabajados: parseInt(primaDias),
+      });
+      setPrimaResult(res);
+      await fetchPeriodos();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error calculando prima"); }
+    finally { setPrimaLoading(false); }
   }
 
   async function enviarEmails(periodoStr: string) {
@@ -1007,6 +1026,90 @@ export default function NominaPage() {
               </div>
             </div>
           )}
+
+          {/* Prima semestral */}
+          <div className="card border-l-4 border-l-brand-orange">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Prima semestral · Art. 306 CST</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              15 días de salario por semestre. Base: salario + aux. transporte (si aplica).
+            </p>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Año</label>
+                <input className="input" type="number" min={2024} max={2030} value={primaAnio}
+                  onChange={(e) => setPrimaAnio(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Semestre</label>
+                <select className="input" value={primaSem} onChange={(e) => setPrimaSem(e.target.value as "S1"|"S2")}>
+                  <option value="S1">S1 — Ene/Jun (pago 30 jun)</option>
+                  <option value="S2">S2 — Jul/Dic (pago 20 dic)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Días trabajados</label>
+                <input className="input" type="number" min={1} max={180} value={primaDias}
+                  onChange={(e) => setPrimaDias(e.target.value)} />
+              </div>
+            </div>
+            <button onClick={calcularPrima} disabled={primaLoading || empleados.length === 0}
+              className="btn-primary flex items-center gap-2 mb-4 disabled:opacity-50">
+              {primaLoading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+              {primaLoading ? "Calculando..." : `Calcular prima · ${empleados.length} empleados`}
+            </button>
+
+            {primaResult && (
+              <div>
+                <div className="flex gap-4 mb-3 flex-wrap">
+                  <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg px-4 py-2">
+                    <p className="text-xs text-gray-500">Total prima</p>
+                    <p className="text-lg font-bold text-brand-orange">{COP(primaResult.total_prima)}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-slate-800 rounded-lg px-4 py-2">
+                    <p className="text-xs text-gray-500">Pago límite</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{primaResult.fecha_pago_limite}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-slate-800 rounded-lg px-4 py-2">
+                    <p className="text-xs text-gray-500">Empleados</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{primaResult.empleados_count}</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-500 border-b dark:border-slate-700">
+                        <th className="pb-2">Empleado</th>
+                        <th className="pb-2 text-right">Salario</th>
+                        <th className="pb-2 text-right">Base liq.</th>
+                        <th className="pb-2 text-center">Días</th>
+                        <th className="pb-2 text-right">Prima</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {primaResult.detalle.map((d) => (
+                        <tr key={d.empleado_id} className="border-b dark:border-slate-700">
+                          <td className="py-1.5 font-medium text-gray-900 dark:text-white">
+                            {d.nombre}
+                            {d.cedula && <span className="text-xs text-gray-400 ml-1">{d.cedula}</span>}
+                          </td>
+                          <td className="py-1.5 text-right text-gray-500">{d.error ? "—" : COP(d.salario)}</td>
+                          <td className="py-1.5 text-right text-gray-500">{d.error ? <span className="text-red-400 text-xs">{d.error}</span> : COP(d.base_liquidacion)}</td>
+                          <td className="py-1.5 text-center text-gray-500">{d.error ? "—" : d.dias_trabajados}</td>
+                          <td className="py-1.5 text-right font-bold text-brand-orange">{d.error ? "—" : COP(d.prima)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-gray-200 dark:border-slate-600 font-bold">
+                      <tr>
+                        <td className="pt-2" colSpan={4}>TOTAL PRIMA SEMESTRAL</td>
+                        <td className="pt-2 text-right text-brand-orange">{COP(primaResult.total_prima)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
