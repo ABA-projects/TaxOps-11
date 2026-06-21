@@ -160,14 +160,14 @@ def calcular_nomina(e: EntradaNomina) -> ResultadoNomina:
     # Valor hora ordinaria
     vh = s / HORAS_MES
 
-    # Horas extras y recargos (Art. 168 CST)
+    # Horas extras y recargos (Art. 168 CST · Ley 2466/2025 jul-2025→jun-2026)
     hed_v  = _redondear(e.hed  * vh * 1.25)
-    hen_v  = _redondear(e.hen  * vh * 1.75)
+    hen_v  = _redondear(e.hen  * vh * 1.80)  # 75% → 80%
     rn_v   = _redondear(e.rn   * vh * 1.35)
-    hod_v  = _redondear(e.hod  * vh * 1.75)
-    hedd_v = _redondear(e.hedd * vh * 2.00)
-    hend_v = _redondear(e.hend * vh * 2.50)
-    rnd_v  = _redondear(e.rnd  * vh * 2.10)
+    hod_v  = _redondear(e.hod  * vh * 1.80)  # 75% → 80%
+    hedd_v = _redondear(e.hedd * vh * 2.05)  # 100% → 105%
+    hend_v = _redondear(e.hend * vh * 2.55)  # 150% → 155%
+    rnd_v  = _redondear(e.rnd  * vh * 2.15)  # 110% → 115%
     subtotal_he = hed_v + hen_v + rn_v + hod_v + hedd_v + hend_v + rnd_v
 
     bonif = _redondear(e.bonificaciones_salariales)
