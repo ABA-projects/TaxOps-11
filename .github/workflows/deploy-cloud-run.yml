@@ -73,6 +73,7 @@ jobs:
             --region ${{ env.REGION }} \
             --memory 2Gi \
             --cpu 1 \
+            --no-cpu-throttling \
             --timeout 600 \
             --max-instances 1 \
             --allow-unauthenticated \
@@ -88,4 +89,4 @@ jobs:
           echo "### Deploy exitoso ✅" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: $URL" >> $GITHUB_STEP_SUMMARY
           echo "- **Imagen**: \`$IMAGE\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **RAM**: 2 GB | **Timeout**: 600s | **Instancias**: máx 1" >> $GITHUB_STEP_SUMMARY
+          echo "- **RAM**: 2 GB | **CPU**: siempre asignado | **Timeout**: 600s | **Instancias**: máx 1" >> $GITHUB_STEP_SUMMARY

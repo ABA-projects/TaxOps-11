@@ -58,8 +58,8 @@ def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
             _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
             _jobs[job_id]["current_file"] = name
 
-        # workers=1: evita 2 OCR simultáneos que exceden el límite de RAM en Railway (512 MB)
-        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=1)
+        # workers=2: Cloud Run tiene 2 GB RAM; seguros con el memory leak de _jobs ya corregido
+        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=2)
         gc.collect()
 
         state: dict[str, Any] = {
