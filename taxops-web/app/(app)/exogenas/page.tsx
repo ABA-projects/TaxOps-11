@@ -138,7 +138,7 @@ function authHeaders(): Record<string, string> {
 export default function ExogenasPage() {
   const { post } = useApi(); // used for chatbot and export (short requests via proxy)
   const fileRef = useRef<HTMLInputElement>(null);
-  const sseRef = useRef<EventSource | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ProcessResult | null>(null);
@@ -163,9 +163,9 @@ export default function ExogenasPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMsgs]);
 
-  // Close SSE connection on unmount
+  // Abort stream on unmount
   useEffect(() => {
-    return () => { sseRef.current?.close(); };
+    return () => { abortRef.current?.abort(); };
   }, []);
 
   function addFiles(list: FileList | null) {
@@ -178,40 +178,64 @@ export default function ExogenasPage() {
     });
   }
 
-  function startSSE(jobId: string) {
-    const es = new EventSource(`${DIRECT_API}/exogenas/stream/${jobId}`);
-    sseRef.current = es;
+  async function startStream(jobId: string) {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "progress") {
-          if (typeof data.progress === "number") setProgress(data.progress);
-          if (data.current) setCurrentFile(data.current);
-        } else if (data.type === "done") {
-          es.close();
-          sseRef.current = null;
-          setResult(data.result as ProcessResult);
-          setTab("analytics");
-          setLoading(false);
-          setProgress(100);
-        } else if (data.type === "error") {
-          es.close();
-          sseRef.current = null;
-          setError(data.error || "Error en el procesamiento");
-          setLoading(false);
-        }
-      } catch {
-        // ignore parse errors
+    try {
+      const res = await fetch(`${DIRECT_API}/exogenas/stream/${jobId}`, {
+        headers: { Accept: "text/event-stream", ...authHeaders() },
+        signal: ctrl.signal,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+        throw new Error(err.detail || `Error ${res.status}`);
       }
-    };
 
-    es.onerror = () => {
-      es.close();
-      sseRef.current = null;
-      setError("Error de conexión con el servidor. Intenta de nuevo.");
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // SSE events are separated by \n\n
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+          if (!dataLine) continue;
+          try {
+            const data = JSON.parse(dataLine.slice(6));
+            if (data.type === "progress") {
+              if (typeof data.progress === "number") setProgress(data.progress);
+              if (data.current) setCurrentFile(data.current);
+            } else if (data.type === "done") {
+              setResult(data.result as ProcessResult);
+              setTab("analytics");
+              setLoading(false);
+              setProgress(100);
+              return;
+            } else if (data.type === "error") {
+              throw new Error(data.error || "Error en el procesamiento");
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(e instanceof Error ? e.message : "Error de conexión");
       setLoading(false);
-    };
+    } finally {
+      abortRef.current = null;
+    }
   }
 
   async function handleProcess() {
@@ -256,8 +280,8 @@ export default function ExogenasPage() {
       setLoading(false); return;
     }
 
-    // Phase 3: open SSE stream — keeps Cloud Run alive, no polling needed
-    startSSE(jobId);
+    // Phase 3: fetch-based SSE stream — maneja errores HTTP + auth
+    startStream(jobId);
   }
 
   async function handleExport() {

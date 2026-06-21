@@ -76,12 +76,16 @@ async def stream_job(job_id: str) -> StreamingResponse:
     paths, org_id, tmpdir = _pending.pop(job_id)
 
     async def generate():
-        import gc
-        import time
+        try:
+            import gc
+            import time
 
-        from exogenas.extractor import extract_many
-        from exogenas.municipios import buscar_municipio
-        from services.processor_exogenas import _agregar
+            from exogenas.extractor import extract_many
+            from exogenas.municipios import buscar_municipio
+            from services.processor_exogenas import _agregar
+        except Exception as exc:
+            yield _sse({"type": "error", "error": f"Error de inicialización: {exc}"})
+            return
 
         total = len(paths)
         all_rows: list[dict] = []
@@ -94,11 +98,27 @@ async def stream_job(job_id: str) -> StreamingResponse:
                 yield _sse({"type": "progress", "progress": round(i / total * 100), "current": p.name})
 
                 t0 = time.time()
+                fut = loop.run_in_executor(None, extract_many, p)
+                rows: list[dict] = []
                 try:
-                    rows: list[dict] = await asyncio.wait_for(
-                        loop.run_in_executor(None, extract_many, p),
-                        timeout=90,
-                    )
+                    # Keepalive SSE comment cada 5 s mientras OCR corre;
+                    # límite global 90 s por archivo.
+                    deadline = time.monotonic() + 90
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            fut.cancel()
+                            raise asyncio.TimeoutError()
+                        try:
+                            rows = await asyncio.wait_for(
+                                asyncio.shield(fut), timeout=min(5.0, remaining)
+                            )
+                            break
+                        except asyncio.TimeoutError:
+                            if time.monotonic() >= deadline:
+                                fut.cancel()
+                                raise
+                            yield ":\n\n"  # SSE comment — keepalive, ignorado por el cliente
                     elapsed = time.time() - t0
                     for row in rows:
                         row["_archivo"] = p.name
