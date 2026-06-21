@@ -1,10 +1,13 @@
-"""Router de nómina — cálculo mensual, liquidación definitiva y exportación Excel."""
+"""Router de nómina — cálculo mensual, liquidación definitiva, empleados DB y períodos batch."""
 from __future__ import annotations
 
 import io
+import json
+import os
 from datetime import date
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 
 from dependencies import get_current_user
@@ -670,3 +673,618 @@ async def export_batch(
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMPLEADOS — CRUD persistido en PostgreSQL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _get_db():
+    from db.database import db_available, get_db
+    if not db_available():
+        raise HTTPException(status_code=503, detail="Base de datos no disponible")
+    return get_db
+
+
+@router.get("/empleados")
+async def listar_empleados(user: dict = Depends(get_current_user)) -> list:
+    from sqlalchemy import text
+    get_db = _get_db()
+    with get_db() as db:
+        rows = db.execute(
+            text("SELECT * FROM empleados WHERE org_id = :org AND activo = TRUE ORDER BY nombre"),
+            {"org": user["org_id"]},
+        ).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/empleados", status_code=201)
+async def crear_empleado(body: dict, user: dict = Depends(get_current_user)) -> dict:
+    from sqlalchemy import text
+    if not body.get("nombre") or not body.get("salario"):
+        raise HTTPException(status_code=422, detail="nombre y salario son requeridos")
+    get_db = _get_db()
+    emp_id = str(uuid4())
+    with get_db() as db:
+        db.execute(
+            text("""
+                INSERT INTO empleados
+                    (id, org_id, cedula, nombre, cargo, salario,
+                     clase_riesgo_arl, tipo_salario, fecha_ingreso, email)
+                VALUES
+                    (:id, :org, :cedula, :nombre, :cargo, :salario,
+                     :arl, :tipo, :fecha, :email)
+            """),
+            {
+                "id":     emp_id,
+                "org":    user["org_id"],
+                "cedula": body.get("cedula", ""),
+                "nombre": body["nombre"],
+                "cargo":  body.get("cargo", ""),
+                "salario": float(body["salario"]),
+                "arl":    int(body.get("clase_riesgo_arl", 1)),
+                "tipo":   body.get("tipo_salario", "ordinario"),
+                "fecha":  body.get("fecha_ingreso") or None,
+                "email":  body.get("email", ""),
+            },
+        )
+        db.commit()
+    return {"id": emp_id, **body}
+
+
+@router.put("/empleados/{emp_id}")
+async def actualizar_empleado(emp_id: str, body: dict, user: dict = Depends(get_current_user)) -> dict:
+    from sqlalchemy import text
+    get_db = _get_db()
+    with get_db() as db:
+        result = db.execute(
+            text("""
+                UPDATE empleados SET
+                    cedula = :cedula, nombre = :nombre, cargo = :cargo,
+                    salario = :salario, clase_riesgo_arl = :arl,
+                    tipo_salario = :tipo, fecha_ingreso = :fecha,
+                    email = :email, updated_at = NOW()
+                WHERE id = :id AND org_id = :org AND activo = TRUE
+            """),
+            {
+                "id":     emp_id,
+                "org":    user["org_id"],
+                "cedula": body.get("cedula", ""),
+                "nombre": body.get("nombre", ""),
+                "cargo":  body.get("cargo", ""),
+                "salario": float(body.get("salario", 0)),
+                "arl":    int(body.get("clase_riesgo_arl", 1)),
+                "tipo":   body.get("tipo_salario", "ordinario"),
+                "fecha":  body.get("fecha_ingreso") or None,
+                "email":  body.get("email", ""),
+            },
+        )
+        db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return {"id": emp_id, **body}
+
+
+@router.delete("/empleados/{emp_id}", status_code=204)
+async def eliminar_empleado(emp_id: str, user: dict = Depends(get_current_user)) -> None:
+    from sqlalchemy import text
+    get_db = _get_db()
+    with get_db() as db:
+        result = db.execute(
+            text("UPDATE empleados SET activo = FALSE WHERE id = :id AND org_id = :org"),
+            {"id": emp_id, "org": user["org_id"]},
+        )
+        db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PERÍODOS — cálculo batch + historial en DB
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/periodos")
+async def listar_periodos(user: dict = Depends(get_current_user)) -> list:
+    from sqlalchemy import text
+    get_db = _get_db()
+    with get_db() as db:
+        rows = db.execute(
+            text("SELECT * FROM nomina_periodos WHERE org_id = :org ORDER BY periodo DESC"),
+            {"org": user["org_id"]},
+        ).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/periodos/{periodo}")
+async def detalle_periodo(periodo: str, user: dict = Depends(get_current_user)) -> dict:
+    from sqlalchemy import text
+    get_db = _get_db()
+    with get_db() as db:
+        per = db.execute(
+            text("SELECT * FROM nomina_periodos WHERE org_id = :org AND periodo = :p LIMIT 1"),
+            {"org": user["org_id"], "p": periodo},
+        ).mappings().fetchone()
+        if not per:
+            raise HTTPException(status_code=404, detail="Período no encontrado")
+        detalle = db.execute(
+            text("""
+                SELECT d.*, e.nombre, e.cedula, e.cargo, e.email
+                FROM nomina_detalle d
+                JOIN empleados e ON e.id = d.empleado_id
+                WHERE d.periodo_id = :pid
+                ORDER BY e.nombre
+            """),
+            {"pid": per["id"]},
+        ).mappings().fetchall()
+    return {
+        **dict(per),
+        "detalle": [dict(r) for r in detalle],
+    }
+
+
+@router.post("/periodos/{periodo}/calcular")
+async def calcular_periodo(periodo: str, body: dict, user: dict = Depends(get_current_user)) -> dict:
+    """Calcula nómina batch para todos los empleados activos del período YYYY-MM."""
+    import re
+    if not re.match(r"^\d{4}-\d{2}$", periodo):
+        raise HTTPException(status_code=422, detail="Formato de período inválido. Use YYYY-MM")
+
+    from sqlalchemy import text
+    get_db = _get_db()
+    org_id = user["org_id"]
+
+    with get_db() as db:
+        empleados_rows = db.execute(
+            text("SELECT * FROM empleados WHERE org_id = :org AND activo = TRUE ORDER BY nombre"),
+            {"org": org_id},
+        ).mappings().fetchall()
+
+    if not empleados_rows:
+        raise HTTPException(status_code=422, detail="No hay empleados activos en esta organización")
+
+    dias = int(body.get("dias_trabajados", 30))
+    resultados = []
+    total_dev = total_ded = total_neto = total_carga = total_costo = 0.0
+
+    for emp in empleados_rows:
+        try:
+            entrada = EntradaNomina(
+                salario_basico   = float(emp["salario"]),
+                dias_trabajados  = dias,
+                clase_riesgo_arl = int(emp["clase_riesgo_arl"]),
+                tipo_salario     = emp["tipo_salario"],
+            )
+            r = calcular_nomina(entrada)
+            row = {
+                "empleado_id":   str(emp["id"]),
+                "nombre":        emp["nombre"],
+                "cedula":        emp["cedula"],
+                "cargo":         emp["cargo"],
+                "email":         emp["email"],
+                "salario":       float(emp["salario"]),
+                "devengado":     r.total_devengado,
+                "deducciones":   r.total_deducciones,
+                "neto":          r.neto_pagar,
+                "carga":         r.total_carga_patronal,
+                "costo":         r.costo_total_empresa,
+                "detalle":       _mensual_to_dict(r),
+            }
+            total_dev   += r.total_devengado
+            total_ded   += r.total_deducciones
+            total_neto  += r.neto_pagar
+            total_carga += r.total_carga_patronal
+            total_costo += r.costo_total_empresa
+        except Exception as exc:
+            row = {
+                "empleado_id": str(emp["id"]),
+                "nombre": emp["nombre"],
+                "cedula": emp["cedula"],
+                "error":  str(exc),
+                "devengado": 0, "deducciones": 0, "neto": 0, "carga": 0, "costo": 0,
+            }
+        resultados.append(row)
+
+    # Persistir o actualizar el período
+    with get_db() as db:
+        existing = db.execute(
+            text("SELECT id FROM nomina_periodos WHERE org_id = :org AND periodo = :p AND tipo = 'mensual'"),
+            {"org": org_id, "p": periodo},
+        ).fetchone()
+
+        if existing:
+            periodo_id = str(existing[0])
+            db.execute(
+                text("""
+                    UPDATE nomina_periodos SET
+                        total_devengado = :dev, total_deducciones = :ded,
+                        total_neto = :neto, carga_patronal = :carga,
+                        costo_empresa = :costo, empleados_count = :cnt,
+                        estado = 'calculado'
+                    WHERE id = :pid
+                """),
+                {"pid": periodo_id, "dev": total_dev, "ded": total_ded,
+                 "neto": total_neto, "carga": total_carga, "costo": total_costo,
+                 "cnt": len(resultados)},
+            )
+            db.execute(text("DELETE FROM nomina_detalle WHERE periodo_id = :pid"), {"pid": periodo_id})
+        else:
+            periodo_id = str(uuid4())
+            db.execute(
+                text("""
+                    INSERT INTO nomina_periodos
+                        (id, org_id, periodo, tipo, estado,
+                         total_devengado, total_deducciones, total_neto,
+                         carga_patronal, costo_empresa, empleados_count)
+                    VALUES
+                        (:id, :org, :p, 'mensual', 'calculado',
+                         :dev, :ded, :neto, :carga, :costo, :cnt)
+                """),
+                {"id": periodo_id, "org": org_id, "p": periodo,
+                 "dev": total_dev, "ded": total_ded, "neto": total_neto,
+                 "carga": total_carga, "costo": total_costo, "cnt": len(resultados)},
+            )
+
+        for row in resultados:
+            if "error" in row:
+                continue
+            db.execute(
+                text("""
+                    INSERT INTO nomina_detalle (id, periodo_id, empleado_id, org_id, resultado)
+                    VALUES (:id, :pid, :eid, :org, :res)
+                """),
+                {
+                    "id":  str(uuid4()),
+                    "pid": periodo_id,
+                    "eid": row["empleado_id"],
+                    "org": org_id,
+                    "res": json.dumps(row["detalle"], default=str),
+                },
+            )
+        db.commit()
+
+    return {
+        "periodo_id":       periodo_id,
+        "periodo":          periodo,
+        "empleados_count":  len(resultados),
+        "total_devengado":  total_dev,
+        "total_deducciones": total_ded,
+        "total_neto":       total_neto,
+        "carga_patronal":   total_carga,
+        "costo_empresa":    total_costo,
+        "detalle":          resultados,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COLILLA PDF individual por empleado/período
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/colilla/{periodo}/{empleado_id}")
+async def colilla_pdf(periodo: str, empleado_id: str, user: dict = Depends(get_current_user)) -> StreamingResponse:
+    """Genera colilla PDF para un empleado en un período calculado."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from sqlalchemy import text
+
+    get_db = _get_db()
+    with get_db() as db:
+        row = db.execute(
+            text("""
+                SELECT d.resultado, e.nombre, e.cedula, e.cargo, e.salario, e.email
+                FROM nomina_detalle d
+                JOIN empleados e ON e.id = d.empleado_id
+                JOIN nomina_periodos p ON p.id = d.periodo_id
+                WHERE p.org_id = :org AND p.periodo = :per AND d.empleado_id = :eid
+                LIMIT 1
+            """),
+            {"org": user["org_id"], "per": periodo, "eid": empleado_id},
+        ).mappings().fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Colilla no encontrada. Calcula el período primero.")
+
+    resultado = row["resultado"] if isinstance(row["resultado"], dict) else json.loads(row["resultado"])
+    emp_nombre = row["nombre"]
+    emp_cedula = row["cedula"]
+    emp_cargo  = row["cargo"]
+
+    NAV = colors.HexColor("#1A3A5C")
+    ORG = colors.HexColor("#E05519")
+    LGT = colors.HexColor("#EEF2F7")
+    styles = getSampleStyleSheet()
+    H1 = ParagraphStyle("h1", parent=styles["Normal"], fontSize=14, textColor=colors.white,
+                        backColor=NAV, alignment=TA_CENTER, fontName="Helvetica-Bold", leading=20, spaceAfter=2)
+    H2 = ParagraphStyle("h2", parent=styles["Normal"], fontSize=9, textColor=colors.white,
+                        backColor=ORG, spaceAfter=1, spaceBefore=6, fontName="Helvetica-Bold", leading=13)
+    FOOT = ParagraphStyle("foot", parent=styles["Normal"], fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
+
+    def make_table(rows):
+        t = Table(rows, colWidths=[10*cm, 4.5*cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), NAV),
+            ("TEXTCOLOR",  (0, 0), (-1, 0), colors.white),
+            ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LGT]),
+            ("GRID",       (0, 0), (-1, -1), 0.25, colors.HexColor("#DDDDDD")),
+            ("ALIGN",      (1, 0), (1, -1), "RIGHT"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING",   (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
+        ]))
+        return t
+
+    def cop(v): return f"${float(v or 0):,.0f}"
+
+    dev  = resultado.get("devengado", {})
+    ded  = resultado.get("deducciones", {})
+    pat  = resultado.get("carga_patronal", {})
+    neto = resultado.get("neto_pagar", 0)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=1.8*cm, leftMargin=1.8*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    story = []
+
+    story.append(Paragraph(f"TaxOps · Colilla de Nómina · {periodo}", H1))
+    story.append(Paragraph(f"Empleado: {emp_nombre}  ·  CC {emp_cedula}  ·  {emp_cargo}", styles["Normal"]))
+    story.append(Spacer(1, 0.3*cm))
+
+    story.append(Paragraph("DEVENGADO", H2))
+    dev_rows = [["Concepto", "Valor"],
+        ["Salario proporcional", cop(dev.get("salario_proporcional", 0))]]
+    if dev.get("aplica_aux_transporte"):
+        dev_rows.append(["Auxilio de transporte", cop(dev.get("auxilio_transporte", 0))])
+    he = dev.get("horas_extras", {})
+    for lbl, key in [("HED +25%","hed"),("HEN +80%","hen"),("RN +35%","rn"),
+                     ("HOD +80%","hod"),("HEDD +105%","hedd"),("HEND +155%","hend"),("RND +115%","rnd")]:
+        if he.get(key, 0):
+            dev_rows.append([f"  · {lbl}", cop(he[key])])
+    if dev.get("bonificaciones"): dev_rows.append(["Bonificaciones salariales", cop(dev["bonificaciones"])])
+    if dev.get("comisiones"):     dev_rows.append(["Comisiones", cop(dev["comisiones"])])
+    if dev.get("otros_no_salariales"): dev_rows.append(["No salariales", cop(dev["otros_no_salariales"])])
+    dev_rows.append(["TOTAL DEVENGADO", cop(dev.get("total_devengado", 0))])
+    story.append(make_table(dev_rows))
+
+    story.append(Paragraph("DEDUCCIONES EMPLEADO", H2))
+    ded_rows = [["Concepto", "Valor"],
+        ["IBC – Base Seg. Social",     cop(ded.get("ibc", 0))],
+        ["Salud empleado (4%)",         cop(ded.get("salud_empleado", 0))],
+        ["Pensión empleado (4%)",        cop(ded.get("pension_empleado", 0))]]
+    if ded.get("fsp"):               ded_rows.append(["FSP – Solidaridad",    cop(ded["fsp"])])
+    if ded.get("retencion_fuente"):  ded_rows.append(["Retención en la fuente", cop(ded["retencion_fuente"])])
+    if ded.get("otras"):             ded_rows.append(["Otras deducciones",    cop(ded["otras"])])
+    ded_rows.append(["TOTAL DEDUCCIONES", cop(ded.get("total_deducciones", 0))])
+    story.append(make_table(ded_rows))
+
+    story.append(Spacer(1, 0.2*cm))
+    neto_t = Table([["NETO A PAGAR", cop(neto)]], colWidths=[10*cm, 4.5*cm])
+    neto_t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), NAV),
+        ("TEXTCOLOR",  (0, 0), (-1, -1), colors.white),
+        ("FONTNAME",   (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE",   (0, 0), (-1, -1), 12),
+        ("ALIGN",      (1, 0), (1, -1), "RIGHT"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING",   (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+    ]))
+    story.append(neto_t)
+
+    story.append(Paragraph("CARGA PATRONAL", H2))
+    pat_rows = [["Concepto", "Valor"],
+        ["Salud empleador (8.5%)",    cop(pat.get("salud_empleador", 0))],
+        ["Pensión empleador (12%)",   cop(pat.get("pension", 0))],
+        ["ARL",                       cop(pat.get("arl", 0))],
+        ["SENA (2%)",                 cop(pat.get("sena", 0))],
+        ["ICBF (3%)",                 cop(pat.get("icbf", 0))],
+        ["Caja de Compensación (4%)", cop(pat.get("caja_compensacion", 0))],
+        ["TOTAL CARGA PATRONAL",      cop(pat.get("total", 0))]]
+    story.append(make_table(pat_rows))
+
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph(
+        f"Generado por TaxOps SaaS · {date.today().strftime('%d/%m/%Y')} · "
+        "CST Colombia · Art.114-1 ET · Ley 1607/2012 · Ley 2466/2025",
+        FOOT,
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    safe_nombre = emp_nombre.replace(" ", "_")
+    filename = f"colilla_{safe_nombre}_{periodo}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMAIL — envío de colillas vía Resend
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/periodos/{periodo}/email")
+async def enviar_colillas_email(periodo: str, body: dict, user: dict = Depends(get_current_user)) -> dict:
+    """Envía colillas PDF por email usando Resend API."""
+    resend_key = os.getenv("RESEND_API_KEY", "")
+    if not resend_key:
+        raise HTTPException(status_code=503, detail="RESEND_API_KEY no configurada")
+
+    from_email = os.getenv("RESEND_FROM_EMAIL", "noreply@taxops.co")
+    from sqlalchemy import text
+    import base64
+    import urllib.request
+
+    get_db = _get_db()
+    with get_db() as db:
+        per = db.execute(
+            text("SELECT id FROM nomina_periodos WHERE org_id = :org AND periodo = :p LIMIT 1"),
+            {"org": user["org_id"], "p": periodo},
+        ).mappings().fetchone()
+        if not per:
+            raise HTTPException(status_code=404, detail="Período no encontrado. Calcula primero.")
+
+        detalles = db.execute(
+            text("""
+                SELECT d.resultado, d.empleado_id, e.nombre, e.email
+                FROM nomina_detalle d
+                JOIN empleados e ON e.id = d.empleado_id
+                WHERE d.periodo_id = :pid AND e.email != ''
+                ORDER BY e.nombre
+            """),
+            {"pid": per["id"]},
+        ).mappings().fetchall()
+
+    # Filtrar empleados con email
+    empleado_ids = body.get("empleado_ids")
+    sent = []
+    skipped = []
+    errors = []
+
+    for det in detalles:
+        emp_id = str(det["empleado_id"])
+        if empleado_ids and emp_id not in empleado_ids:
+            continue
+        if not det["email"]:
+            skipped.append(det["nombre"])
+            continue
+
+        # Generar PDF en memoria
+        try:
+            pdf_buf = await _generar_colilla_pdf(
+                resultado=det["resultado"] if isinstance(det["resultado"], dict) else json.loads(det["resultado"]),
+                nombre=det["nombre"],
+                periodo=periodo,
+            )
+            pdf_b64 = base64.b64encode(pdf_buf).decode()
+        except Exception as exc:
+            errors.append(f"{det['nombre']}: error PDF — {exc}")
+            continue
+
+        # Enviar vía Resend
+        payload = json.dumps({
+            "from": from_email,
+            "to":   [det["email"]],
+            "subject": f"Colilla de nómina {periodo} — TaxOps",
+            "html": (
+                f"<p>Hola <strong>{det['nombre']}</strong>,</p>"
+                f"<p>Adjuntamos tu colilla de nómina del período <strong>{periodo}</strong>.</p>"
+                "<p>Este es un mensaje automático generado por <strong>TaxOps</strong>.</p>"
+            ),
+            "attachments": [{
+                "filename": f"colilla_{periodo}.pdf",
+                "content":  pdf_b64,
+            }],
+        }).encode()
+
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp.read()
+            sent.append(det["nombre"])
+        except Exception as exc:
+            errors.append(f"{det['nombre']}: error Resend — {exc}")
+
+    return {"enviados": sent, "sin_email": skipped, "errores": errors}
+
+
+async def _generar_colilla_pdf(resultado: dict, nombre: str, periodo: str) -> bytes:
+    """Helper que genera bytes de PDF para una colilla (reutilizado por email)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+
+    NAV = colors.HexColor("#1A3A5C")
+    ORG = colors.HexColor("#E05519")
+    LGT = colors.HexColor("#EEF2F7")
+    styles = getSampleStyleSheet()
+    H1 = ParagraphStyle("h1", parent=styles["Normal"], fontSize=14, textColor=colors.white,
+                        backColor=NAV, alignment=TA_CENTER, fontName="Helvetica-Bold", leading=20, spaceAfter=2)
+    H2 = ParagraphStyle("h2", parent=styles["Normal"], fontSize=9, textColor=colors.white,
+                        backColor=ORG, spaceAfter=1, spaceBefore=6, fontName="Helvetica-Bold", leading=13)
+    FOOT = ParagraphStyle("foot", parent=styles["Normal"], fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
+
+    def make_table(rows):
+        t = Table(rows, colWidths=[10*cm, 4.5*cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), NAV),
+            ("TEXTCOLOR",  (0, 0), (-1, 0), colors.white),
+            ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LGT]),
+            ("GRID",       (0, 0), (-1, -1), 0.25, colors.HexColor("#DDDDDD")),
+            ("ALIGN",      (1, 0), (1, -1), "RIGHT"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING",   (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
+        ]))
+        return t
+
+    def cop(v): return f"${float(v or 0):,.0f}"
+
+    dev  = resultado.get("devengado", {})
+    ded  = resultado.get("deducciones", {})
+    pat  = resultado.get("carga_patronal", {})
+    neto = resultado.get("neto_pagar", 0)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=1.8*cm, leftMargin=1.8*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    story = []
+    story.append(Paragraph(f"TaxOps · Colilla de Nómina · {periodo}", H1))
+    story.append(Paragraph(f"Empleado: {nombre}", styles["Normal"]))
+    story.append(Spacer(1, 0.3*cm))
+
+    dev_rows = [["Concepto", "Valor"],
+        ["Salario proporcional", cop(dev.get("salario_proporcional", 0))]]
+    if dev.get("aplica_aux_transporte"):
+        dev_rows.append(["Auxilio de transporte", cop(dev.get("auxilio_transporte", 0))])
+    he = dev.get("horas_extras", {})
+    for lbl, key in [("HED +25%","hed"),("HEN +80%","hen"),("RN +35%","rn"),
+                     ("HOD +80%","hod"),("HEDD +105%","hedd"),("HEND +155%","hend"),("RND +115%","rnd")]:
+        if he.get(key, 0):
+            dev_rows.append([f"  · {lbl}", cop(he[key])])
+    dev_rows.append(["TOTAL DEVENGADO", cop(dev.get("total_devengado", 0))])
+    story.append(Paragraph("DEVENGADO", H2))
+    story.append(make_table(dev_rows))
+
+    ded_rows = [["Concepto", "Valor"],
+        ["IBC – Base Seg. Social",    cop(ded.get("ibc", 0))],
+        ["Salud empleado (4%)",        cop(ded.get("salud_empleado", 0))],
+        ["Pensión empleado (4%)",      cop(ded.get("pension_empleado", 0))]]
+    if ded.get("fsp"):             ded_rows.append(["FSP",              cop(ded["fsp"])])
+    if ded.get("retencion_fuente"):ded_rows.append(["Retención fuente", cop(ded["retencion_fuente"])])
+    ded_rows.append(["TOTAL DEDUCCIONES", cop(ded.get("total_deducciones", 0))])
+    story.append(Paragraph("DEDUCCIONES", H2))
+    story.append(make_table(ded_rows))
+
+    neto_t = Table([["NETO A PAGAR", cop(neto)]], colWidths=[10*cm, 4.5*cm])
+    neto_t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), NAV), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("FONTNAME",   (0, 0), (-1, -1), "Helvetica-Bold"), ("FONTSIZE",  (0, 0), (-1, -1), 12),
+        ("ALIGN",      (1, 0), (1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING",  (0, 0), (-1, -1), 6), ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+    ]))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(neto_t)
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph(
+        f"Generado por TaxOps SaaS · {date.today().strftime('%d/%m/%Y')}",
+        FOOT,
+    ))
+    doc.build(story)
+    return buf.getvalue()

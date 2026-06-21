@@ -5,6 +5,7 @@ import {
   Calculator, FileText, ChevronDown, ChevronUp,
   Download, BarChart3, TrendingUp, AlertCircle,
   Users, Plus, Trash2, Upload, UserCheck, Printer,
+  Calendar, Mail, Send, RefreshCw,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { PageChatbot } from "@/components/PageChatbot";
@@ -24,7 +25,7 @@ const SALARY_PRESETS = [
   { label: "Integral", value: SMLMV * 13 },
 ];
 
-type TabType = "mensual" | "liquidacion" | "analitica" | "empleados";
+type TabType = "mensual" | "liquidacion" | "analitica" | "empleados" | "periodos";
 
 type CargaPatronal = {
   pension: number; salud_empleador: number; arl: number;
@@ -55,17 +56,25 @@ type ResultadoLiq = {
 
 type Empleado = {
   id: string; nombre: string; cedula: string; cargo: string;
-  salario: number; clase_riesgo_arl: number; tipo_salario: string; fecha_ingreso: string;
+  salario: number; clase_riesgo_arl: number; tipo_salario: string;
+  fecha_ingreso: string; email: string;
+};
+type PeriodoResumen = {
+  id: string; periodo: string; estado: string; empleados_count: number;
+  total_devengado: number; total_neto: number; carga_patronal: number; costo_empresa: number;
+};
+type PeriodoDetalle = PeriodoResumen & {
+  detalle: Array<{
+    empleado_id: string; nombre: string; cedula: string; cargo: string;
+    email: string; salario: number; devengado: number; neto: number;
+    carga: number; costo: number; error?: string;
+  }>;
 };
 type BatchRow = {
   nombre: string; salario: number; neto: number; carga: number; costo: number; error?: string;
 };
 
-const EMP_KEY = "taxops_empleados";
-function loadEmpleados(): Empleado[] {
-  try { return JSON.parse(localStorage.getItem(EMP_KEY) || "[]"); } catch { return []; }
-}
-function saveEmpleados(list: Empleado[]) { localStorage.setItem(EMP_KEY, JSON.stringify(list)); }
+// empleados ahora viven en PostgreSQL — localStorage solo se usa para historial de cálculos locales
 
 type HistEntry = {
   id: string; tipo: "mensual" | "liquidacion"; ts: string;
@@ -152,7 +161,7 @@ Puedes ayudar con:
 Responde en español, de forma clara y concisa.`;
 
 export default function NominaPage() {
-  const { post, postForm } = useApi();
+  const { get, post, put, del, postForm, getBlob } = useApi();
   const [tab, setTab] = useState<TabType>("mensual");
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
@@ -162,16 +171,43 @@ export default function NominaPage() {
   const [showHE, setShowHE] = useState(false);
   const [history, setHistory] = useState<HistEntry[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [empLoading, setEmpLoading] = useState(false);
   const [showNewEmp, setShowNewEmp] = useState(false);
+  const [editingEmp, setEditingEmp] = useState<string | null>(null);
   const [nuevoEmp, setNuevoEmp] = useState<Omit<Empleado, "id">>({
     nombre: "", cedula: "", cargo: "", salario: SMLMV,
-    clase_riesgo_arl: 1, tipo_salario: "ordinario", fecha_ingreso: "",
+    clase_riesgo_arl: 1, tipo_salario: "ordinario", fecha_ingreso: "", email: "",
   });
   const [batchResults, setBatchResults] = useState<BatchRow[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Períodos
+  const [periodos, setPeriodos] = useState<PeriodoResumen[]>([]);
+  const [periodoActual, setPeriodoActual] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  });
+  const [periodoDias, setPeriodoDias] = useState("30");
+  const [periodoLoading, setPeriodoLoading] = useState(false);
+  const [periodoDetalle, setPeriodoDetalle] = useState<PeriodoDetalle | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
 
-  useEffect(() => { setHistory(loadHist()); setEmpleados(loadEmpleados()); }, []);
+  const fetchEmpleados = useCallback(async () => {
+    setEmpLoading(true);
+    try { setEmpleados(await get<Empleado[]>("/nomina/empleados")); }
+    catch { /* silencioso si no hay DB */ }
+    finally { setEmpLoading(false); }
+  }, [get]); // eslint-disable-line
+
+  const fetchPeriodos = useCallback(async () => {
+    try { setPeriodos(await get<PeriodoResumen[]>("/nomina/periodos")); }
+    catch { /* silencioso si no hay DB */ }
+  }, [get]); // eslint-disable-line
+
+  useEffect(() => {
+    setHistory(loadHist());
+    fetchEmpleados();
+    fetchPeriodos();
+  }, []); // eslint-disable-line
 
   const [mensual, setMensual] = useState({
     salario_basico: "", dias_trabajados: "30", clase_riesgo_arl: "1",
@@ -287,16 +323,35 @@ export default function NominaPage() {
     );
   }
 
-  function guardarEmpleado() {
+  async function guardarEmpleado() {
     if (!nuevoEmp.nombre || !nuevoEmp.salario) { setError("Nombre y salario requeridos"); return; }
-    const lista = [...empleados, { ...nuevoEmp, id: crypto.randomUUID() }];
-    setEmpleados(lista); saveEmpleados(lista); setShowNewEmp(false); setError("");
-    setNuevoEmp({ nombre: "", cedula: "", cargo: "", salario: SMLMV, clase_riesgo_arl: 1, tipo_salario: "ordinario", fecha_ingreso: "" });
+    setError("");
+    try {
+      if (editingEmp) {
+        await put(`/nomina/empleados/${editingEmp}`, nuevoEmp);
+        setEditingEmp(null);
+      } else {
+        await post("/nomina/empleados", nuevoEmp);
+      }
+      await fetchEmpleados();
+      setShowNewEmp(false);
+      setNuevoEmp({ nombre: "", cedula: "", cargo: "", salario: SMLMV, clase_riesgo_arl: 1, tipo_salario: "ordinario", fecha_ingreso: "", email: "" });
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error guardando empleado"); }
   }
 
-  function eliminarEmpleado(id: string) {
-    const lista = empleados.filter((e) => e.id !== id);
-    setEmpleados(lista); saveEmpleados(lista);
+  async function eliminarEmpleado(id: string) {
+    try {
+      await del(`/nomina/empleados/${id}`);
+      await fetchEmpleados();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error eliminando empleado"); }
+  }
+
+  function editarEmpleado(e: Empleado) {
+    setEditingEmp(e.id);
+    setNuevoEmp({ nombre: e.nombre, cedula: e.cedula, cargo: e.cargo, salario: e.salario,
+      clase_riesgo_arl: e.clase_riesgo_arl, tipo_salario: e.tipo_salario,
+      fecha_ingreso: e.fecha_ingreso, email: e.email || "" });
+    setShowNewEmp(true);
   }
 
   function cargarEnMensual(e: Empleado) {
@@ -307,6 +362,46 @@ export default function NominaPage() {
   function cargarEnLiq(e: Empleado) {
     setLiq((p) => ({ ...p, salario_basico: NUM(e.salario), tipo_salario: e.tipo_salario, fecha_ingreso: e.fecha_ingreso || "" }));
     setTab("liquidacion");
+  }
+
+  async function calcularPeriodo() {
+    setPeriodoLoading(true); setError("");
+    try {
+      const res = await post<PeriodoDetalle>(`/nomina/periodos/${periodoActual}/calcular`, {
+        dias_trabajados: parseInt(periodoDias),
+      });
+      setPeriodoDetalle(res);
+      await fetchPeriodos();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error calculando período"); }
+    finally { setPeriodoLoading(false); }
+  }
+
+  async function abrirPeriodo(p: PeriodoResumen) {
+    try {
+      const det = await get<PeriodoDetalle>(`/nomina/periodos/${p.periodo}`);
+      setPeriodoDetalle(det);
+      setPeriodoActual(p.periodo);
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error abriendo período"); }
+  }
+
+  async function descargarColilla(periodoStr: string, empId: string, nombre: string) {
+    try {
+      const blob = await getBlob(`/nomina/colilla/${periodoStr}/${empId}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `colilla_${nombre.replace(/ /g,"_")}_${periodoStr}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error descargando colilla"); }
+  }
+
+  async function enviarEmails(periodoStr: string) {
+    setEmailLoading(true); setError("");
+    try {
+      const res = await post<{enviados: string[]; sin_email: string[]; errores: string[]}>(`/nomina/periodos/${periodoStr}/email`, {});
+      const msg = `Enviados: ${res.enviados.length} · Sin email: ${res.sin_email.length}${res.errores.length ? ` · Errores: ${res.errores.join("; ")}` : ""}`;
+      setError(msg);
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error enviando emails"); }
+    finally { setEmailLoading(false); }
   }
 
   async function handleBatchFile(file: File) {
@@ -331,10 +426,11 @@ export default function NominaPage() {
 
       <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-xl flex-wrap">
         {([
-          ["mensual",     "Nómina Mensual",        Calculator],
-          ["liquidacion", "Liquidación",            FileText],
+          ["mensual",     "Nómina Mensual",         Calculator],
+          ["liquidacion", "Liquidación",             FileText],
           ["empleados",   `Empleados (${empleados.length})`, Users],
-          ["analitica",   "Analítica",              BarChart3],
+          ["periodos",    "Períodos",                Calendar],
+          ["analitica",   "Analítica",               BarChart3],
         ] as const).map(([t, label, Icon]) => (
           <button key={t} onClick={() => { setTab(t); setError(""); }}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -607,7 +703,9 @@ export default function NominaPage() {
 
             {showNewEmp && (
               <div className="bg-gray-50 dark:bg-slate-800 rounded-xl p-4 mb-4 border border-gray-200 dark:border-slate-700">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Nuevo empleado</h4>
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+                  {editingEmp ? "Editar empleado" : "Nuevo empleado"}
+                </h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs text-gray-500 mb-1">Nombre completo *</label>
                     <input className="input" placeholder="Juan Pérez" value={nuevoEmp.nombre} onChange={(e) => setNuevoEmp((p) => ({ ...p, nombre: e.target.value }))} /></div>
@@ -634,25 +732,30 @@ export default function NominaPage() {
                     </select></div>
                   <div><label className="block text-xs text-gray-500 mb-1">Fecha de ingreso</label>
                     <input className="input" type="date" value={nuevoEmp.fecha_ingreso} onChange={(e) => setNuevoEmp((p) => ({ ...p, fecha_ingreso: e.target.value }))} /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Email (para colillas)</label>
+                    <input className="input" type="email" placeholder="juan@empresa.com" value={nuevoEmp.email} onChange={(e) => setNuevoEmp((p) => ({ ...p, email: e.target.value }))} /></div>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={guardarEmpleado} className="btn-primary flex items-center gap-1.5 text-sm px-4 py-2">
-                    <UserCheck size={14} /> Guardar
+                    <UserCheck size={14} /> {editingEmp ? "Actualizar" : "Guardar"}
                   </button>
-                  <button onClick={() => setShowNewEmp(false)} className="text-sm text-gray-400 hover:text-gray-600 px-4 py-2">Cancelar</button>
+                  <button onClick={() => { setShowNewEmp(false); setEditingEmp(null); }} className="text-sm text-gray-400 hover:text-gray-600 px-4 py-2">Cancelar</button>
                 </div>
               </div>
             )}
 
-            {empleados.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Sin empleados. Agrega uno manualmente o importa desde Excel/CSV.</p>
+            {empLoading ? (
+              <p className="text-sm text-gray-400 text-center py-8">Cargando empleados...</p>
+            ) : empleados.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Sin empleados. Agrega uno para comenzar.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-500 border-b dark:border-slate-700">
                       <th className="pb-2">Empleado</th><th className="pb-2">Cargo</th>
-                      <th className="pb-2 text-right">Salario</th><th className="pb-2 text-center">ARL</th><th className="pb-2">Acciones</th>
+                      <th className="pb-2 text-right">Salario</th><th className="pb-2 text-center">ARL</th>
+                      <th className="pb-2 text-center">Email</th><th className="pb-2">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -665,10 +768,14 @@ export default function NominaPage() {
                         <td className="py-2 text-gray-500 text-xs">{e.cargo || "—"}</td>
                         <td className="py-2 text-right font-medium text-gray-900 dark:text-white">{COP(e.salario)}</td>
                         <td className="py-2 text-center"><span className="text-xs bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{e.clase_riesgo_arl}</span></td>
+                        <td className="py-2 text-center">
+                          {e.email ? <span className="text-xs text-green-600">✓</span> : <span className="text-xs text-gray-300">—</span>}
+                        </td>
                         <td className="py-2">
                           <div className="flex gap-1.5">
                             <button onClick={() => cargarEnMensual(e)} className="text-xs bg-brand-orange text-white px-2 py-1 rounded-md hover:bg-orange-600 transition-colors">Mensual</button>
                             <button onClick={() => cargarEnLiq(e)} className="text-xs bg-brand-navy text-white px-2 py-1 rounded-md hover:bg-brand-navy/80 transition-colors">Liquidar</button>
+                            <button onClick={() => editarEmpleado(e)} className="text-xs text-blue-400 hover:text-blue-600 p-1 border border-blue-200 dark:border-blue-800 rounded">Editar</button>
                             <button onClick={() => eliminarEmpleado(e.id)} className="text-xs text-red-400 hover:text-red-600 p-1"><Trash2 size={13} /></button>
                           </div>
                         </td>
@@ -748,6 +855,158 @@ export default function NominaPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ══ PERÍODOS ═════════════════════════════════════════════════════ */}
+      {tab === "periodos" && (
+        <div className="space-y-6">
+          {/* Calcular nuevo período */}
+          <div className="card">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Calcular nómina batch</h3>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Período (YYYY-MM)</label>
+                <input className="input" type="month" value={periodoActual}
+                  onChange={(e) => setPeriodoActual(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Días trabajados</label>
+                <input className="input" type="number" min={1} max={31} value={periodoDias}
+                  onChange={(e) => setPeriodoDias(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap-3 items-center">
+              <button onClick={calcularPeriodo} disabled={periodoLoading || empleados.length === 0}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                {periodoLoading ? <RefreshCw size={14} className="animate-spin" /> : <Calculator size={14} />}
+                {periodoLoading ? "Calculando..." : `Calcular ${empleados.length} empleados`}
+              </button>
+              {empleados.length === 0 && (
+                <p className="text-xs text-amber-500">Agrega empleados en la pestaña Empleados primero</p>
+              )}
+            </div>
+          </div>
+
+          {/* Detalle del período calculado */}
+          {periodoDetalle && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Período {periodoDetalle.periodo}</h3>
+                  <p className="text-xs text-gray-500">{periodoDetalle.empleados_count} empleados · {periodoDetalle.estado}</p>
+                </div>
+                <button onClick={() => enviarEmails(periodoDetalle.periodo)} disabled={emailLoading}
+                  className="flex items-center gap-1.5 text-sm bg-brand-navy text-white px-3 py-1.5 rounded-lg hover:bg-brand-navy/80 transition-colors disabled:opacity-50">
+                  {emailLoading ? <RefreshCw size={13} className="animate-spin" /> : <Mail size={13} />}
+                  {emailLoading ? "Enviando..." : "Enviar colillas por email"}
+                </button>
+              </div>
+
+              {/* Resumen de totales */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                {[
+                  { label: "Total devengado",  value: periodoDetalle.total_devengado },
+                  { label: "Total neto",        value: periodoDetalle.total_neto },
+                  { label: "Carga patronal",    value: periodoDetalle.carga_patronal },
+                  { label: "Costo empresa",     value: periodoDetalle.costo_empresa },
+                ].map((k) => (
+                  <div key={k.label} className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">{k.label}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{COP(k.value)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tabla de empleados del período */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 border-b dark:border-slate-700">
+                      <th className="pb-2">Empleado</th>
+                      <th className="pb-2 text-right">Devengado</th>
+                      <th className="pb-2 text-right">Neto</th>
+                      <th className="pb-2 text-right">Carga</th>
+                      <th className="pb-2 text-right">Costo</th>
+                      <th className="pb-2">Colilla</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periodoDetalle.detalle.map((d) => (
+                      <tr key={d.empleado_id} className="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/30">
+                        <td className="py-2">
+                          <p className="font-medium text-gray-900 dark:text-white">{d.nombre}</p>
+                          <p className="text-xs text-gray-400">{d.cargo || d.cedula || "—"}</p>
+                        </td>
+                        <td className="py-2 text-right text-gray-600 dark:text-gray-300">{d.error ? <span className="text-red-400 text-xs">{d.error}</span> : COP(d.devengado)}</td>
+                        <td className="py-2 text-right font-semibold text-gray-900 dark:text-white">{d.error ? "—" : COP(d.neto)}</td>
+                        <td className="py-2 text-right text-gray-500">{d.error ? "—" : COP(d.carga)}</td>
+                        <td className="py-2 text-right text-brand-orange font-medium">{d.error ? "—" : COP(d.costo)}</td>
+                        <td className="py-2">
+                          {!d.error && (
+                            <button onClick={() => descargarColilla(periodoDetalle.periodo, d.empleado_id, d.nombre)}
+                              className="flex items-center gap-1 text-xs text-brand-orange hover:text-orange-700 font-medium">
+                              <Download size={12} /> PDF
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-200 dark:border-slate-600 font-bold text-sm">
+                    <tr>
+                      <td className="pt-2">TOTALES</td>
+                      <td className="pt-2 text-right">{COP(periodoDetalle.detalle.reduce((s,r)=>s+(r.devengado||0),0))}</td>
+                      <td className="pt-2 text-right">{COP(periodoDetalle.detalle.reduce((s,r)=>s+(r.neto||0),0))}</td>
+                      <td className="pt-2 text-right">{COP(periodoDetalle.detalle.reduce((s,r)=>s+(r.carga||0),0))}</td>
+                      <td className="pt-2 text-right text-brand-orange">{COP(periodoDetalle.detalle.reduce((s,r)=>s+(r.costo||0),0))}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Historial de períodos calculados */}
+          {periodos.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Historial de períodos</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 border-b dark:border-slate-700">
+                      <th className="pb-2">Período</th><th className="pb-2 text-center">Emp.</th>
+                      <th className="pb-2 text-right">Neto total</th>
+                      <th className="pb-2 text-right">Costo empresa</th>
+                      <th className="pb-2 text-center">Estado</th><th className="pb-2">Ver</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periodos.map((p) => (
+                      <tr key={p.id} className="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/30">
+                        <td className="py-2 font-medium text-gray-900 dark:text-white">{p.periodo}</td>
+                        <td className="py-2 text-center text-gray-500">{p.empleados_count}</td>
+                        <td className="py-2 text-right font-semibold">{COP(p.total_neto)}</td>
+                        <td className="py-2 text-right text-brand-orange font-medium">{COP(p.costo_empresa)}</td>
+                        <td className="py-2 text-center">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.estado==="calculado"?"bg-green-100 text-green-700":"bg-gray-100 text-gray-500"}`}>
+                            {p.estado}
+                          </span>
+                        </td>
+                        <td className="py-2">
+                          <button onClick={() => abrirPeriodo(p)}
+                            className="text-xs text-brand-orange hover:text-orange-700 font-medium">
+                            Abrir →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
