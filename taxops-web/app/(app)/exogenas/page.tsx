@@ -138,7 +138,7 @@ function authHeaders(): Record<string, string> {
 export default function ExogenasPage() {
   const { post } = useApi(); // used for chatbot and export (short requests via proxy)
   const fileRef = useRef<HTMLInputElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ProcessResult | null>(null);
@@ -163,9 +163,9 @@ export default function ExogenasPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMsgs]);
 
-  // Clean up polling interval on unmount
+  // Close SSE connection on unmount
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => { sseRef.current?.close(); };
   }, []);
 
   function addFiles(list: FileList | null) {
@@ -178,50 +178,40 @@ export default function ExogenasPage() {
     });
   }
 
-  function stopPolling() {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }
+  function startSSE(jobId: string) {
+    const es = new EventSource(`${DIRECT_API}/exogenas/stream/${jobId}`);
+    sseRef.current = es;
 
-  function startPolling(jobId: string) {
-    pollRef.current = setInterval(async () => {
+    es.onmessage = (event) => {
       try {
-        const res = await fetch(`${DIRECT_API}/exogenas/status/${jobId}`, {
-          headers: authHeaders(),
-        });
-
-        if (res.status === 404) {
-          stopPolling();
-          setError("El servidor se reinició mientras procesaba. Intenta de nuevo.");
-          setLoading(false);
-          return;
-        }
-        if (res.status === 401) {
-          stopPolling();
-          setError("Sesión expirada. Recarga la página e inicia sesión de nuevo.");
-          setLoading(false);
-          return;
-        }
-        if (!res.ok) return; // error transitorio — seguir intentando
-
-        const data = await res.json();
-
-        if (typeof data.progress === "number") setProgress(data.progress);
-        if (data.current_file) setCurrentFile(data.current_file);
-
-        if (data.status === "done") {
-          stopPolling();
+        const data = JSON.parse(event.data);
+        if (data.type === "progress") {
+          if (typeof data.progress === "number") setProgress(data.progress);
+          if (data.current) setCurrentFile(data.current);
+        } else if (data.type === "done") {
+          es.close();
+          sseRef.current = null;
           setResult(data.result as ProcessResult);
           setTab("analytics");
           setLoading(false);
-        } else if (data.status === "error") {
-          stopPolling();
+          setProgress(100);
+        } else if (data.type === "error") {
+          es.close();
+          sseRef.current = null;
           setError(data.error || "Error en el procesamiento");
           setLoading(false);
         }
       } catch {
-        // Network hiccup — keep polling, don't abort
+        // ignore parse errors
       }
-    }, 3000);
+    };
+
+    es.onerror = () => {
+      es.close();
+      sseRef.current = null;
+      setError("Error de conexión con el servidor. Intenta de nuevo.");
+      setLoading(false);
+    };
   }
 
   async function handleProcess() {
@@ -266,8 +256,8 @@ export default function ExogenasPage() {
       setLoading(false); return;
     }
 
-    // Phase 3: poll status every 3 s until done or error
-    startPolling(jobId);
+    // Phase 3: open SSE stream — keeps Cloud Run alive, no polling needed
+    startSSE(jobId);
   }
 
   async function handleExport() {

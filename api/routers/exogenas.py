@@ -1,90 +1,25 @@
-"""Exogenas router — process, list, export."""
+"""Exogenas router — SSE streaming processor, list, export."""
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import tempfile
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from dependencies import get_current_user
-from schemas import ExportExogenasRequest, ProcessExogenasResponse
+from schemas import ExportExogenasRequest
 
 router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
-# In-memory job store — keyed by job_id, lives for the server instance lifetime
-_jobs: dict[str, dict[str, Any]] = {}
-# One job at a time — OCR es memory-intensive y Railway tiene límite ~512 MB
-_executor = ThreadPoolExecutor(max_workers=1)
-
-_RESULT_DIR = Path(tempfile.gettempdir()) / "taxops_jobs"
-_RESULT_DIR.mkdir(exist_ok=True)
-
-
-def _save_result(job_id: str, state: dict) -> None:
-    """Persist completed job state to /tmp so it survives minor restarts."""
-    try:
-        (_RESULT_DIR / f"{job_id}.json").write_text(
-            json.dumps(state, default=str), encoding="utf-8"
-        )
-    except Exception:
-        pass
-
-
-def _load_result(job_id: str) -> dict | None:
-    path = _RESULT_DIR / f"{job_id}.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return None
-
-
-def _run_job(job_id: str, paths: list[Path], org_id: str, tmpdir: str) -> None:
-    """Runs in thread pool. Writes final state to _jobs[job_id] and /tmp."""
-    try:
-        import gc
-        from services.processor_exogenas import procesar_exogenas
-
-        total = len(paths)
-
-        def on_progress(i: int, _total: int, name: str) -> None:
-            _jobs[job_id]["progress"] = round(i / _total * 100) if _total else 0
-            _jobs[job_id]["current_file"] = name
-
-        # workers=1 + no-cpu-throttling (en deploy): OCR secuencial evita pico ~1.8 GB con 2 PDFs
-        # escaneados simultáneos. Con CPU siempre asignado, 1 worker es tan rápido como 2.
-        resultado = procesar_exogenas(paths=paths, on_progress=on_progress, org_id=org_id, workers=1)
-        gc.collect()
-
-        state: dict[str, Any] = {
-            "status": "done",
-            "progress": 100,
-            "current_file": "",
-            "result": {
-                "total_archivos": resultado.total_archivos,
-                "procesados": resultado.total_archivos - resultado.errores,
-                "errores": resultado.errores,
-                "ica_excluidos": resultado.ica_excluidos,
-                "advertencias": resultado.advertencias,
-                "df_detalle": resultado.df_detalle.fillna("").to_dict(orient="records"),
-                "df_1003": resultado.df_1003.fillna("").to_dict(orient="records"),
-            },
-        }
-        _jobs[job_id] = state
-        _save_result(job_id, state)
-    except Exception as exc:
-        state = {"status": "error", "error": str(exc), "progress": 0}
-        _jobs[job_id] = state
-        _save_result(job_id, state)
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+# Temporary store: job_id → (paths, org_id, tmpdir)
+# Holds files only for the brief gap between POST and GET stream.
+_pending: dict[str, tuple[list[Path], str, str]] = {}
 
 
 @router.post("/process")
@@ -98,7 +33,6 @@ async def process_exogenas(
         ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp",
     }
 
-    # Persist files in a temp dir that outlives this request (background task needs them)
     tmpdir = tempfile.mkdtemp()
     tmp_paths: list[Path] = []
 
@@ -124,26 +58,166 @@ async def process_exogenas(
         raise HTTPException(status_code=500, detail=f"Error leyendo archivos: {exc}")
 
     job_id = str(uuid.uuid4())
-    _jobs[job_id] = {"status": "processing", "progress": 0, "current_file": ""}
+    _pending[job_id] = (tmp_paths, user["org_id"], tmpdir)
 
-    _executor.submit(_run_job, job_id, tmp_paths, user["org_id"], tmpdir)
-
-    return {"job_id": job_id, "status": "processing", "total": len(tmp_paths)}
+    return {"job_id": job_id, "total": len(tmp_paths)}
 
 
-@router.get("/status/{job_id}")
-async def job_status(job_id: str) -> dict:
-    # No auth required — job_id UUID acts as capability token.
-    if job_id in _jobs:
-        state = _jobs[job_id]
-        # Libera RAM en cuanto el cliente lee el resultado final; /tmp es la copia durable.
-        if state.get("status") in ("done", "error"):
-            _jobs.pop(job_id, None)
-        return state
-    cached = _load_result(job_id)
-    if cached:
-        return cached  # sirve desde /tmp; no re-cachear en _jobs para no acumular en RAM
-    raise HTTPException(status_code=404, detail="Job no encontrado o servidor reiniciado")
+def _sse(data: Any) -> str:
+    return f"data: {json.dumps(data, default=str)}\n\n"
+
+
+@router.get("/stream/{job_id}")
+async def stream_job(job_id: str) -> StreamingResponse:
+    """SSE endpoint: keeps Cloud Run request alive while OCR runs file by file."""
+    if job_id not in _pending:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+
+    paths, org_id, tmpdir = _pending.pop(job_id)
+
+    async def generate():
+        import gc
+        import time
+
+        from exogenas.extractor import extract_many
+        from exogenas.municipios import buscar_municipio
+        from services.processor_exogenas import _agregar
+
+        total = len(paths)
+        all_rows: list[dict] = []
+        errors = 0
+        warnings: list[str] = []
+        loop = asyncio.get_running_loop()
+
+        try:
+            for i, p in enumerate(paths):
+                yield _sse({"type": "progress", "progress": round(i / total * 100), "current": p.name})
+
+                t0 = time.time()
+                try:
+                    rows: list[dict] = await asyncio.wait_for(
+                        loop.run_in_executor(None, extract_many, p),
+                        timeout=90,
+                    )
+                    elapsed = time.time() - t0
+                    for row in rows:
+                        row["_archivo"] = p.name
+                        if row.get("error"):
+                            errors += 1
+                            warnings.append(f"⚠️ {p.name}: {row['error']}")
+                        all_rows.append(row)
+                    if elapsed > 3:
+                        fuente = rows[0].get("fuente", "?") if rows else "?"
+                        escaneado = rows[0].get("es_escaneado", False) if rows else False
+                        warnings.append(
+                            f"⏱️ {p.name}: {elapsed:.1f}s "
+                            f"[{'OCR' if escaneado or fuente == 'IMAGEN' else fuente}]"
+                        )
+                except asyncio.TimeoutError:
+                    errors += 1
+                    warnings.append(f"⏱️ {p.name}: timeout >90s — archivo omitido")
+                except Exception as e:
+                    errors += 1
+                    warnings.append(f"❌ {p.name}: {e}")
+
+                gc.collect()
+
+            # ── Post-processing ────────────────────────────────────────────
+            import pandas as pd
+
+            if not all_rows:
+                yield _sse({
+                    "type": "done",
+                    "result": {
+                        "total_archivos": total,
+                        "procesados": total - errors,
+                        "errores": errors,
+                        "ica_excluidos": 0,
+                        "advertencias": warnings,
+                        "df_detalle": [],
+                        "df_1003": [],
+                    },
+                })
+                return
+
+            df = pd.DataFrame(all_rows)
+
+            def _resolve_mpio(ciudad: str) -> pd.Series:
+                dpto, mpio = buscar_municipio(str(ciudad))
+                return pd.Series({"cod_dpto": dpto, "cod_mpio": mpio})
+
+            mpio_df = df["ciudad_retencion"].apply(_resolve_mpio)
+            df["cod_dpto"] = mpio_df["cod_dpto"]
+            df["cod_mpio"] = mpio_df["cod_mpio"]
+
+            ica_count = int((df["concepto"] == "ICA").sum())
+
+            mask_incompletas = (
+                (df["concepto"].fillna("").astype(str).str.strip() == "") |
+                (df["nit"].fillna("").astype(str).str.strip() == "") |
+                (df["base"].fillna(0) <= 0)
+            ) & (df["concepto"].fillna("") != "ICA")
+            df_incompletas = df[mask_incompletas]
+            if not df_incompletas.empty:
+                for archivo, grupo in df_incompletas.groupby("_archivo"):
+                    for _, fila in grupo.iterrows():
+                        motivos = []
+                        if not str(fila.get("nit", "")).strip():
+                            motivos.append("NIT vacío")
+                        if not str(fila.get("concepto", "")).strip():
+                            motivos.append("concepto vacío")
+                        if not (fila.get("base") or 0) > 0:
+                            motivos.append("base=0")
+                        warnings.append(
+                            f"⚠️ {archivo}: fila excluida del Formato 1003 "
+                            f"({', '.join(motivos)}) — "
+                            f"retenedor: '{fila.get('razon_social','') or fila.get('nit','') or '?'}'"
+                        )
+
+            df_1003 = _agregar(df)
+
+            sin_mpio = df_1003[df_1003["cod_dpto"] == ""]
+            for _, row in sin_mpio.iterrows():
+                warnings.append(
+                    f"ℹ️ No se encontró código DIAN para ciudad '{row.get('ciudad_retencion','')}' "
+                    f"({row.get('razon_social','')}). Completa manualmente."
+                )
+
+            if org_id and not df_1003.empty:
+                try:
+                    from db.database import db_available, insert_exogenas_batch
+                    if db_available():
+                        insert_exogenas_batch(df_1003, org_id)
+                except Exception:
+                    pass
+
+            yield _sse({
+                "type": "done",
+                "result": {
+                    "total_archivos": total,
+                    "procesados": total - errors,
+                    "errores": errors,
+                    "ica_excluidos": ica_count,
+                    "advertencias": warnings,
+                    "df_detalle": df.fillna("").to_dict(orient="records"),
+                    "df_1003": df_1003.fillna("").to_dict(orient="records"),
+                },
+            })
+
+        except Exception as exc:
+            yield _sse({"type": "error", "error": str(exc)})
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.post("/export")
