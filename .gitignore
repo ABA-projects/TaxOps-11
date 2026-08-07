@@ -38,3 +38,14 @@ Thumbs.db
 # Streamlit secrets
 .streamlit/secrets.toml
 .vercel
+
+# Local dev tooling
+.envrc
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars.secret
+crash.log
+crash.*.log

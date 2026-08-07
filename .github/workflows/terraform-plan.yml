@@ -1,0 +1,49 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths: ["infra/**"]
+
+permissions:
+  id-token: write # requerido para autenticar contra AWS vía OIDC
+  contents: read
+
+concurrency:
+  group: terraform-prod
+  cancel-in-progress: false # nunca cancelar un plan/apply a medias
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/environments/prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.15"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        run: terraform plan -no-color | tee /tmp/plan.txt
+
+      - name: Publicar el plan en el resumen del job
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/plan.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
