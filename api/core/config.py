@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # ── Superadmin ────────────────────────────────────────────────────────────
     TAXOPS_SUPERADMIN_EMAILS: str = ""
 
+    # ── AWS (jobs state — DynamoDB) ──────────────────────────────────────────
+    AWS_REGION: str = "us-east-1"
+    JOBS_TABLE_NAME: str = "taxops-jobs-prod"
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
