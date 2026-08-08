@@ -11,8 +11,20 @@ module "github_oidc" {
   source = "../../modules/github-oidc"
 }
 
+module "jobs" {
+  source = "../../modules/jobs"
+}
+
 output "ecr_repository_url" {
   value = module.ecr.repository_url
+}
+
+output "jobs_table_name" {
+  value = module.jobs.table_name
+}
+
+output "jobs_queue_url" {
+  value = module.jobs.queue_url
 }
 
 output "github_actions_role_arn" {
