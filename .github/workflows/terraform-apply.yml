@@ -16,6 +16,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    environment: production # requiere aprobación manual — ver Settings → Environments → production
     defaults:
       run:
         working-directory: infra/environments/prod

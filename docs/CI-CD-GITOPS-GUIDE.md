@@ -9,9 +9,11 @@ Desde el Task 1.4/1.4b del plan de migración:
 | Evento | Qué corre | Dónde |
 |---|---|---|
 | Abrís un PR que toca `infra/**` | `terraform-plan.yml`: fmt, validate, plan → el resultado queda en el Job Summary del PR | GitHub Actions |
-| Se mergea a `main` | `terraform-apply.yml`: apply automático | GitHub Actions |
+| Se mergea a `main` | `terraform-apply.yml`: **se pausa esperando aprobación** (environment `production`), luego aplica | GitHub Actions |
 
 Autenticación vía **OIDC** (rol `taxops-github-actions-terraform`), sin llaves de AWS guardadas en GitHub. **Regla de oro**: de aquí en adelante, ningún `terraform apply` manual desde tu laptop salvo emergencia — tu `AWS_PROFILE=taxops-admin` local queda para `plan`/lectura/debug.
+
+**Gate de aprobación manual (2026-08-07, adelantado desde el backlog de abajo):** el job de apply usa el environment `production` de GitHub con required reviewers = tu usuario, y "Allow administrators to bypass configured protection rules" activado — así ningún apply corre sin un click tuyo de por medio, pero ese click lo das vos mismo sin depender de nadie más. Se adelantó porque configurarlo cuesta $0 y el beneficio es inmediato.
 
 Esto ya es "GitOps" en el sentido que importa para un equipo de 1: **el estado deseado vive en Git, y el pipeline es el único camino para aplicarlo** — no hay un humano corriendo `apply` a mano contra producción.
 
@@ -21,7 +23,7 @@ Mismo criterio que el backlog de seguridad de `docs/AWS-ACCOUNT-SETUP-GUIDE.md` 
 
 | Mejora | Qué resuelve | Activar cuando... |
 |---|---|---|
-| **Aprobación manual antes de apply** (GitHub Environments con required reviewers) | Hoy el apply a `main` es automático sin gate humano — un PR mergeado por error aplica directo. | Se invite a alguien más a escribir Terraform, o el repo pase a un plan de GitHub que soporte protection rules en repos privados (Pro/Team) — hoy en un repo privado gratis esa función no está disponible. |
+| ~~**Aprobación manual antes de apply**~~ | ✅ **Ya implementado** (2026-08-07) — environment `production` + required reviewers, ver nota arriba. | — |
 | **Rol de CI acotado (no `AdministratorAccess`)** | El rol `taxops-github-actions-terraform` hoy tiene admin total — cualquier bug en un `.tf` mal escrito podría tocar cualquier cosa de la cuenta. | Antes de invitar a alguien más al repo, o cuando el plan de migración esté 100% ejecutado y se conozca el set final de servicios a acotar (Lambda, SQS, DynamoDB, S3, CloudFront, Route53, ECR, SSM). |
 | **Detección de drift** (workflow con `schedule: cron` que corre `terraform plan` semanal y alerta si hay diffs) | Hoy si alguien cambia algo a mano en la consola AWS, nadie se entera hasta el próximo `apply`. | En cuanto termine la migración inicial y la infra esté estable — no tiene sentido antes, todavía va a haber diffs esperados mientras se construye. |
 | **Policy-as-code** (`tfsec`/`checkov` como check obligatorio en `terraform-plan.yml`) | Detecta buckets públicos, IAM demasiado permisivo, etc. antes del merge. | Gratis agregarlo, bajo costo de mantenimiento — se puede sumar apenas Chunk 1 esté aplicado, no hay que esperar un trigger de negocio para este. |

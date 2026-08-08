@@ -291,6 +291,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    environment: production # gate de aprobación manual, ver nota abajo
     defaults:
       run:
         working-directory: infra/environments/prod
@@ -306,6 +307,8 @@ jobs:
       - run: terraform init
       - run: terraform apply -auto-approve
 ```
+
+**Nota (traído de Fase 2 antes de tiempo, decisión 2026-08-07):** el backlog original de `docs/CI-CD-GITOPS-GUIDE.md` marcaba "aprobación manual antes de apply" como mejora de Fase 2. Se adelantó porque el costo de configurarlo es $0 y el beneficio (nunca un apply 100% automático sin que un humano lo confirme) es inmediato — no había razón real para esperar un trigger de negocio. Configuración: GitHub → Settings → Environments → `production`, required reviewers = tu usuario, + **"Allow administrators to bypass configured protection rules"** activado (así el propio admin puede aprobar su propio deploy, ya que GitHub por defecto no deja que el mismo actor que disparó el run se auto-apruebe).
 
 - [ ] Push ambos archivos. El `terraform-plan.yml` corre en cada PR que toque `infra/**` (revisas el plan en el Job Summary antes de aprobar el merge); `terraform-apply.yml` corre solo al mergear a `main`.
 - [ ] **Regla de oro de aquí en adelante**: nunca más `terraform apply` manual desde tu laptop salvo emergencia — todo cambio de infra pasa por PR. Tu `AWS_PROFILE=taxops-admin` local queda para `plan`/lectura/debug, no para aplicar.
