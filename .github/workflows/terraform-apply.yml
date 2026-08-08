@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ["infra/**"]
+  workflow_dispatch: {} # permite disparar manualmente desde la pestaña Actions, para probar el gate
 
 permissions:
   id-token: write # requerido para autenticar contra AWS vía OIDC
