@@ -41,10 +41,22 @@ python -m pytest --cov=. --cov-report=term-missing
 
 ## Deployment
 
-- **API (Render)**: `render.yaml` deploys `api/Dockerfile-api` as a Docker web service.
+**Current production path (verified against the live `.env.local`, not just the docs — see `docs/MIGRACION-AWS-DISCOVERY.md` §0 for the full trail of stale deploy docs in this repo):**
+
+- **API**: Google Cloud Run (`us-central1`), deployed via `.github/workflows/deploy-cloud-run.yml` (the only workflow with a real automatic trigger, `on: push: branches: [main]`). Builds `api/Dockerfile-api`, pushes to Artifact Registry.
 - **Frontend (Vercel)**: `taxops-web/` deploys to Vercel. `INTERNAL_API_URL` is baked at build time; fallback: `NEXT_PUBLIC_API_URL` → `http://localhost:8000`.
-- **CI/CD**: `.github/workflows/ci.yml` runs flake8+mypy (api-lint), pytest (api-test), ESLint+tsc (web-lint), next build (web-build) on push/PR to main. `.github/workflows/deploy.yml` triggers Railway redeploy when CI passes.
-- **Alembic**: migrations run automatically on API startup (`api/main.py` calls `alembic upgrade head`). Manual: `cd api && alembic upgrade head`.
+- **⚠️ Stale/vestigial, do not trust**: `render.yaml` (Render), `.github/workflows/deploy.yml` (Railway trigger), `CLAUDE.md` mentions of Render/Railway in older commits — these are leftovers from an earlier iteration and are **not** the live path. `ci.yml` (lint/test) exists but is `workflow_dispatch`-only, not wired as a gate on the Cloud Run deploy.
+- **Alembic**: migrations run automatically on API startup (`api/main.py` calls `alembic upgrade head`) in a background thread. Manual: `cd api && alembic upgrade head`.
+
+### Migración a AWS — en progreso (no tocar sin leer esto primero)
+
+Hay una migración activa de todo el compute/storage/CI-CD de GCP+Vercel a AWS, gestionada 100% con Terraform. **No es código todavía en el repo de la app** (es infraestructura, vive en `infra/`), pero si tocas deploy/CI-CD/`docs/`, lee esto primero:
+
+- **Discovery, plan y guías**: `docs/MIGRACION-AWS-DISCOVERY.md`, `docs/superpowers/plans/2026-08-05-taxops11-aws-migration.md` (plan ejecutable por chunks, con checkboxes), `docs/AWS-ACCOUNT-SETUP-GUIDE.md`, `docs/CI-CD-GITOPS-GUIDE.md`, `docs/DIRENV-AWS-PROFILE.md`, `docs/MIGRACION-AWS-CASE-STUDY.md` (portafolio).
+- **Estado (2026-08-07)**: Chunks 0-2 del plan aplicados y verificados — bootstrap de Terraform (S3 state, locking nativo), ECR + rol OIDC para GitHub Actions, y SQS+DynamoDB para reemplazar el estado de jobs en memoria. Pendiente: Task 2.3 (refactor Python de `api/routers/exogenas.py` y `services/renta/job_processor.py` para usar SQS+DynamoDB en vez de `ThreadPoolExecutor`), luego Chunks 3-8.
+- **Premisa no negociable: todo gratis, siempre.** Cualquier recurso AWS nuevo se evalúa primero por costo (capa gratuita perpetua > 12 meses > pago). Ver el detalle de decisiones de costo en el case study.
+- **Regla de oro del pipeline**: ningún `terraform apply` manual salvo el bootstrap inicial — todo cambio de `infra/` pasa por PR (`terraform-plan.yml` comenta el plan) → merge a `main` → aprobación manual en GitHub (`terraform-apply.yml`, environment `production`) → apply.
+- **La DB se queda en Neon** en la Fase 1 (no se migra a RDS/Aurora) — evita el costo de un NAT Gateway. Ver justificación completa en el case study.
 
 ## Auth modes
 
