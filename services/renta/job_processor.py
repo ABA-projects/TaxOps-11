@@ -5,6 +5,8 @@ import json
 import uuid
 from datetime import datetime
 
+from api.core import job_store
+
 
 def process_documento_job(
     job_id: str,
@@ -15,7 +17,6 @@ def process_documento_job(
     contrib_id: str,
     org_id: str,
     año: int,
-    in_memory_jobs: dict,
 ) -> None:
     """
     Runs in a background thread:
@@ -23,14 +24,13 @@ def process_documento_job(
       2. OCR → text
       3. Classify → category + fields
       4. UPDATE renta_documentos in DB
-      5. UPDATE in-memory job status
+      5. UPDATE job status (DynamoDB, via job_store)
     """
     import logging
     log = logging.getLogger("taxops.renta")
 
     def _update_job(progreso: int, **kwargs):
-        if job_id in in_memory_jobs:
-            in_memory_jobs[job_id].update({"progreso": progreso, **kwargs})
+        job_store.put_job(job_id, kwargs.get("status", "processing"), {"progreso": progreso, **kwargs})
 
     try:
         # 1. Upload to GCS — non-fatal: OCR/classify still run if GCS fails

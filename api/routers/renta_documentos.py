@@ -3,18 +3,17 @@ from __future__ import annotations
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
+from core import job_store
 from dependencies import get_current_user, require_admin
 
 router = APIRouter(prefix="/renta", tags=["Renta · Documentos"])
 
 # One job at a time to avoid OOM (OCR is memory-intensive)
 _executor = ThreadPoolExecutor(max_workers=1)
-_jobs: dict[str, dict[str, Any]] = {}
 
 _ALLOWED_TYPES = {
     "application/pdf",
@@ -77,12 +76,11 @@ async def upload_documentos(
             "mime_type":  content_type,
         })
 
-    _jobs[job_id] = {
-        "status":   "processing",
+    job_store.put_job(job_id, "processing", {
         "progreso": 0,
         "total":    len(doc_records),
         "completados": 0,
-    }
+    })
 
     _executor.submit(
         _run_upload_job,
@@ -101,7 +99,6 @@ def _run_upload_job(
     from services.renta.job_processor import process_documento_job
     total = len(doc_records)
     for i, rec in enumerate(doc_records, 1):
-        sub_job: dict[str, Any] = {}
         process_documento_job(
             job_id=f"{job_id}_{i}",
             doc_id=rec["doc_id"],
@@ -111,11 +108,14 @@ def _run_upload_job(
             contrib_id=contrib_id,
             org_id=org_id,
             año=año,
-            in_memory_jobs=sub_job,
         )
-        _jobs[job_id]["completados"] = i
-        _jobs[job_id]["progreso"] = round(i / total * 100)
-    _jobs[job_id]["status"] = "done"
+        job = job_store.get_job(job_id) or {}
+        job["completados"] = i
+        job["progreso"] = round(i / total * 100)
+        job_store.put_job(job_id, job.get("status", "processing"), job)
+    job = job_store.get_job(job_id) or {}
+    job["status"] = "done"
+    job_store.put_job(job_id, "done", job)
 
 
 def _create_doc_record(
@@ -157,7 +157,7 @@ async def job_status(
     job_id: str,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    job = _jobs.get(job_id)
+    job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job no encontrado")
     return job
