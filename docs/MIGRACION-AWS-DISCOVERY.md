@@ -34,7 +34,7 @@ App legacy Streamlit (`Home.py`, `app.py`, root `Dockerfile`) sigue en el repo p
 
 ## 2. Jobs en background — el hallazgo más importante
 
-`exógenas` y `renta` (OCR) usan `ThreadPoolExecutor` + diccionarios en memoria (`_jobs`, `in_memory_jobs`) para el estado de los jobs, con resultados escritos en `/tmp/taxops_jobs/`.
+**Corrección (2026-08-08, verificado leyendo el código real, no solo el discovery original):** el bug de estado en memoria vive en `api/routers/renta_documentos.py` (dict `_jobs`) + `services/renta/job_processor.py` (dict `in_memory_jobs`), ambos con `ThreadPoolExecutor` y un endpoint de status polleado cada 2s por el frontend. `api/routers/exogenas.py` tiene un dict `_pending` distinto — es un stream SSE (`GET /exogenas/stream/{job_id}`) consumido sincrónicamente dentro de la misma request, no un job persistente pollable; no aplica el mismo arreglo. Ya corregido en `job_store.py` (Chunk 2, Task 2.3).
 
 **Esto ya es fràgil hoy**, no solo un problema de migración: si Cloud Run recicla la instancia (`--max-instances 1` la protege parcialmente, pero un cold restart igual borra el estado), el usuario pierde el job. No sobrevive a redeploys ni a más de 1 instancia.
 

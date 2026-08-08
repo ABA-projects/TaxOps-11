@@ -14,9 +14,10 @@
 
 ## Observaciones antes de implementar
 
+- **Premisa no negociable: todo gratis, siempre.** Cada recurso nuevo se evalúa primero por costo — capa gratuita (idealmente "forever", no solo 12 meses) antes que cualquier otra consideración de diseño. Ante la duda entre "más simple" y "más barato", gana lo más barato, incluso si implica más trabajo de research. Ejemplos ya aplicados en este plan: se bajó el `countNumber` de imágenes retenidas en ECR de 10 a 3 para no salirse de los 500MB del free tier (Chunk 1, Task 1.2); se eliminó la tabla DynamoDB de lock del Chunk 0 en favor del locking nativo de S3 (`use_lockfile`, Terraform 1.10+) — mismo resultado, un recurso menos que mantener. Cualquier decisión que implique un costo recurrente real (no solo teórico) se marca explícitamente y se pospone a Fase 2 con un trigger concreto (ver `docs/AWS-ACCOUNT-SETUP-GUIDE.md` sección 6.1 y `docs/CI-CD-GITOPS-GUIDE.md`), nunca se activa "por si acaso".
 - **No crear una VPC.** Lambda fuera de VPC (default) puede llamar a Neon, Groq y Google OAuth por internet sin costo extra. Meter Lambda en VPC para "hablar con una RDS" obliga a un NAT Gateway (~$32/mes) que se come todo el ahorro de la capa gratuita — por eso la DB se queda en Neon en la Fase 1.
-- El estado de Terraform va en **S3 + DynamoDB lock**, se bootstrapea una sola vez (Chunk 0) fuera del flujo normal de `terraform apply`.
-- El código de la API **casi no cambia** salvo dos puntos: (a) `services/renta/storage.py` (GCS → S3), (b) `api/routers/exogenas.py` y `services/renta/job_processor.py` (dict en memoria → DynamoDB). Todo lo demás (FastAPI, rutas, auth) se mantiene igual porque Lambda con Mangum expone la misma app ASGI sin reescribirla.
+- El estado de Terraform va en **S3 con locking nativo** (`use_lockfile = true`, Terraform 1.10+ — sin tabla DynamoDB), se bootstrapea una sola vez (Chunk 0) fuera del flujo normal de `terraform apply`.
+- El código de la API **casi no cambia** salvo dos puntos: (a) `services/renta/storage.py` (GCS → S3), (b) `api/routers/renta_documentos.py` y `services/renta/job_processor.py` (dict en memoria → DynamoDB — **no** `exogenas.py`, corregido 2026-08-08 tras verificar el código real, ver discovery §2). Todo lo demás (FastAPI, rutas, auth) se mantiene igual porque Lambda con Mangum expone la misma app ASGI sin reescribirla.
 - Región recomendada: **`us-east-1`** (más barata para Lambda/S3/CloudFront edge, y es donde vive la mayoría de la capa gratuita "forever" de AWS).
 - Todas las tareas de Terraform siguen el mismo patrón: escribir el `.tf`, `terraform fmt`, `terraform validate`, `terraform plan` (revisar el output antes de aplicar), `terraform apply`, commit. No se repite el detalle de `fmt`/`validate` en cada task para no inflar el documento — es un paso implícito en todo "Apply" de este plan.
 - Convención de nombres de recursos: `taxops-<componente>-<env>` (ej. `taxops-api-prod`, `taxops-jobs-prod`).
@@ -368,14 +369,16 @@ resource "aws_sqs_queue" "jobs" {
 ### Task 2.3: Cambio de código — dict en memoria → DynamoDB
 
 **Files:**
-- Modify: `api/routers/exogenas.py` (reemplazar `_pending`/`_jobs` dict por `boto3.resource("dynamodb").Table("taxops-jobs-prod")`)
+- Modify: `api/routers/renta_documentos.py` (reemplazar `_jobs` dict por `boto3.resource("dynamodb").Table("taxops-jobs-prod")` — **no** `exogenas.py`, ver corrección arriba)
 - Modify: `services/renta/job_processor.py` (reemplazar `in_memory_jobs` dict de la misma forma)
 - Modify: `api/requirements-api.txt` (agregar `boto3`)
 
 - [ ] Escribir un helper único `api/core/job_store.py` con `put_job(job_id, status, data)` / `get_job(job_id)` sobre DynamoDB, y usarlo desde ambos routers — evita duplicar el cliente boto3 en dos archivos.
-- [ ] Reemplazar en `exogenas.py` y `job_processor.py` las escrituras/lecturas del dict por llamadas al helper.
-- [ ] Test manual: correr un job de exógenas localmente contra una tabla DynamoDB real (o `moto` en tests) y confirmar que `GET /exogenas/status/{job_id}` lee el estado correctamente tras "reiniciar" el proceso (mata y levanta el proceso local — antes esto perdía el job, ahora no).
+- [ ] Reemplazar en `renta_documentos.py` y `job_processor.py` las escrituras/lecturas del dict por llamadas al helper.
+- [x] **Hecho (2026-08-08, vía subagente + verificado)**: `api/core/job_store.py` creado, `tests/test_job_store.py` con `moto` (4 tests), suite completa 164 passed/25 skipped. Ver nota de secuenciación abajo antes de mergear a `main`.
 - [ ] Commit: `git commit -m "feat: mover estado de jobs de memoria a DynamoDB"`.
+
+**⚠️ Nota de secuenciación (decisión 2026-08-08) — NO mergear a `main` todavía:** `deploy-cloud-run.yml` dispara auto-deploy en push a `main` sobre paths `api/**`/`services/**`, que este cambio toca. Cloud Run hoy **no tiene credenciales AWS** — un merge directo rompería en producción el upload/status de documentos de Renta (DynamoDB inalcanzable). Opciones evaluadas: (a) credencial IAM puente para Cloud Run — descartada, introduce una AWS key estática viviendo en GCP por semanas, contradice el principio de no-static-keys usado en el resto del plan (OIDC); (b) **mantener en un branch separado y mergear junto con el Chunk 4 (Lambda)**, donde el compute ya tiene IAM role nativo — **elegida**, cero riesgo de producción, cero credenciales temporales, el costo es solo esperar unas semanas más para que el fix llegue a prod (ya está roto hoy de la misma forma, así que no empeora nada). Branch: `feat/job-store-dynamodb`, no mergear hasta completar Chunk 4.
 
 ---
 
@@ -525,7 +528,7 @@ resource "aws_lambda_event_source_mapping" "worker_sqs" {
 }
 ```
 
-- [ ] Refactorizar `api/routers/exogenas.py` y `services/renta/job_processor.py` para que, en vez de lanzar un `ThreadPoolExecutor`, hagan `sqs.send_message()` y devuelvan el `job_id` de inmediato (202 Accepted). El procesamiento real se mueve a un `worker_handler.py` nuevo que consume el mensaje SQS y llama a la misma lógica de pipeline que ya existe (`pipeline/extractor.py`, etc.) — no se reescribe el pipeline, solo quién lo invoca.
+- [ ] Refactorizar `api/routers/renta_documentos.py` (no `exogenas.py`, ver corrección del Chunk 2) para que, en vez de lanzar un `ThreadPoolExecutor`, haga `sqs.send_message()` y devuelva el `job_id` de inmediato (202 Accepted). El procesamiento real se mueve a un `worker_handler.py` nuevo que consume el mensaje SQS y llama a `services/renta/job_processor.py` (que ya usa `job_store`, Chunk 2) — no se reescribe la lógica de OCR/clasificación, solo quién la invoca.
 - [ ] Apply, commit: `git commit -m "feat: worker Lambda para jobs largos vía SQS"`.
 
 ---
@@ -656,6 +659,37 @@ resource "aws_amplify_branch" "main" {
 - [ ] Monitorear CloudWatch Logs + métricas de error rate 24-48h.
 - [ ] **Rollback:** revertir el registro DNS a Cloud Run/Vercel (siguen corriendo, no se apagan hasta confirmar estabilidad en AWS por al menos 1 semana).
 - [ ] Una vez estable: apagar el servicio de Cloud Run y el proyecto de Vercel, borrar `deploy-cloud-run.yml`.
+
+### Task 8.2: Decomisión completa — código, cuentas y $ (pedido explícito de Jaime, 2026-08-07)
+
+No basta con apagar los servicios — hay que limpiar todo lo que ya no tiene dueño, para no terminar pagando/manteniendo dos stacks a la vez.
+
+**Código (este repo):**
+- [ ] Borrar `.github/workflows/deploy-cloud-run.yml`, `.github/workflows/deploy.yml` (Railway, ya vestigial) y `render.yaml` (Render, nunca fue el path real — ver discovery sección 0).
+- [ ] Borrar `taxops-web/vercel.json` y el `vercel.json` raíz duplicado.
+- [ ] `services/renta/storage.py`: confirmar que ya no queda ningún import de `google-cloud-storage` tras el Chunk 3 (S3).
+- [ ] `api/requirements-api.txt`: quitar `google-cloud-storage` (ya debería estar hecho en Chunk 3, doble check aquí).
+- [ ] Revisar si la app **Streamlit legacy** (`Home.py`, `app.py`, `app_v2.py`, `home_gate.py`, `home_landing.py`, root `Dockerfile`) sigue en uso — si no, proponer su eliminación en un PR aparte (fuera de alcance de este plan, pero dejar la pregunta explícita en el PR de cutover).
+- [ ] Marcar como históricos (no borrar, mover a una nota al inicio) `docs/AWS_HOSTING_GUIDE.md` y `docs/MIGRACION-VERCEL-NEON.md` — documentan arquitecturas ya no vigentes, pero tienen valor de archivo/portafolio.
+- [ ] `docs/GCP_MONITORING.md` — mismo tratamiento: marcar como histórico una vez el corte esté confirmado estable.
+
+**Secretos y config (GitHub):**
+- [ ] Borrar de GitHub Secrets: `GCP_PROJECT_ID`, `GCP_SA_KEY` (¡la llave de service account de GCP! revocarla también del lado de GCP, no solo borrarla de GitHub).
+- [ ] Confirmar que ningún workflow activo sigue referenciando esos secrets.
+
+**Cuenta GCP:**
+- [ ] Revocar/borrar la Service Account que usaba `GCP_SA_KEY` (IAM → Service Accounts).
+- [ ] Borrar la imagen del Artifact Registry (`taxops-api`) y el repositorio si no se usa para nada más.
+- [ ] Borrar el servicio Cloud Run `taxops-api`.
+- [ ] Decisión final: **borrar el proyecto de GCP completo** (recomendado si no hay nada más corriendo ahí) vs. solo deshabilitar billing — borrar el proyecto es lo más limpio y evita cualquier cobro residual olvidado.
+
+**Cuenta Vercel:**
+- [ ] Borrar el proyecto `taxops-app`/`taxops-web` de Vercel (Settings → Delete Project).
+- [ ] Revisar si vale la pena mantener la cuenta de Vercel por otros proyectos personales, o si también se puede cerrar.
+
+**Verificación final:**
+- [ ] Confirmar en el dashboard de billing de GCP que no queda ningún cargo recurrente.
+- [ ] Actualizar `docs/MIGRACION-AWS-CASE-STUDY.md` con el resultado real (costo Mes 1 AWS, fecha de decomisión GCP/Vercel) — cierra el case study de portafolio con datos reales, no proyectados.
 
 ---
 
