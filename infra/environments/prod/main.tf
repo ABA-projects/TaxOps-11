@@ -15,6 +15,10 @@ module "jobs" {
   source = "../../modules/jobs"
 }
 
+module "storage" {
+  source = "../../modules/storage"
+}
+
 output "ecr_repository_url" {
   value = module.ecr.repository_url
 }
@@ -25,6 +29,14 @@ output "jobs_table_name" {
 
 output "jobs_queue_url" {
   value = module.jobs.queue_url
+}
+
+output "renta_docs_bucket" {
+  value = module.storage.renta_docs_bucket
+}
+
+output "job_artifacts_bucket" {
+  value = module.storage.job_artifacts_bucket
 }
 
 output "github_actions_role_arn" {
