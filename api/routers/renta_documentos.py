@@ -197,26 +197,23 @@ async def preview_documento(
     if not row:
         raise HTTPException(404, "Documento no encontrado")
 
-    gcs_key: str = row[0]
+    s3_key: str = row[0]
     filename: str = row[1]
     mime_type: str = row[2] or "application/octet-stream"
 
-    if gcs_key.startswith("pending/"):
+    if s3_key.startswith("pending/"):
         raise HTTPException(409, "Documento aún en procesamiento")
 
     try:
-        from google.cloud import storage
-        path = gcs_key.removeprefix("gs://taxops-docs/")
-        client = storage.Client()
-        blob = client.bucket("taxops-docs").blob(path)
-        content = blob.download_as_bytes()
+        from services.renta.storage import download_from_s3
+        content = download_from_s3(s3_key)
         return Response(
             content=content,
             media_type=mime_type,
             headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
     except Exception as exc:
-        raise HTTPException(502, f"Error descargando de GCS: {exc}")
+        raise HTTPException(502, f"Error descargando de S3: {exc}")
 
 
 # ─── Delete ──────────────────────────────────────────────────────────────────
@@ -230,7 +227,7 @@ async def delete_documento(
     _get_contribuyente_or_404(contrib_id, user["org_id"])
     from sqlalchemy import text
     from db.database import get_db
-    from services.renta.storage import delete_from_gcs
+    from services.renta.storage import delete_from_s3
 
     with get_db() as db:
         row = db.execute(
@@ -239,8 +236,8 @@ async def delete_documento(
         ).fetchone()
         if not row:
             raise HTTPException(404, "Documento no encontrado")
-        gcs_key = row[0]
+        s3_key = row[0]
         db.execute(text("DELETE FROM renta_documentos WHERE id = :id"), {"id": doc_id})
 
-    if gcs_key and not gcs_key.startswith("pending/"):
-        delete_from_gcs(gcs_key)
+    if s3_key and not s3_key.startswith("pending/"):
+        delete_from_s3(s3_key)

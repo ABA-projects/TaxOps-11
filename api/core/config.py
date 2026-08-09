@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     # ── AWS (jobs state — DynamoDB) ──────────────────────────────────────────
     AWS_REGION: str = "us-east-1"
     JOBS_TABLE_NAME: str = "taxops-jobs-prod"
+    S3_BUCKET_RENTA_DOCS: str = "taxops-renta-docs-prod"
 
     @property
     def allowed_origins_list(self) -> list[str]:

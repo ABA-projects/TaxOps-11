@@ -33,12 +33,12 @@ def process_documento_job(
         job_store.put_job(job_id, kwargs.get("status", "processing"), {"progreso": progreso, **kwargs})
 
     try:
-        # 1. Upload to GCS — non-fatal: OCR/classify still run if GCS fails
-        from services.renta.storage import upload_to_gcs
-        gcs_key = f"pending/{doc_id}"
+        # 1. Upload to S3 — non-fatal: OCR/classify still run if upload fails
+        from services.renta.storage import upload_to_s3
+        s3_key = f"pending/{doc_id}"
         try:
             _update_job(10, status="uploading")
-            gcs_key = upload_to_gcs(
+            s3_key = upload_to_s3(
                 file_bytes=file_bytes,
                 org_id=org_id,
                 contrib_id=contrib_id,
@@ -46,8 +46,8 @@ def process_documento_job(
                 filename=filename,
                 content_type=mime_type or "application/octet-stream",
             )
-        except Exception as gcs_exc:
-            log.warning("GCS upload failed for %s: %s — continuing without storage", filename, gcs_exc)
+        except Exception as s3_exc:
+            log.warning("S3 upload failed for %s: %s — continuing without storage", filename, s3_exc)
 
         _update_job(30, status="ocr")
 
@@ -65,7 +65,7 @@ def process_documento_job(
         # 4. Update DB
         _update_doc_in_db(
             doc_id=doc_id,
-            gcs_key=gcs_key,
+            s3_key=s3_key,
             texto_ocr=text,
             classification=classification,
         )
@@ -85,7 +85,7 @@ def process_documento_job(
 
 def _update_doc_in_db(
     doc_id: str,
-    gcs_key: str,
+    s3_key: str,
     texto_ocr: str,
     classification: dict,
 ) -> None:
@@ -95,7 +95,7 @@ def _update_doc_in_db(
         db.execute(
             text("""
                 UPDATE renta_documentos SET
-                    s3_key                  = :gcs_key,
+                    s3_key                  = :s3_key,
                     texto_ocr               = :texto_ocr,
                     categoria               = :categoria,
                     carpeta_virtual         = :carpeta_virtual,
@@ -106,7 +106,7 @@ def _update_doc_in_db(
                 WHERE id = :doc_id
             """),
             {
-                "gcs_key":        gcs_key,
+                "s3_key":        s3_key,
                 "texto_ocr":      texto_ocr[:50_000],  # cap at 50k chars
                 "categoria":      classification["categoria"],
                 "carpeta_virtual": classification["carpeta_virtual"],
