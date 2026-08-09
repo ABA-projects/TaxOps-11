@@ -417,17 +417,20 @@ resource "aws_s3_bucket_public_access_block" "all" {
 }
 ```
 
-- [ ] Apply, commit.
+- [x] **Hecho (2026-08-08)**: aplicado vía branch `infra/chunk3-storage`, PR pendiente de abrir/mergear normal (no tiene el problema de secuenciamiento del código — es infra pura).
 
 ### Task 3.2: Cambio de código — GCS → S3 en `services/renta/storage.py`
 
 **Files:**
-- Modify: `services/renta/storage.py` (swap `google-cloud-storage` client por `boto3` S3 client, misma interfaz pública: `upload()`, `signed_url()`)
-- Modify: `api/requirements-api.txt` (quitar `google-cloud-storage`, ya está `boto3` del Chunk 2)
+- Modify: `services/renta/storage.py`, `api/routers/renta_documentos.py`, `services/renta/job_processor.py`, `api/core/config.py`, `api/requirements-api.txt`
+- Create: `tests/test_storage_s3.py`
 
-- [ ] Mantener la misma firma de funciones que hoy usa `services/renta/job_processor.py` para no tocar el caller — solo cambia la implementación interna.
-- [ ] Usar `generate_presigned_url` de boto3 en vez de `generate_signed_url` de GCS (equivalente directo).
-- [ ] Commit: `git commit -m "feat: migrar storage de Renta de GCS a S3"`.
+- [x] **Hecho (2026-08-08, vía subagente + verificado + limpieza manual de naming)**: funciones renombradas (`upload_to_gcs`→`upload_to_s3`, `delete_from_gcs`→`delete_from_s3`, nueva `download_from_s3`), `get_signed_url` simplificado (sin fallback a URL pública — el bucket bloquea acceso público, `generate_presigned_url` funciona directo con IAM role). Se encontró y corrigió de paso un caller oculto: `preview_documento()` en `renta_documentos.py` bypaseaba `storage.py` con un cliente GCS inline y bucket hardcodeado — ya usa `download_from_s3()`. 170 passed / 25 skipped.
+- [x] Commit hecho: `feat: migrar storage de Renta de GCS a S3 (Task 3.2)`.
+
+**⚠️ Mismo criterio de secuenciamiento que el Task 2.3 — NO mergeado a `main` todavía.** Vive en el branch `feat/job-store-dynamodb` (apilado sobre el Task 2.3). Se mergea junto con el Chunk 4.
+
+**Límite conocido, aceptado a propósito:** documentos ya subidos a GCS antes de este cambio (si los hay) quedan con keys `gs://...` en la DB, ilegibles por el nuevo código — no se construyó compatibilidad dual GCS+S3 dado el volumen bajo del módulo Renta en esta etapa.
 
 ---
 
