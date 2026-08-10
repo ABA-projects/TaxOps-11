@@ -1,52 +1,93 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 .env
-.venv
+.env.*
+!.env.example
+!api/.env.example
+.venv/
 venv/
 *.egg-info/
+*.egg
 dist/
 build/
 .mypy_cache/
 .pytest_cache/
+.ruff_cache/
+.tox/
 htmlcov/
 .coverage
+.coverage.*
+coverage.xml
+*.db
+*.sqlite
+*.sqlite3
 
-# Logs y outputs
+# ── Logs y outputs ───────────────────────────────────────────────────────────
 logs/
 outputs/
+*.log
+crash.log
+crash.*.log
 facturas/*.pdf
 facturas/*.xml
 facturas/*.xlsx
 
-# Node.js / Next.js
+# ── Node.js / Next.js ────────────────────────────────────────────────────────
 node_modules/
 .next/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 taxops-web/.env.local
 taxops-web/out/
 
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# IDE
+# ── IDE / editores ───────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
+*.swo
+*.iml
 
-# Streamlit secrets
+# ── Streamlit / Vercel ───────────────────────────────────────────────────────
 .streamlit/secrets.toml
 .vercel
 
-# Local dev tooling
-.envrc
+# ── Credenciales y llaves (por si acaso, no debería haber ninguna en el repo) ─
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
 
-# Terraform
+# ── Local dev tooling ─────────────────────────────────────────────────────────
+.envrc
+.superpowers/
+
+# ── Terraform ─────────────────────────────────────────────────────────────────
 **/.terraform/
+.terraformrc
+terraform.rc
 *.tfstate
 *.tfstate.*
 *.tfvars.secret
-crash.log
-crash.*.log
-
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
