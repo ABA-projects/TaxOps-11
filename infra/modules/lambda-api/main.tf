@@ -8,14 +8,11 @@ resource "aws_lambda_function" "api" {
   memory_size   = 1024 # Tesseract/WeasyPrint necesitan margen; ajustar con CloudWatch si hace falta
   timeout       = 60   # requests HTTP normales; los jobs largos van al worker (SQS), no aquí
 
-  # x86_64 (no arm64): el layer de Tesseract solo viene precompilado para x86_64 — a este
-  # volumen de tráfico ambas arquitecturas caen en capa gratuita igual, no vale la pena el
-  # riesgo/tiempo extra de compilar un layer arm64 propio por un ahorro que hoy es $0.
+  # x86_64 (no arm64): los binarios precompilados de Tesseract (api/Dockerfile-lambda) solo
+  # existen para x86_64 — a este volumen de tráfico ambas arquitecturas caen en capa gratuita
+  # igual, no vale la pena el riesgo/tiempo extra de recompilar para arm64 por un ahorro que
+  # hoy es $0.
   architectures = ["x86_64"]
-
-  # exogenas.py procesa OCR sincrónicamente dentro del request (a diferencia de Renta, que ya
-  # pasa por el worker vía SQS) — la API SÍ necesita el layer, no solo el worker.
-  layers = [aws_lambda_layer_version.tesseract.arn]
 
   lifecycle {
     ignore_changes = [image_uri] # el tag se actualiza vía CI/CD (aws lambda update-function-code), no vía terraform apply

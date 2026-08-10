@@ -11,8 +11,7 @@ resource "aws_lambda_function" "worker" {
   memory_size = 2048 # OCR con Tesseract — igual que los 2Gi que ya usaba en Cloud Run
   timeout     = 840  # 14 min, deja margen bajo el máximo de 15 min de Lambda
 
-  architectures = ["x86_64"] # mismo motivo que aws_lambda_function.api — layer de Tesseract es x86_64
-  layers        = [aws_lambda_layer_version.tesseract.arn]
+  architectures = ["x86_64"] # mismo motivo que aws_lambda_function.api — binarios de Tesseract son x86_64 (Dockerfile-lambda)
 
   lifecycle {
     ignore_changes = [image_uri]

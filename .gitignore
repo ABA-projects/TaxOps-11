@@ -50,5 +50,3 @@ Thumbs.db
 crash.log
 crash.*.log
 
-# Artefactos de build (regenerables via scripts/build-tesseract-layer.sh)
-infra/modules/lambda-api/build/

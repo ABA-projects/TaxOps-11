@@ -6,7 +6,7 @@ variable "ecr_repo_url" {
 variable "image_tag" {
   description = "Tag de la imagen a desplegar — debe existir en ECR antes de aplicar (build+push manual/CI primero)"
   type        = string
-  default     = "latest"
+  default     = "v2" # taxops-api:latest ya existe (intento anterior, sin Tesseract funcionando) -- ECR tiene tags inmutables
 }
 
 variable "sqs_queue_arn" {
