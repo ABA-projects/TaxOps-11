@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    } # solo para el workaround temporal en infra/modules/lambda-api/main.tf (ver comentario ahí)
   }
 }
 
