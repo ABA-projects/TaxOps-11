@@ -33,9 +33,6 @@ jobs:
         with:
           terraform_version: "~> 1.15"
 
-      - name: Generar el layer de Tesseract (no se commitea, se regenera acá)
-        run: ../../modules/lambda-api/scripts/build-tesseract-layer.sh
-
       - name: terraform init
         run: terraform init
 
