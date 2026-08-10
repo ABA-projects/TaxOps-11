@@ -23,3 +23,15 @@ resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
   authorization_type = "NONE" # la auth la maneja FastAPI (JWT), no IAM
 }
+
+# authorization_type = "NONE" en el recurso de arriba NO alcanza por sí solo — Lambda además
+# exige un permiso explícito en la resource policy de la función que autorice invocación
+# pública vía Function URL. Sin esto, cualquier request da 403 Forbidden aunque el Function
+# URL diga "NONE" (confirmado con un curl real contra la URL en producción).
+resource "aws_lambda_permission" "public_function_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.api.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
