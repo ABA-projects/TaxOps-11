@@ -19,8 +19,20 @@ module "storage" {
   source = "../../modules/storage"
 }
 
+module "lambda_api" {
+  source             = "../../modules/lambda-api"
+  ecr_repo_url       = module.ecr.repository_url
+  sqs_queue_arn      = module.jobs.queue_arn
+  dynamodb_table_arn = module.jobs.table_arn
+  s3_bucket_arns     = [module.storage.renta_docs_bucket_arn, module.storage.job_artifacts_bucket_arn]
+}
+
 output "ecr_repository_url" {
   value = module.ecr.repository_url
+}
+
+output "lambda_api_function_url" {
+  value = module.lambda_api.function_url
 }
 
 output "jobs_table_name" {
