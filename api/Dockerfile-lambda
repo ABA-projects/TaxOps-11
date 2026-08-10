@@ -68,24 +68,30 @@ ENV PATH="/opt/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/lib:${LD_LIBRARY_PATH}"
 ENV TESSDATA_PREFIX="/opt/tesseract/share/tessdata"
 
-# El WORKDIR base de la imagen Lambda es /var/task (LAMBDA_TASK_ROOT); lo
-# cambiamos a /app para que el COPY de abajo reproduzca la misma estructura de
-# rutas que api/Dockerfile-api (pipeline/, services/, db/, exogenas/, api/ como
-# hermanos bajo /app), y así los imports (`from services...`, `from api.core...`)
-# sigan funcionando igual.
-WORKDIR /app
+# CRÍTICO: Lambda resuelve el handler buscando el módulo en ${LAMBDA_TASK_ROOT}
+# (/var/task), NO en el WORKDIR del contenedor -- son cosas distintas (esto rompió el
+# primer intento: "No module named 'main'", confirmado invocando la función directo
+# vía SDK, bypaseando el Function URL). Por eso el código se copia a
+# ${LAMBDA_TASK_ROOT} (no a /app), reproduciendo la misma estructura de hermanos
+# (pipeline/, services/, db/, exogenas/, api/) que ya usa api/Dockerfile-api.
+WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Instalar dependencias Python
 COPY api/requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
-# Copiar código fuente (pipeline compartido + api)
 COPY pipeline/ ./pipeline/
 COPY services/ ./services/
 COPY db/ ./db/
 COPY exogenas/ ./exogenas/
 COPY api/ ./api/
 
-WORKDIR /app/api
+# El código mezcla dos estilos de import ya establecidos en el resto del proyecto:
+# - api/main.py, api/routers/*.py: `from core...`, `from routers...` (relativos a api/,
+#   el estilo que usa uvicorn hoy en Cloud Run porque corre con cwd=api/)
+# - services/renta/job_processor.py, api/worker_handler.py: `from api.core...`,
+#   `from services...` (relativos a la raíz del repo, vía su propio sys.path.insert)
+# ${LAMBDA_TASK_ROOT} ya queda en sys.path automáticamente (satisface el segundo
+# estilo) -- se agrega también ${LAMBDA_TASK_ROOT}/api explícitamente para el primero.
+ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/api:${PYTHONPATH}"
 
 CMD ["main.handler"]
