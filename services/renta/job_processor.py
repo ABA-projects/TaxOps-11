@@ -11,7 +11,7 @@ from api.core import job_store
 def process_documento_job(
     job_id: str,
     doc_id: str,
-    file_bytes: bytes,
+    s3_key: str,
     filename: str,
     mime_type: str,
     contrib_id: str,
@@ -19,8 +19,8 @@ def process_documento_job(
     año: int,
 ) -> None:
     """
-    Runs in a background thread:
-      1. Upload to GCS
+    Runs in the SQS worker:
+      1. Download from S3
       2. OCR → text
       3. Classify → category + fields
       4. UPDATE renta_documentos in DB
@@ -33,21 +33,16 @@ def process_documento_job(
         job_store.put_job(job_id, kwargs.get("status", "processing"), {"progreso": progreso, **kwargs})
 
     try:
-        # 1. Upload to S3 — non-fatal: OCR/classify still run if upload fails
-        from services.renta.storage import upload_to_s3
-        s3_key = f"pending/{doc_id}"
+        # 1. Download from S3 — fatal: no bytes, no OCR, no fallback possible
+        from services.renta.storage import download_from_s3
         try:
-            _update_job(10, status="uploading")
-            s3_key = upload_to_s3(
-                file_bytes=file_bytes,
-                org_id=org_id,
-                contrib_id=contrib_id,
-                año=año,
-                filename=filename,
-                content_type=mime_type or "application/octet-stream",
-            )
-        except Exception as s3_exc:
-            log.warning("S3 upload failed for %s: %s — continuing without storage", filename, s3_exc)
+            _update_job(10, status="downloading")
+            file_bytes = download_from_s3(s3_key)
+        except Exception as exc:
+            log.error("Job %s failed for doc %s: S3 download failed: %s", job_id, doc_id, exc, exc_info=True)
+            _update_job(0, status="error", error=str(exc))
+            _mark_doc_error(doc_id, str(exc))
+            return
 
         _update_job(30, status="ocr")
 

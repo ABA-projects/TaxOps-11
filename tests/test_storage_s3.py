@@ -103,29 +103,31 @@ def test_download_from_s3_returns_bytes(s3_bucket):
     assert content == b"contenido-pdf"
 
 
-def test_upload_failure_is_non_fatal_for_job_processor(monkeypatch):
-    """job_processor.process_documento_job must keep running OCR/classify
-    even if the S3 upload raises (non-fatal try/except around the upload)."""
+def test_s3_download_failure_is_fatal_for_job_processor(monkeypatch):
+    """job_processor.process_documento_job's first step is now downloading
+    from S3 (not uploading) — and it is fatal: without the bytes there is
+    nothing to OCR, so the job must end in status="error" and OCR/classify
+    must never run."""
     import services.renta.job_processor as job_processor
 
-    def _boom(**kwargs):
+    def _boom(s3_key):
         raise RuntimeError("simulated S3 outage")
 
-    monkeypatch.setattr("services.renta.storage.upload_to_s3", _boom)
+    monkeypatch.setattr("services.renta.storage.download_from_s3", _boom)
+
+    ocr_calls: list[tuple] = []
     monkeypatch.setattr(
-        "services.renta.ocr_agent.extract_text", lambda *a, **k: "texto ocr"
-    )
-    monkeypatch.setattr(
-        "services.renta.classifier_agent.classify_document",
-        lambda *a, **k: {
-            "categoria": "otros",
-            "confianza": 0.5,
-            "carpeta_virtual": "otros",
-            "datos_extraidos": {},
-        },
+        "services.renta.ocr_agent.extract_text",
+        lambda *a, **k: ocr_calls.append((a, k)) or "texto ocr",
     )
     monkeypatch.setattr(job_processor, "_update_doc_in_db", lambda **k: None)
-    monkeypatch.setattr(job_processor, "_mark_doc_error", lambda *a, **k: None)
+
+    mark_error_calls: list[tuple] = []
+    monkeypatch.setattr(
+        job_processor,
+        "_mark_doc_error",
+        lambda doc_id, error: mark_error_calls.append((doc_id, error)),
+    )
 
     calls: list[tuple] = []
     monkeypatch.setattr(
@@ -136,7 +138,7 @@ def test_upload_failure_is_non_fatal_for_job_processor(monkeypatch):
     job_processor.process_documento_job(
         job_id="job-1",
         doc_id="doc-1",
-        file_bytes=b"contenido-pdf",
+        s3_key="renta/org-1/contrib-1/2026/factura.pdf",
         filename="factura.pdf",
         mime_type="application/pdf",
         contrib_id="contrib-1",
@@ -144,8 +146,13 @@ def test_upload_failure_is_non_fatal_for_job_processor(monkeypatch):
         año=2026,
     )
 
-    # Final job update should reflect success ("done"), proving the upload
-    # failure did not abort the pipeline.
+    # OCR must never have run — the download failure short-circuits the job.
+    assert ocr_calls == []
+
+    # Final job update must reflect the failure, not success.
     statuses = [status for _, status, _ in calls]
-    assert "done" in statuses
-    assert "error" not in statuses
+    assert "error" in statuses
+    assert "done" not in statuses
+
+    # The document itself was marked with the error too.
+    assert mark_error_calls and mark_error_calls[0][0] == "doc-1"
