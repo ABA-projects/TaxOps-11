@@ -13,6 +13,10 @@ resource "aws_lambda_function" "worker" {
 
   architectures = ["x86_64"] # mismo motivo que aws_lambda_function.api — binarios de Tesseract son x86_64 (Dockerfile-lambda)
 
+  environment {
+    variables = local.lambda_env
+  }
+
   lifecycle {
     ignore_changes = [image_uri]
   }
