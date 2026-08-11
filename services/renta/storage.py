@@ -1,18 +1,17 @@
-"""services/renta/storage.py — GCS upload + signed URL for renta documents."""
+"""services/renta/storage.py — S3 upload + signed URL for renta documents."""
 from __future__ import annotations
 
-import datetime
-import os
+import boto3
 
-_BUCKET_NAME = os.environ.get("GCS_BUCKET", "taxops-docs")
+from api.core.config import get_settings
 
 
 def _client():
-    from google.cloud import storage
-    return storage.Client()
+    settings = get_settings()
+    return boto3.client("s3", region_name=settings.AWS_REGION)
 
 
-def upload_to_gcs(
+def upload_to_s3(
     file_bytes: bytes,
     org_id: str,
     contrib_id: str,
@@ -20,43 +19,39 @@ def upload_to_gcs(
     filename: str,
     content_type: str = "application/octet-stream",
 ) -> str:
-    """Upload a file to GCS. Returns the gs:// URI (used as s3_key in DB)."""
-    client = _client()
-    bucket = client.bucket(_BUCKET_NAME)
-    blob_name = f"renta/{org_id}/{contrib_id}/{año}/{filename}"
-    blob = bucket.blob(blob_name)
-    blob.upload_from_string(file_bytes, content_type=content_type)
-    return f"gs://{_BUCKET_NAME}/{blob_name}"
+    """Upload a file to S3. Returns the object key (used as s3_key in DB)."""
+    settings = get_settings()
+    key = f"renta/{org_id}/{contrib_id}/{año}/{filename}"
+    _client().put_object(
+        Bucket=settings.S3_BUCKET_RENTA_DOCS,
+        Key=key,
+        Body=file_bytes,
+        ContentType=content_type,
+    )
+    return key
 
 
-def get_signed_url(gcs_key: str, expiry_hours: int = 1) -> str:
-    """Generate a signed URL for temporary read access.
+def get_signed_url(s3_key: str, expiry_hours: int = 1) -> str:
+    """Generate a presigned URL for temporary read access."""
+    settings = get_settings()
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.S3_BUCKET_RENTA_DOCS, "Key": s3_key},
+        ExpiresIn=expiry_hours * 3600,
+    )
 
-    Falls back to an authenticated URL if signing isn't available
-    (e.g. when running with a SA that can't self-sign tokens).
-    """
-    # gcs_key format: gs://bucket/path/to/file
-    path = gcs_key.removeprefix(f"gs://{_BUCKET_NAME}/")
-    client = _client()
-    bucket = client.bucket(_BUCKET_NAME)
-    blob = bucket.blob(path)
+
+def delete_from_s3(s3_key: str) -> None:
+    """Delete an object. Silently ignores failures."""
+    settings = get_settings()
     try:
-        url = blob.generate_signed_url(
-            expiration=datetime.timedelta(hours=expiry_hours),
-            method="GET",
-            version="v4",
-        )
-        return url
-    except Exception:
-        # Cloud Run SA can't self-sign — return public URL if bucket is not private
-        return f"https://storage.googleapis.com/{_BUCKET_NAME}/{path}"
-
-
-def delete_from_gcs(gcs_key: str) -> None:
-    """Delete a blob. Silently ignores NotFound."""
-    path = gcs_key.removeprefix(f"gs://{_BUCKET_NAME}/")
-    try:
-        client = _client()
-        client.bucket(_BUCKET_NAME).blob(path).delete()
+        _client().delete_object(Bucket=settings.S3_BUCKET_RENTA_DOCS, Key=s3_key)
     except Exception:
         pass
+
+
+def download_from_s3(s3_key: str) -> bytes:
+    """Download an object's bytes."""
+    settings = get_settings()
+    response = _client().get_object(Bucket=settings.S3_BUCKET_RENTA_DOCS, Key=s3_key)
+    return response["Body"].read()

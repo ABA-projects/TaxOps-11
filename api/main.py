@@ -131,3 +131,12 @@ async def bootstrap(secret: str, org_slug: str, org_name: str,
 
     return {"org": {"id": str(org["id"]), "slug": org["slug"], "name": org["name"]},
             "user": {"id": str(user["id"]), "email": user["email"], "role": user["role"]}}
+
+
+from mangum import Mangum
+
+# lifespan="off": el `lifespan` de este archivo dispara un thread de background
+# para migraciones Alembic pensado para un servidor long-running — no es seguro
+# bajo el modelo de cold-start/freeze de Lambda. Las migraciones se corren aparte
+# (paso de CI), fuera de alcance aquí.
+handler = Mangum(app, lifespan="off")

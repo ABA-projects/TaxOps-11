@@ -1,0 +1,97 @@
+# TaxOps API — Dockerfile para AWS Lambda (container image)
+# Contexto de build: raíz de proyecto-facturas/ (no api/)
+# docker build --platform linux/amd64 -f api/Dockerfile-lambda -t taxops-api-lambda .
+#
+# Imagen separada de api/Dockerfile-api (Cloud Run) — no lo reemplaza.
+# Esta MISMA imagen la usan dos funciones Lambda (API y worker); el worker
+# sobreescribe el CMD por defecto vía image_config.command = ["worker_handler.handler"]
+# (ver infra/modules/lambda-api/worker.tf).
+#
+# x86_64 obligatorio: los binarios precompilados de Tesseract de este Dockerfile solo
+# existen para x86_64. A este volumen de tráfico, x86_64 vs arm64 cae en capa gratuita
+# de Lambda igual — no vale la pena compilar Tesseract para arm64 por un ahorro que hoy es $0.
+#
+# NOTA — Tesseract OCR (tesseract-ocr + tesseract-ocr-spa en el Dockerfile-api de
+# Debian) NO tiene paquete en Amazon Linux 2023 (ni en el repo base ni en EPEL 9,
+# verificado contra el metadata real del repo — fue retirado de EPEL9). Compilarlo
+# desde fuente es viable pero cuesta ~10-15 min de build. Se usan binarios
+# precompilados de bweigel/aws-lambda-tesseract-layer (pineados a un commit fijo).
+#
+# IMPORTANTE — por qué NO es un Lambda Layer: AWS no permite Layers en funciones
+# desplegadas como imagen de contenedor ("Lambda layers are not supported for
+# functions created with container images" — error real que dio Terraform al
+# intentarlo). La alternativa oficial de AWS para container images es empacar todo
+# dentro de la imagen (ver "Working with Lambda layers and extensions in container
+# images", AWS Compute Blog) — que es justo lo que hace este stage.
+
+FROM public.ecr.aws/lambda/python:3.12 AS tesseract-fetch
+
+# curl-minimal ya viene en la imagen base (y entra en conflicto con el paquete "curl"
+# completo) -- solo falta git.
+RUN dnf install -y git && dnf clean all
+
+ARG TESSERACT_LAYER_COMMIT=0b2d91351b5c7536a0db9e4703e4b85419d7cfc8
+RUN git clone https://github.com/bweigel/aws-lambda-tesseract-layer.git /tmp/tlayer \
+    && cd /tmp/tlayer && git checkout "${TESSERACT_LAYER_COMMIT}"
+
+# El paquete precompilado trae eng+deu+osd, no español — se agrega aparte (solo datos,
+# no requiere compilar nada).
+RUN curl -sL -o /tmp/tlayer/ready-to-use/amazonlinux-2023/tesseract/share/tessdata/spa.traineddata \
+    https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/spa.traineddata
+
+# ---------------------------------------------------------------------------------
+
+FROM public.ecr.aws/lambda/python:3.12
+
+# Dependencias del sistema: psycopg2 + libs de Cairo/Pango/GDK-Pixbuf (WeasyPrint) +
+# libGL/glib (Pillow/pdfplumber) + fuentes. Nombres de paquete Amazon Linux 2023
+# (dnf), distintos a Debian/apt-get — ver mapeo completo en el historial de este archivo.
+RUN dnf install -y \
+    postgresql-devel gcc \
+    mesa-libGL glib2 \
+    cairo pango \
+    gdk-pixbuf2 libffi-devel shared-mime-info \
+    liberation-fonts \
+    && dnf clean all
+
+# Binarios de Tesseract — mismos paths que usaría un Lambda Layer normal (/opt/...) por
+# convención, pero copiados directo en el build en vez de montados como layer.
+COPY --from=tesseract-fetch /tmp/tlayer/ready-to-use/amazonlinux-2023/bin/ /opt/bin/
+COPY --from=tesseract-fetch /tmp/tlayer/ready-to-use/amazonlinux-2023/lib/ /opt/lib/
+COPY --from=tesseract-fetch /tmp/tlayer/ready-to-use/amazonlinux-2023/tesseract/ /opt/tesseract/
+
+# Seteo explícito — no está documentado que Lambda agregue /opt/bin y /opt/lib
+# automáticamente al PATH/LD_LIBRARY_PATH en funciones de imagen de contenedor (ese
+# comportamiento SÍ está garantizado para Zip+Layers, no para imágenes), así que no se
+# asume: se fija a mano para que funcione sin depender de comportamiento no confirmado.
+ENV PATH="/opt/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/lib:${LD_LIBRARY_PATH}"
+ENV TESSDATA_PREFIX="/opt/tesseract/share/tessdata"
+
+# CRÍTICO: Lambda resuelve el handler buscando el módulo en ${LAMBDA_TASK_ROOT}
+# (/var/task), NO en el WORKDIR del contenedor -- son cosas distintas (esto rompió el
+# primer intento: "No module named 'main'", confirmado invocando la función directo
+# vía SDK, bypaseando el Function URL). Por eso el código se copia a
+# ${LAMBDA_TASK_ROOT} (no a /app), reproduciendo la misma estructura de hermanos
+# (pipeline/, services/, db/, exogenas/, api/) que ya usa api/Dockerfile-api.
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY api/requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+COPY pipeline/ ./pipeline/
+COPY services/ ./services/
+COPY db/ ./db/
+COPY exogenas/ ./exogenas/
+COPY api/ ./api/
+
+# El código mezcla dos estilos de import ya establecidos en el resto del proyecto:
+# - api/main.py, api/routers/*.py: `from core...`, `from routers...` (relativos a api/,
+#   el estilo que usa uvicorn hoy en Cloud Run porque corre con cwd=api/)
+# - services/renta/job_processor.py, api/worker_handler.py: `from api.core...`,
+#   `from services...` (relativos a la raíz del repo, vía su propio sys.path.insert)
+# ${LAMBDA_TASK_ROOT} ya queda en sys.path automáticamente (satisface el segundo
+# estilo) -- se agrega también ${LAMBDA_TASK_ROOT}/api explícitamente para el primero.
+ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/api:${PYTHONPATH}"
+
+CMD ["main.handler"]

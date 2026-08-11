@@ -1,6 +1,6 @@
-# direnv: aislamiento del profile de AWS de este proyecto
+# direnv: aislamiento de AWS CLI + GitHub CLI de este proyecto
 
-**Problema que resuelve:** Jaime usa AWS también para trabajo (British Airways/Nexus). Sin aislamiento, es fácil terminar con `AWS_PROFILE` apuntando a la cuenta equivocada en la terminal equivocada — desde algo inofensivo (`aws s3 ls` contra la cuenta que no era) hasta algo serio (`terraform apply`/`terraform destroy` contra la cuenta de trabajo por accidente, o al revés).
+**Problema que resuelve:** Jaime usa AWS y GitHub también para trabajo (British Airways/Nexus). Sin aislamiento, es fácil terminar con `AWS_PROFILE` o la sesión de `gh` apuntando a la cuenta equivocada en la terminal equivocada — desde algo inofensivo (`aws s3 ls` contra la cuenta que no era) hasta algo serio (`terraform apply`/`terraform destroy` contra la cuenta de trabajo por accidente, o un `gh pr create` que falla por usar la identidad de GitHub equivocada — esto último ya pasó, ver sección de `gh` abajo).
 
 **Solución:** [direnv](https://direnv.net/) activa variables de entorno **automáticamente al entrar a una carpeta específica** y las desactiva al salir. El profile de AWS de TaxOps solo existe mientras estás dentro de `TaxOps-11/` — en cualquier otra terminal, carpeta o proyecto, no interfiere con nada.
 
