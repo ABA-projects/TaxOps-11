@@ -1,5 +1,8 @@
 # Guía de Despliegue TaxOps — AWS + CI/CD + Docker
 
+> ⚠️ **Histórico — ya no vigente.** GCP/Cloud Run se decomisionó el 2026-08-11, la migración a AWS Lambda quedó completa y verificada en producción. Se conserva como referencia/archivo, no como guía activa. Ver `docs/superpowers/plans/2026-08-05-taxops11-aws-migration.md` y `docs/MIGRACION-AWS-CASE-STUDY.md` para el estado real.
+
+
 > **Objetivo:** Alojar TaxOps en producción por **$0–5 USD/mes** con dominio propio, HTTPS, PostgreSQL persistente y pipeline CI/CD automatizado.
 
 ---

@@ -1,5 +1,8 @@
 # Migración: Railway → Vercel + Neon + Railway
 
+> ⚠️ **Histórico — ya no vigente.** GCP/Cloud Run se decomisionó el 2026-08-11, la migración a AWS Lambda quedó completa y verificada en producción. Se conserva como referencia/archivo, no como guía activa. Ver `docs/superpowers/plans/2026-08-05-taxops11-aws-migration.md` y `docs/MIGRACION-AWS-CASE-STUDY.md` para el estado real.
+
+
 Guía para mover el stack de TaxOps a una arquitectura híbrida gratuita/económica:
 
 | Capa | Antes | Después |
