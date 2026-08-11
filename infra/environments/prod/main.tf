@@ -20,11 +20,15 @@ module "storage" {
 }
 
 module "lambda_api" {
-  source             = "../../modules/lambda-api"
-  ecr_repo_url       = module.ecr.repository_url
-  sqs_queue_arn      = module.jobs.queue_arn
-  dynamodb_table_arn = module.jobs.table_arn
-  s3_bucket_arns     = [module.storage.renta_docs_bucket_arn, module.storage.job_artifacts_bucket_arn]
+  source               = "../../modules/lambda-api"
+  ecr_repo_url         = module.ecr.repository_url
+  sqs_queue_arn        = module.jobs.queue_arn
+  dynamodb_table_arn   = module.jobs.table_arn
+  s3_bucket_arns       = [module.storage.renta_docs_bucket_arn, module.storage.job_artifacts_bucket_arn]
+  secrets              = var.secrets
+  sqs_queue_url        = module.jobs.queue_url
+  jobs_table_name      = module.jobs.table_name
+  s3_bucket_renta_docs = module.storage.renta_docs_bucket
 }
 
 output "ecr_repository_url" {
