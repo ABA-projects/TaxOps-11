@@ -1,0 +1,104 @@
+# TaxOps — Deploy automático a AWS Lambda
+#
+# Se activa en cada push a main que toque código de la app. Reemplaza el ciclo manual
+# usado durante el Chunk 4 (docker build + push a ECR + aws lambda update-function-code).
+#
+# No toca Terraform ni el state de infra — infra/modules/lambda-api tiene
+# lifecycle.ignore_changes = [image_uri] a propósito, para que este workflow pueda
+# actualizar el código sin pelear con terraform-apply.yml (separación de
+# responsabilidades: Terraform crea/destruye recursos, este workflow actualiza código).
+#
+# Requiere las mismas credenciales OIDC que terraform-*.yml (rol
+# taxops-github-actions-terraform, ya tiene permisos de sobra — AdministratorAccess,
+# ver deuda técnica documentada en docs/CI-CD-GITOPS-GUIDE.md) + los secrets de
+# DATABASE_URL etc. que ya existen en el repo (mismos que usa terraform-apply.yml).
+
+name: Deploy to Lambda
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "pipeline/**"
+      - "exogenas/**"
+      - "services/**"
+      - "db/**"
+      - ".github/workflows/deploy-lambda.yml"
+  workflow_dispatch: {} # permite re-desplegar manualmente sin necesidad de un commit nuevo
+
+permissions:
+  id-token: write # requerido para autenticar contra AWS vía OIDC
+  contents: read
+
+concurrency:
+  group: deploy-lambda-prod
+  cancel-in-progress: false # nunca cancelar un deploy a medias
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: 786567028012.dkr.ecr.us-east-1.amazonaws.com/taxops-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login a ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+            | docker login --username AWS --password-stdin ${{ env.ECR_REPO }}
+
+      # x86_64 explícito: los binarios precompilados de Tesseract en api/Dockerfile-lambda
+      # solo existen para esa arquitectura (ver el Dockerfile para el detalle completo).
+      # ubuntu-latest ya es x86_64 nativo, este build no necesita emulación.
+      - name: Build imagen Lambda
+        run: |
+          docker build --platform linux/amd64 -f api/Dockerfile-lambda \
+            -t ${{ env.ECR_REPO }}:${{ github.sha }} .
+
+      - name: Push a ECR
+        run: docker push ${{ env.ECR_REPO }}:${{ github.sha }}
+
+      # Con Mangum(app, lifespan="off") el thread de Alembic de api/main.py nunca corre
+      # en Lambda (a propósito, no es seguro bajo el modelo cold-start/freeze) — las
+      # migraciones se corren acá, como paso de CI separado, antes de actualizar el
+      # código de las funciones.
+      - name: Migraciones Alembic
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pip install -r api/requirements-api.txt
+          cd api && alembic upgrade head
+
+      - name: Actualizar Lambda API
+        run: |
+          aws lambda update-function-code \
+            --function-name taxops-api-prod \
+            --image-uri ${{ env.ECR_REPO }}:${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
+          aws lambda wait function-updated \
+            --function-name taxops-api-prod --region ${{ env.AWS_REGION }}
+
+      - name: Actualizar Lambda worker
+        run: |
+          aws lambda update-function-code \
+            --function-name taxops-worker-prod \
+            --image-uri ${{ env.ECR_REPO }}:${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
+          aws lambda wait function-updated \
+            --function-name taxops-worker-prod --region ${{ env.AWS_REGION }}
+
+      - name: Smoke test /health
+        run: |
+          URL=$(aws lambda get-function-url-config --function-name taxops-api-prod \
+            --region ${{ env.AWS_REGION }} --query FunctionUrl --output text)
+          RESPONSE=$(curl -sf "${URL}health")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q '"status":"ok"' || (echo "Smoke test falló" && exit 1)

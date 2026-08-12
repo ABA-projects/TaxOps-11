@@ -1,6 +1,8 @@
 # TaxOps CI — GitHub Actions
 # Corre en cada PR hacia main y en push directo a main.
-# Bloquea Railway deploy si algo falla.
+# Gatea el merge (vía branch protection en Settings, opcional pero recomendado) y,
+# transitivamente, el deploy — deploy-lambda.yml solo corre en push a main, que ya
+# debería estar limpio si el PR pasó CI primero.
 #
 # Jobs:
 #   api-lint    → flake8 + mypy sobre el backend FastAPI
@@ -11,7 +13,11 @@
 name: CI
 
 on:
-  workflow_dispatch:  # desactivado — activar manualmente si se necesita
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {} # sigue disponible para correr manual si hace falta
 
 # Cancela runs anteriores del mismo PR si llega uno nuevo
 concurrency:
@@ -146,4 +152,4 @@ jobs:
             echo "One or more CI jobs failed"
             exit 1
           fi
-          echo "All CI checks passed — Railway deploy can proceed"
+          echo "All CI checks passed"
