@@ -24,13 +24,9 @@ locals {
 # Log group explícito — sin esto, Lambda lo auto-crea en la primera invocación con
 # retención "Never expire" (costo de storage sin límite, y sin los default_tags del
 # provider porque Lambda lo crea directo, no Terraform). Ya existía en AWS desde antes de
-# este resource (auto-creado); el bloque import de abajo lo adopta en vez de fallar con
-# "ya existe".
-import {
-  to = aws_cloudwatch_log_group.api
-  id = "/aws/lambda/taxops-api-prod"
-}
-
+# este resource (auto-creado); se adopta vía import{} declarado en el root module
+# (infra/environments/prod/imports.tf) — los bloques import solo se permiten ahí, no
+# dentro de un módulo reutilizable como este.
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/taxops-api-prod"
   retention_in_days = 14 # logs de debug, no auditoría — no vale la pena pagar storage indefinido

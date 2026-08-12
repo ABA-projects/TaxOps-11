@@ -1,8 +1,3 @@
-import {
-  to = aws_cloudwatch_log_group.worker
-  id = "/aws/lambda/taxops-worker-prod"
-}
-
 resource "aws_cloudwatch_log_group" "worker" {
   name              = "/aws/lambda/taxops-worker-prod"
   retention_in_days = 14
