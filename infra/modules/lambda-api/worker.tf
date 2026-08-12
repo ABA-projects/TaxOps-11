@@ -1,3 +1,13 @@
+import {
+  to = aws_cloudwatch_log_group.worker
+  id = "/aws/lambda/taxops-worker-prod"
+}
+
+resource "aws_cloudwatch_log_group" "worker" {
+  name              = "/aws/lambda/taxops-worker-prod"
+  retention_in_days = 14
+}
+
 # Lambda worker — consume SQS, corre OCR/clasificación (jobs largos). Misma imagen que la
 # API, entrypoint distinto (worker_handler.handler en vez de main.handler).
 resource "aws_lambda_function" "worker" {
@@ -20,6 +30,8 @@ resource "aws_lambda_function" "worker" {
   lifecycle {
     ignore_changes = [image_uri]
   }
+
+  depends_on = [aws_cloudwatch_log_group.worker]
 }
 
 resource "aws_lambda_event_source_mapping" "worker_sqs" {

@@ -21,6 +21,21 @@ locals {
   })
 }
 
+# Log group explícito — sin esto, Lambda lo auto-crea en la primera invocación con
+# retención "Never expire" (costo de storage sin límite, y sin los default_tags del
+# provider porque Lambda lo crea directo, no Terraform). Ya existía en AWS desde antes de
+# este resource (auto-creado); el bloque import de abajo lo adopta en vez de fallar con
+# "ya existe".
+import {
+  to = aws_cloudwatch_log_group.api
+  id = "/aws/lambda/taxops-api-prod"
+}
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/aws/lambda/taxops-api-prod"
+  retention_in_days = 14 # logs de debug, no auditoría — no vale la pena pagar storage indefinido
+}
+
 # Lambda de API — reemplaza Cloud Run. La misma imagen de api/Dockerfile-api, con Mangum
 # envolviendo la app FastAPI existente (sin reescribir rutas).
 resource "aws_lambda_function" "api" {
@@ -44,6 +59,8 @@ resource "aws_lambda_function" "api" {
   lifecycle {
     ignore_changes = [image_uri] # el tag se actualiza vía CI/CD (aws lambda update-function-code), no vía terraform apply
   }
+
+  depends_on = [aws_cloudwatch_log_group.api] # que el log group (con tags/retention) exista antes de que Lambda escriba el primero
 }
 
 resource "aws_lambda_function_url" "api" {
