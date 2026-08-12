@@ -1,6 +1,8 @@
 # TaxOps CI — GitHub Actions
 # Corre en cada PR hacia main y en push directo a main.
-# Bloquea Railway deploy si algo falla.
+# Gatea el merge (vía branch protection en Settings, opcional pero recomendado) y,
+# transitivamente, el deploy — deploy-lambda.yml solo corre en push a main, que ya
+# debería estar limpio si el PR pasó CI primero.
 #
 # Jobs:
 #   api-lint    → flake8 + mypy sobre el backend FastAPI
@@ -11,7 +13,11 @@
 name: CI
 
 on:
-  workflow_dispatch:  # desactivado — activar manualmente si se necesita
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {} # sigue disponible para correr manual si hace falta
 
 # Cancela runs anteriores del mismo PR si llega uno nuevo
 concurrency:
@@ -29,10 +35,10 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -58,17 +64,17 @@ jobs:
       # Groq no se llama en tests (mocked)
       GROQ_API_KEY: sk-test-not-real
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: api/requirements-api.txt
 
       - name: Install API dependencies
-        run: pip install -r api/requirements-api.txt pytest pytest-asyncio httpx aiosqlite
+        run: pip install -r api/requirements-api.txt pytest pytest-asyncio httpx aiosqlite "moto[dynamodb,s3,sqs]"
 
       - name: Run tests
         run: pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
@@ -84,10 +90,10 @@ jobs:
       run:
         working-directory: taxops-web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -113,10 +119,10 @@ jobs:
       INTERNAL_API_URL: http://localhost:8000
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -146,4 +152,4 @@ jobs:
             echo "One or more CI jobs failed"
             exit 1
           fi
-          echo "All CI checks passed — Railway deploy can proceed"
+          echo "All CI checks passed"

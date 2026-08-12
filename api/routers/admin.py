@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from dependencies import get_current_user, require_admin, require_owner, require_superadmin
 from schemas import (
+    ADMIN_ROLES,
     AdminStats,
     AuditLogEntry,
     ChangeRoleRequest,
@@ -687,6 +688,7 @@ async def create_client(
 @router.get("/superadmin/check")
 async def superadmin_check(user: dict = Depends(get_current_user)) -> dict:
     """Retorna is_superadmin para cualquier usuario autenticado (nunca 403)."""
+    from core.config import get_settings  # noqa: E402 (mismo patrón local que el resto del archivo)
     s = get_settings()
     allowed = {e.strip().lower() for e in s.TAXOPS_SUPERADMIN_EMAILS.split(",") if e.strip()}
     return {"is_superadmin": user["email"].lower() in allowed}
