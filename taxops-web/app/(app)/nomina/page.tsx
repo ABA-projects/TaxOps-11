@@ -202,12 +202,12 @@ export default function NominaPage() {
     try { setEmpleados(await get<Empleado[]>("/nomina/empleados")); }
     catch { /* silencioso si no hay DB */ }
     finally { setEmpLoading(false); }
-  }, [get]); // eslint-disable-line
+  }, [get]);
 
   const fetchPeriodos = useCallback(async () => {
     try { setPeriodos(await get<PeriodoResumen[]>("/nomina/periodos")); }
     catch { /* silencioso si no hay DB */ }
-  }, [get]); // eslint-disable-line
+  }, [get]);
 
   useEffect(() => {
     setHistory(loadHist());
@@ -293,7 +293,7 @@ export default function NominaPage() {
       URL.revokeObjectURL(url);
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error exportando Excel"); }
     finally { setExporting(null); }
-  }, [mensual, liq, post]); // eslint-disable-line
+  }, [mensual, liq, post]);
 
   const exportPDF = useCallback(async (tipo: "mensual" | "liquidacion") => {
     setExporting("pdf");
@@ -309,7 +309,7 @@ export default function NominaPage() {
       URL.revokeObjectURL(url);
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Error generando PDF"); }
     finally { setExporting(null); }
-  }, [mensual, liq, post]); // eslint-disable-line
+  }, [mensual, liq, post]);
 
   function ExportButtons({ tipo }: { tipo: "mensual" | "liquidacion" }) {
     const hasResult = tipo === "mensual" ? !!resultMensual : !!resultLiq;

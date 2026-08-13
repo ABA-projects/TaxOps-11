@@ -383,7 +383,7 @@ export default function LandingPage() {
                 <div className="flex gap-0.5 mb-3">
                   {[1,2,3,4,5].map((s) => <Star key={s} size={14} className="text-brand-orange fill-brand-orange" />)}
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed mb-4">"{t.text}"</p>
+                <p className="text-sm text-gray-700 leading-relaxed mb-4">&ldquo;{t.text}&rdquo;</p>
                 <div>
                   <p className="font-bold text-gray-900 text-sm">{t.name}</p>
                   <p className="text-xs text-gray-400">{t.role}</p>
