@@ -10,3 +10,10 @@ variable "secrets" {
   sensitive   = true
   default     = {}
 }
+
+variable "github_access_token" {
+  description = "PAT classic (scope 'repo') para que Amplify se conecte al repo de GitHub — NO va en var.secrets (eso son env vars de Lambda, este token no debe llegar ahí)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

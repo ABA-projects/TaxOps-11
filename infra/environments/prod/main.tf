@@ -47,6 +47,26 @@ module "cdn" {
   lambda_function_url = module.lambda_api.function_url
 }
 
+module "amplify" {
+  source              = "../../modules/amplify"
+  github_access_token = var.github_access_token
+  api_domain          = module.cdn.api_domain
+}
+
+module "cost_reminders" {
+  source = "../../modules/cost-reminders"
+  email  = "taxopsa@gmail.com"
+
+  reminders = {
+    # Cuenta AWS creada 2026-08-05T16:14:12-05:00 (aws organizations describe-account) —
+    # el free tier de 12 meses de Amplify Hosting vence ~2027-08-05. Alerta 1 mes antes.
+    amplify-free-tier = {
+      schedule_at = "2027-07-05T09:00:00"
+      message     = "TaxOps-11: el free tier de 12 meses de AWS Amplify Hosting vence ~2027-08-05 (build minutes, storage CDN, data transfer, SSR requests pasan a pago). Revisar costo real acumulado vs. alternativas (Vercel free tier, S3+CloudFront estático si aplica) antes de esa fecha. Ver docs/MIGRACION-AWS-CASE-STUDY.md."
+    }
+  }
+}
+
 output "ecr_repository_url" {
   value = module.ecr.repository_url
 }
@@ -79,4 +99,9 @@ output "job_artifacts_bucket" {
 output "github_actions_role_arn" {
   value       = module.github_oidc.role_arn
   description = "Copiar a GitHub → Settings → Secrets and variables → Actions → Variables → AWS_TERRAFORM_ROLE_ARN"
+}
+
+output "amplify_default_domain" {
+  value       = module.amplify.default_domain
+  description = "URL de Amplify antes de tener dominio propio (Chunk 5 solo cubrió api.taxopsapp.com, no el frontend)"
 }

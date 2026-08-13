@@ -54,16 +54,20 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           TAXOPS_SUPERADMIN_EMAILS: ${{ secrets.TAXOPS_SUPERADMIN_EMAILS }}
           BOOTSTRAP_SECRET: ${{ secrets.BOOTSTRAP_SECRET }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
         run: |
-          jq -n '{secrets: {
-            DATABASE_URL: env.DATABASE_URL,
-            SECRET_KEY: env.SECRET_KEY,
-            GROQ_API_KEY: env.GROQ_API_KEY,
-            GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
-            GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
-            TAXOPS_SUPERADMIN_EMAILS: env.TAXOPS_SUPERADMIN_EMAILS,
-            BOOTSTRAP_SECRET: env.BOOTSTRAP_SECRET
-          }}' > terraform.tfvars.secret.json
+          jq -n '{
+            github_access_token: env.AMPLIFY_GITHUB_TOKEN,
+            secrets: {
+              DATABASE_URL: env.DATABASE_URL,
+              SECRET_KEY: env.SECRET_KEY,
+              GROQ_API_KEY: env.GROQ_API_KEY,
+              GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+              GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+              TAXOPS_SUPERADMIN_EMAILS: env.TAXOPS_SUPERADMIN_EMAILS,
+              BOOTSTRAP_SECRET: env.BOOTSTRAP_SECRET
+            }
+          }' > terraform.tfvars.secret.json
 
       - name: terraform plan
         run: terraform plan -var-file=terraform.tfvars.secret.json -no-color | tee /tmp/plan.txt
