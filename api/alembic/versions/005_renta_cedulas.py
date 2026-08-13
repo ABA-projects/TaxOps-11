@@ -16,14 +16,14 @@ depends_on = None
 
 def upgrade() -> None:
     cols = [
-        ("aportes_pension",    "NUMERIC(18,2)", "0"),
-        ("afc_fvp",            "NUMERIC(18,2)", "0"),
+        ("aportes_pension", "NUMERIC(18,2)", "0"),
+        ("afc_fvp", "NUMERIC(18,2)", "0"),
         ("intereses_vivienda", "NUMERIC(18,2)", "0"),
         ("medicina_prepagada", "NUMERIC(18,2)", "0"),
-        ("dependientes",       "INTEGER",        "0"),
-        ("tipo_ganancia",      "TEXT",           "NULL"),
-        ("pasivos",            "NUMERIC(18,2)", "0"),
-        ("ajuste_manual",      "JSONB",          "NULL"),
+        ("dependientes", "INTEGER", "0"),
+        ("tipo_ganancia", "TEXT", "NULL"),
+        ("pasivos", "NUMERIC(18,2)", "0"),
+        ("ajuste_manual", "JSONB", "NULL"),
     ]
     for col, tipo, default in cols:
         default_sql = f"DEFAULT {default}" if default != "NULL" else ""

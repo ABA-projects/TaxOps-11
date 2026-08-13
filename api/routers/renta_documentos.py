@@ -84,9 +84,9 @@ async def upload_documentos(
             )
 
         uploads.append({
-            "s3_key":     s3_key,
-            "filename":   f.filename or "archivo",
-            "mime_type":  content_type,
+            "s3_key": s3_key,
+            "filename": f.filename or "archivo",
+            "mime_type": content_type,
             "size_bytes": len(file_bytes),
         })
 
@@ -102,15 +102,15 @@ async def upload_documentos(
             size_bytes=u["size_bytes"],
         )
         doc_records.append({
-            "doc_id":    doc_id,
-            "s3_key":    u["s3_key"],
-            "filename":  u["filename"],
+            "doc_id": doc_id,
+            "s3_key": u["s3_key"],
+            "filename": u["filename"],
             "mime_type": u["mime_type"],
         })
 
     job_store.put_job(job_id, "processing", {
         "progreso": 0,
-        "total":    len(doc_records),
+        "total": len(doc_records),
         "completados": 0,
     })
 
@@ -119,10 +119,10 @@ async def upload_documentos(
     sqs.send_message(
         QueueUrl=settings.SQS_QUEUE_URL,
         MessageBody=json.dumps({
-            "job_id":     job_id,
+            "job_id": job_id,
             "contrib_id": contrib_id,
-            "org_id":     user["org_id"],
-            "año":        año,
+            "org_id": user["org_id"],
+            "año": año,
             "documentos": doc_records,
         }),
     )
@@ -149,12 +149,12 @@ def _create_doc_record(
                     (:id, :contrib_id, :org_id, :s3_key, :filename, :mime_type, :size_bytes, 'procesando')
             """),
             {
-                "id":         doc_id,
+                "id": doc_id,
                 "contrib_id": contrib_id,
-                "org_id":     org_id,
-                "s3_key":     s3_key,
-                "filename":   filename,
-                "mime_type":  mime_type,
+                "org_id": org_id,
+                "s3_key": s3_key,
+                "filename": filename,
+                "mime_type": mime_type,
                 "size_bytes": size_bytes,
             },
         )

@@ -5,7 +5,7 @@ UI-agnóstico: lo llama Streamlit, CLI, FastAPI o cualquier otro cliente.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -55,16 +55,6 @@ def procesar(
     Returns:
         ResultadoProcesamiento con df_base, df_val, df_pror y métricas.
     """
-    # ── Cargar CUFEs existentes para deduplicación incremental ────────────────
-    existing_cufes: set[str] = set()
-    if org_id:
-        try:
-            from db.database import get_existing_cufes, db_available
-            if db_available():
-                existing_cufes = get_existing_cufes(org_id)
-        except Exception:
-            pass
-
     processed_keys: set[str] = set()
     filas = []
 

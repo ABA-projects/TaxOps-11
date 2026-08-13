@@ -10,7 +10,15 @@ from jose import JWTError
 
 from core.security import create_access_token, create_refresh_token, decode_token
 from dependencies import get_current_user
-from schemas import AcceptInviteRequest, AccessTokenResponse, LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
+from schemas import (
+    AcceptInviteRequest,
+    AccessTokenResponse,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -110,7 +118,8 @@ async def google_login(request: Request) -> RedirectResponse:
     if not s.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Google OAuth no configurado")
 
-    import base64 as _b64, json as _json
+    import base64 as _b64
+    import json as _json
     # Embed frontend URL in state so callback doesn't depend on env vars
     state_payload = _b64.urlsafe_b64encode(
         _json.dumps({"n": secrets.token_urlsafe(8), "f": s.FRONTEND_URL}).encode()
@@ -135,7 +144,6 @@ async def google_callback(code: str, state: str | None = None) -> dict:
     import httpx
     from core.config import get_settings
     from db.database import get_db
-    from db.auth import hash_password
     from sqlalchemy import text
 
     s = get_settings()
@@ -143,7 +151,8 @@ async def google_callback(code: str, state: str | None = None) -> dict:
         raise HTTPException(status_code=501, detail="Google OAuth no configurado")
 
     # Recover frontend URL from state early (needed for redirects on error/no-account)
-    import base64 as _b64, json as _json
+    import base64 as _b64
+    import json as _json
     try:
         padded = (state or "") + "==" * (4 - len((state or "")) % 4)
         frontend_base = _json.loads(_b64.urlsafe_b64decode(padded)).get("f", s.FRONTEND_URL)
@@ -215,7 +224,6 @@ async def google_callback(code: str, state: str | None = None) -> dict:
     # Recover frontend URL from state (avoids relying on env var at callback time)
     frontend_url = f"{frontend_base.rstrip('/')}/auth/callback?access_token={access}&refresh_token={refresh}"
     return RedirectResponse(frontend_url)
-
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)
@@ -320,7 +328,6 @@ async def accept_invite(token: str, body: AcceptInviteRequest) -> TokenResponse:
     from db.database import get_db
     from db.auth import hash_password
     from sqlalchemy import text
-
 
     with get_db() as db:
         invite = db.execute(
@@ -446,4 +453,7 @@ async def my_groups(user: dict = Depends(get_current_user)) -> list[dict]:
             """),
             {"uid": user["user_id"]},
         ).mappings().fetchall()
-    return [{"id": str(r["id"]), "name": r["name"], "description": r["description"], "modules": r["modules"]} for r in rows]
+    return [{"id": str(r["id"]),
+             "name": r["name"],
+             "description": r["description"],
+             "modules": r["modules"]} for r in rows]

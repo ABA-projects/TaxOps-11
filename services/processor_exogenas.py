@@ -16,12 +16,12 @@ from exogenas.municipios import buscar_municipio
 
 @dataclass
 class ResultadoExogenas:
-    df_detalle:      pd.DataFrame
-    df_1003:         pd.DataFrame
-    total_archivos:  int
-    errores:         int
-    ica_excluidos:   int
-    advertencias:    list[str] = field(default_factory=list)
+    df_detalle: pd.DataFrame
+    df_1003: pd.DataFrame
+    total_archivos: int
+    errores: int
+    ica_excluidos: int
+    advertencias: list[str] = field(default_factory=list)
 
 
 def _agregar(df: pd.DataFrame) -> pd.DataFrame:
@@ -34,29 +34,29 @@ def _agregar(df: pd.DataFrame) -> pd.DataFrame:
     ].copy()
     if df_clean.empty:
         return pd.DataFrame(columns=[
-            "concepto","tipo_doc","nit","dv","primer_apellido","segundo_apellido",
-            "primer_nombre","otros_nombres","razon_social","direccion",
-            "cod_dpto","cod_mpio","base","retencion","porcentaje",
+            "concepto", "tipo_doc", "nit", "dv", "primer_apellido", "segundo_apellido",
+            "primer_nombre", "otros_nombres", "razon_social", "direccion",
+            "cod_dpto", "cod_mpio", "base", "retencion", "porcentaje",
         ])
 
     agg = (
         df_clean
         .groupby(["nit", "concepto"], as_index=False)
         .agg(
-            razon_social     =("razon_social", "first"),
-            dv               =("dv", "first"),
-            tipo_doc         =("tipo_doc", "first"),
-            primer_apellido  =("primer_apellido", "first"),
-            segundo_apellido =("segundo_apellido", "first"),
-            primer_nombre    =("primer_nombre", "first"),
-            otros_nombres    =("otros_nombres", "first"),
-            direccion        =("direccion", "first"),
-            ciudad_retencion =("ciudad_retencion", "first"),
-            cod_dpto         =("cod_dpto", "first"),
-            cod_mpio         =("cod_mpio", "first"),
-            base             =("base", "sum"),
-            retencion        =("retencion", "sum"),
-            porcentaje       =("porcentaje", "first"),
+            razon_social=("razon_social", "first"),
+            dv=("dv", "first"),
+            tipo_doc=("tipo_doc", "first"),
+            primer_apellido=("primer_apellido", "first"),
+            segundo_apellido=("segundo_apellido", "first"),
+            primer_nombre=("primer_nombre", "first"),
+            otros_nombres=("otros_nombres", "first"),
+            direccion=("direccion", "first"),
+            ciudad_retencion=("ciudad_retencion", "first"),
+            cod_dpto=("cod_dpto", "first"),
+            cod_mpio=("cod_mpio", "first"),
+            base=("base", "sum"),
+            retencion=("retencion", "sum"),
+            porcentaje=("porcentaje", "first"),
         )
     )
 
@@ -67,9 +67,9 @@ def _agregar(df: pd.DataFrame) -> pd.DataFrame:
     agg.loc[~mask_31, "razon_social"] = ""
 
     col_order = [
-        "concepto","tipo_doc","nit","dv","primer_apellido","segundo_apellido",
-        "primer_nombre","otros_nombres","razon_social","direccion",
-        "ciudad_retencion","cod_dpto","cod_mpio","base","retencion","porcentaje",
+        "concepto", "tipo_doc", "nit", "dv", "primer_apellido", "segundo_apellido",
+        "primer_nombre", "otros_nombres", "razon_social", "direccion",
+        "ciudad_retencion", "cod_dpto", "cod_mpio", "base", "retencion", "porcentaje",
     ]
     return agg[col_order]
 
@@ -190,7 +190,7 @@ def procesar_exogenas(
                 advertencias.append(
                     f"⚠️ {archivo}: fila excluida del Formato 1003 "
                     f"({', '.join(motivos)}) — "
-                    f"retenedor: '{fila.get('razon_social','') or fila.get('nit','') or '?'}'"
+                    f"retenedor: '{fila.get('razon_social', '') or fila.get('nit', '') or '?'}'"
                 )
 
     df_1003 = _agregar(df)
@@ -199,8 +199,8 @@ def procesar_exogenas(
     sin_mpio = df_1003[df_1003["cod_dpto"] == ""]
     for _, row in sin_mpio.iterrows():
         advertencias.append(
-            f"ℹ️ No se encontró código DIAN para ciudad '{row.get('ciudad_retencion','')}' "
-            f"({row.get('razon_social','')}). Completa manualmente."
+            f"ℹ️ No se encontró código DIAN para ciudad '{row.get('ciudad_retencion', '')}' "
+            f"({row.get('razon_social', '')}). Completa manualmente."
         )
 
     # ── Persistir en PostgreSQL ───────────────────────────────────────────────
