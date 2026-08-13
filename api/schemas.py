@@ -62,17 +62,18 @@ class AccessTokenResponse(BaseModel):
 
 # ── Role constants ────────────────────────────────────────────────────────────
 ADMIN_ROLES = ("owner", "admin")
-BASE_ROLES  = ("contador", "auxiliar_contable")
-ALL_ROLES   = ADMIN_ROLES + BASE_ROLES
+BASE_ROLES = ("contador", "auxiliar_contable")
+ALL_ROLES = ADMIN_ROLES + BASE_ROLES
 
 ROLE_LABELS = {
-    "owner":             "Owner",
-    "admin":             "Admin",
-    "contador":          "Contador",
+    "owner": "Owner",
+    "admin": "Admin",
+    "contador": "Contador",
     "auxiliar_contable": "Auxiliar Contable",
 }
 
 # ── Users ─────────────────────────────────────────────────────────────────────
+
 
 class UserResponse(BaseModel):
     id: str

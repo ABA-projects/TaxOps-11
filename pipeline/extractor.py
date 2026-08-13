@@ -50,7 +50,7 @@ _RE_FOLIO_DOC = re.compile(
 )
 
 # ── Emisor — etiquetas DIAN estándar ───────────────────────────────────────
-_RE_EMISOR_NIT    = re.compile(r"nit\s+del\s+emisor\s*[:\s]+([0-9]{6,12})", re.I)
+_RE_EMISOR_NIT = re.compile(r"nit\s+del\s+emisor\s*[:\s]+([0-9]{6,12})", re.I)
 _RE_EMISOR_NOMBRE = re.compile(r"raz[oó]n\s+social\s*[:\s]+([^\n\r]+)", re.I)
 
 # Documento Equivalente POS: emisor está en "Datos del vendedor" (segunda sección)
@@ -88,7 +88,7 @@ _RE_NIT_GENERICO = re.compile(r"NIT[:\s#.]*([0-9]{6,12})", re.I)
 
 # Fecha desde nombre de carpeta: YYYY-MM, YYYY-MM-DD, DD-MM-YYYY, etc.
 _RE_FOLDER_YEAR_MONTH = re.compile(r"(\d{4})[-_\s](\d{1,2})(?:[-_\s](\d{1,2}))?")
-_RE_FOLDER_DMY        = re.compile(r"(\d{1,2})[-_/](\d{1,2})[-_/](\d{4})")
+_RE_FOLDER_DMY = re.compile(r"(\d{1,2})[-_/](\d{1,2})[-_/](\d{4})")
 
 
 def _clean_number(value: str) -> float:
@@ -180,9 +180,9 @@ def _split_iva_bases(subtotal: float, iva19: float, iva5: float,
     """
     s = abs(subtotal)
     b19 = base19_direct if base19_direct else (round(iva19 / 0.19, 2) if iva19 else 0.0)
-    b5  = base5_direct  if base5_direct  else (round(iva5  / 0.05, 2) if iva5  else 0.0)
+    b5 = base5_direct if base5_direct else (round(iva5 / 0.05, 2) if iva5 else 0.0)
     b19 = min(round(b19, 2), s)
-    b5  = min(round(b5,  2), max(0.0, s - b19))
+    b5 = min(round(b5, 2), max(0.0, s - b19))
     no_grav = max(0.0, round(s - b19 - b5, 2))
     return b19, b5, no_grav
 
@@ -227,7 +227,7 @@ def extract_xml(path: Path) -> dict:
     fecha = _xml_text(root, "cbc:IssueDate")
 
     nit_emisor = _xml_text(root, "cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID")
-    nom_emisor  = (
+    nom_emisor = (
         _xml_text(root, "cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName")
         or _xml_text(root, "cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name")
     )
@@ -239,9 +239,9 @@ def extract_xml(path: Path) -> dict:
 
     subtotal = 0.0
     iva19 = 0.0
-    iva5  = 0.0
+    iva5 = 0.0
     base19_xml = 0.0
-    base5_xml  = 0.0
+    base5_xml = 0.0
 
     for tax in root.findall(".//cac:TaxTotal", NS):
         amount_el = tax.find("cbc:TaxAmount", NS)
@@ -260,38 +260,38 @@ def extract_xml(path: Path) -> dict:
     le = root.find("cac:LegalMonetaryTotal", NS)
     if le is not None:
         subtotal = float((_xml_text(le, "cbc:TaxExclusiveAmount") or "0").replace(",", "."))
-        total    = float((_xml_text(le, "cbc:PayableAmount") or "0").replace(",", "."))
+        total = float((_xml_text(le, "cbc:PayableAmount") or "0").replace(",", "."))
     else:
         total = 0.0
 
     sign = -1 if doc_type == "Nota Crédito" else 1
     subtotal_signed = round(sign * subtotal, 2)
     iva19_signed = round(sign * iva19, 2)
-    iva5_signed  = round(sign * iva5,  2)
+    iva5_signed = round(sign * iva5, 2)
     base19, base5, no_grav = _split_iva_bases(
         subtotal_signed, abs(iva19_signed), abs(iva5_signed),
         base19_direct=base19_xml, base5_direct=base5_xml,
     )
 
     return {
-        "archivo":           path.name,
-        "tipo":              doc_type,
-        "cufe":              cufe,
-        "folio":             folio,
-        "fecha":             _parse_date(fecha),
-        "nit_emisor":        nit_emisor,
-        "nombre_emisor":     nom_emisor,
-        "nit_receptor":      nit_receptor,
-        "nombre_receptor":   nom_receptor,
-        "subtotal":          subtotal_signed,
-        "base_iva_19":       base19,
-        "iva_19":            iva19_signed,
-        "base_iva_5":        base5,
-        "iva_5":             iva5_signed,
-        "no_gravado":        no_grav,
-        "total":             round(sign * total, 2),
-        "retencion_fuente":  _calc_retencion(abs(subtotal_signed), nit_emisor, base19, base5),
-        "fuente":            "XML",
+        "archivo": path.name,
+        "tipo": doc_type,
+        "cufe": cufe,
+        "folio": folio,
+        "fecha": _parse_date(fecha),
+        "nit_emisor": nit_emisor,
+        "nombre_emisor": nom_emisor,
+        "nit_receptor": nit_receptor,
+        "nombre_receptor": nom_receptor,
+        "subtotal": subtotal_signed,
+        "base_iva_19": base19,
+        "iva_19": iva19_signed,
+        "base_iva_5": base5,
+        "iva_5": iva5_signed,
+        "no_gravado": no_grav,
+        "total": round(sign * total, 2),
+        "retencion_fuente": _calc_retencion(abs(subtotal_signed), nit_emisor, base19, base5),
+        "fuente": "XML",
     }
 
 
@@ -501,31 +501,34 @@ def _extract_from_text(path: Path, text: str) -> dict:
     sign = -1 if doc_type == "Nota Crédito" else 1
     subtotal_signed = round(sign * subtotal, 2)
     iva19_signed = round(sign * iva19, 2)
-    iva5_signed  = round(sign * iva5,  2)
+    iva5_signed = round(sign * iva5, 2)
     base19, base5, no_grav = _split_iva_bases(
         subtotal_signed, abs(iva19_signed), abs(iva5_signed),
     )
 
     return {
-        "archivo":           path.name,
-        "tipo":              doc_type,
-        "cufe":              cufe,
-        "folio":             folio,
-        "fecha":             fecha,
-        "nit_emisor":        nit_emisor,
-        "nombre_emisor":     nom_emisor,
-        "nit_receptor":      nit_receptor,
-        "nombre_receptor":   nom_receptor,
-        "subtotal":          subtotal_signed,
-        "base_iva_19":       base19,
-        "iva_19":            iva19_signed,
-        "base_iva_5":        base5,
-        "iva_5":             iva5_signed,
-        "no_gravado":        no_grav,
-        "total":             round(sign * total, 2),
+        "archivo": path.name,
+        "tipo": doc_type,
+        "cufe": cufe,
+        "folio": folio,
+        "fecha": fecha,
+        "nit_emisor": nit_emisor,
+        "nombre_emisor": nom_emisor,
+        "nit_receptor": nit_receptor,
+        "nombre_receptor": nom_receptor,
+        "subtotal": subtotal_signed,
+        "base_iva_19": base19,
+        "iva_19": iva19_signed,
+        "base_iva_5": base5,
+        "iva_5": iva5_signed,
+        "no_gravado": no_grav,
+        "total": round(sign * total, 2),
         # Nota Crédito no genera nueva retención (la retención fue de la factura original)
-        "retencion_fuente":  0.0 if doc_type == "Nota Crédito" else _calc_retencion(abs(subtotal_signed), nit_emisor, base19, base5),
-        "fuente":            path.suffix.upper().lstrip("."),
+        "retencion_fuente": (
+            0.0 if doc_type == "Nota Crédito"
+            else _calc_retencion(abs(subtotal_signed), nit_emisor, base19, base5)
+        ),
+        "fuente": path.suffix.upper().lstrip("."),
     }
 
 
@@ -547,8 +550,8 @@ def _empty_row(filename: str, error: str) -> dict:
         "nit_receptor": "", "nombre_receptor": "",
         "subtotal": 0.0,
         "base_iva_19": 0.0, "iva_19": 0.0,
-        "base_iva_5":  0.0, "iva_5":  0.0,
-        "no_gravado":  0.0,
+        "base_iva_5": 0.0, "iva_5": 0.0,
+        "no_gravado": 0.0,
         "total": 0.0, "retencion_fuente": 0.0,
         "fuente": f"ERROR: {error}",
     }

@@ -8,8 +8,6 @@ Strategy (all free, no API calls):
 from __future__ import annotations
 
 import io
-import tempfile
-from pathlib import Path
 
 
 def extract_text(file_bytes: bytes, filename: str, mime_type: str = "") -> str:
@@ -48,7 +46,6 @@ def _ocr_pdf(file_bytes: bytes) -> str:
     try:
         import pdfplumber
         import pytesseract
-        from PIL import Image
 
         parts: list[str] = []
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:

@@ -23,7 +23,6 @@ def calcular_declaracion(
     Returns:
         dict con todos los campos de renta_declaraciones + detalle_calculo + inconsistencias
     """
-    from sqlalchemy import text
     from db.database import get_db
 
     with get_db() as db:
@@ -56,42 +55,42 @@ def calcular_declaracion(
     inconsistencias = _detectar_inconsistencias(consolidado, docs)
 
     detalle = {
-        "uvt":                     uvt,
-        "consolidado":             consolidado,
+        "uvt": uvt,
+        "consolidado": consolidado,
         "impuesto_cedula_general": impuesto_general,
-        "impuesto_dividendos":     impuesto_dividendos,
-        "impuesto_ocasional":      impuesto_ocasional,
-        "tramo_aplicado":          _tramo_aplicado(consolidado["renta_gravable"], reglas),
-        "ajustados_manualmente":   consolidado.get("_ajustados_manualmente", []),
+        "impuesto_dividendos": impuesto_dividendos,
+        "impuesto_ocasional": impuesto_ocasional,
+        "tramo_aplicado": _tramo_aplicado(consolidado["renta_gravable"], reglas),
+        "ajustados_manualmente": consolidado.get("_ajustados_manualmente", []),
     }
 
     return {
-        "año_gravable":          año,
-        "patrimonio_bruto":      consolidado["patrimonio_bruto"],
-        "patrimonio_liquido":    patrimonio_liquido,
-        "ingresos_laborales":    consolidado["ingresos_laborales"],
-        "rentas_capital":        consolidado["rentas_capital"],
-        "rentas_no_laborales":   consolidado["rentas_no_laborales"],
-        "dividendos":            consolidado.get("dividendos", 0),
+        "año_gravable": año,
+        "patrimonio_bruto": consolidado["patrimonio_bruto"],
+        "patrimonio_liquido": patrimonio_liquido,
+        "ingresos_laborales": consolidado["ingresos_laborales"],
+        "rentas_capital": consolidado["rentas_capital"],
+        "rentas_no_laborales": consolidado["rentas_no_laborales"],
+        "dividendos": consolidado.get("dividendos", 0),
         "ganancias_ocasionales": consolidado.get("ganancias_ocasionales", 0),
-        "rentas_exentas":        consolidado["rentas_exentas"],
-        "deducciones":           consolidado["deducciones"],
-        "retenciones":           retenciones,
-        "impuesto_cargo":        impuesto_cargo,
-        "saldo_pagar":           saldo_pagar,
-        "saldo_favor":           saldo_favor,
-        "estado":                "borrador",
-        "inconsistencias":       inconsistencias,
-        "detalle_calculo":       detalle,
+        "rentas_exentas": consolidado["rentas_exentas"],
+        "deducciones": consolidado["deducciones"],
+        "retenciones": retenciones,
+        "impuesto_cargo": impuesto_cargo,
+        "saldo_pagar": saldo_pagar,
+        "saldo_favor": saldo_favor,
+        "estado": "borrador",
+        "inconsistencias": inconsistencias,
+        "detalle_calculo": detalle,
         # Campos S4
-        "aportes_pension":       float(datos_guardados.get("aportes_pension") or 0),
-        "afc_fvp":               float(datos_guardados.get("afc_fvp") or 0),
-        "intereses_vivienda":    float(datos_guardados.get("intereses_vivienda") or 0),
-        "medicina_prepagada":    float(datos_guardados.get("medicina_prepagada") or 0),
-        "dependientes":          int(datos_guardados.get("dependientes") or 0),
-        "tipo_ganancia":         datos_guardados.get("tipo_ganancia"),
-        "pasivos":               pasivos,
-        "ajuste_manual":         override,
+        "aportes_pension": float(datos_guardados.get("aportes_pension") or 0),
+        "afc_fvp": float(datos_guardados.get("afc_fvp") or 0),
+        "intereses_vivienda": float(datos_guardados.get("intereses_vivienda") or 0),
+        "medicina_prepagada": float(datos_guardados.get("medicina_prepagada") or 0),
+        "dependientes": int(datos_guardados.get("dependientes") or 0),
+        "tipo_ganancia": datos_guardados.get("tipo_ganancia"),
+        "pasivos": pasivos,
+        "ajuste_manual": override,
     }
 
 
@@ -126,13 +125,13 @@ def _cargar_reglas(db, año: int) -> dict:
 
 def _tabla_art241_default() -> list[dict]:
     return [
-        {"desde_uvt": 0,     "hasta_uvt": 1090,  "tarifa_marginal": 0.00, "impuesto_base_uvt": 0},
-        {"desde_uvt": 1090,  "hasta_uvt": 1700,  "tarifa_marginal": 0.19, "impuesto_base_uvt": 0},
-        {"desde_uvt": 1700,  "hasta_uvt": 4100,  "tarifa_marginal": 0.28, "impuesto_base_uvt": 116},
-        {"desde_uvt": 4100,  "hasta_uvt": 8670,  "tarifa_marginal": 0.33, "impuesto_base_uvt": 788},
-        {"desde_uvt": 8670,  "hasta_uvt": 18970, "tarifa_marginal": 0.35, "impuesto_base_uvt": 2296},
+        {"desde_uvt": 0, "hasta_uvt": 1090, "tarifa_marginal": 0.00, "impuesto_base_uvt": 0},
+        {"desde_uvt": 1090, "hasta_uvt": 1700, "tarifa_marginal": 0.19, "impuesto_base_uvt": 0},
+        {"desde_uvt": 1700, "hasta_uvt": 4100, "tarifa_marginal": 0.28, "impuesto_base_uvt": 116},
+        {"desde_uvt": 4100, "hasta_uvt": 8670, "tarifa_marginal": 0.33, "impuesto_base_uvt": 788},
+        {"desde_uvt": 8670, "hasta_uvt": 18970, "tarifa_marginal": 0.35, "impuesto_base_uvt": 2296},
         {"desde_uvt": 18970, "hasta_uvt": 31000, "tarifa_marginal": 0.37, "impuesto_base_uvt": 5901},
-        {"desde_uvt": 31000, "hasta_uvt": None,  "tarifa_marginal": 0.39, "impuesto_base_uvt": 10352},
+        {"desde_uvt": 31000, "hasta_uvt": None, "tarifa_marginal": 0.39, "impuesto_base_uvt": 10352},
     ]
 
 
@@ -152,9 +151,9 @@ def _cargar_documentos(db, contribuyente_id: str) -> list[dict]:
     for r in rows:
         datos = r[2] if isinstance(r[2], dict) else (json.loads(r[2]) if r[2] else {})
         result.append({
-            "id":        str(r[0]),
+            "id": str(r[0]),
             "categoria": r[1],
-            "datos":     datos,
+            "datos": datos,
             "confianza": float(r[4] or 0),
         })
     return result
@@ -186,10 +185,10 @@ def _consolidar_datos(
     datos_guardados = datos_guardados or {}
 
     ingresos_laborales = 0.0
-    rentas_capital     = 0.0
-    rentas_no_lab      = 0.0
-    retenciones        = 0.0
-    patrimonio_bruto   = 0.0
+    rentas_capital = 0.0
+    rentas_no_lab = 0.0
+    retenciones = 0.0
+    patrimonio_bruto = 0.0
 
     for doc in docs:
         d = doc["datos"]
@@ -213,25 +212,25 @@ def _consolidar_datos(
         return manual if manual > 0 else ocr_val
 
     ingresos_laborales = _manual_or_ocr("ingresos_laborales", ingresos_laborales)
-    rentas_capital     = _manual_or_ocr("rentas_capital", rentas_capital)
-    rentas_no_lab      = _manual_or_ocr("rentas_no_laborales", rentas_no_lab)
-    retenciones        = _manual_or_ocr("retenciones", retenciones)
-    patrimonio_bruto   = _manual_or_ocr("patrimonio_bruto", patrimonio_bruto)
+    rentas_capital = _manual_or_ocr("rentas_capital", rentas_capital)
+    rentas_no_lab = _manual_or_ocr("rentas_no_laborales", rentas_no_lab)
+    retenciones = _manual_or_ocr("retenciones", retenciones)
+    patrimonio_bruto = _manual_or_ocr("patrimonio_bruto", patrimonio_bruto)
 
-    dividendos         = float(datos_guardados.get("dividendos") or 0)
-    ganancias_oc       = float(datos_guardados.get("ganancias_ocasionales") or 0)
-    aportes_pension    = float(datos_guardados.get("aportes_pension") or 0)
-    afc_fvp_val        = float(datos_guardados.get("afc_fvp") or 0)
-    intereses_viv      = float(datos_guardados.get("intereses_vivienda") or 0)
-    medicina_prep      = float(datos_guardados.get("medicina_prepagada") or 0)
-    num_dependientes   = int(datos_guardados.get("dependientes") or 0)
+    dividendos = float(datos_guardados.get("dividendos") or 0)
+    ganancias_oc = float(datos_guardados.get("ganancias_ocasionales") or 0)
+    aportes_pension = float(datos_guardados.get("aportes_pension") or 0)
+    afc_fvp_val = float(datos_guardados.get("afc_fvp") or 0)
+    intereses_viv = float(datos_guardados.get("intereses_vivienda") or 0)
+    medicina_prep = float(datos_guardados.get("medicina_prepagada") or 0)
+    num_dependientes = int(datos_guardados.get("dependientes") or 0)
 
     # Ingresos netos cédula general (Art. 336 ET — base para límite 40%/1.340 UVT)
     ingresos_netos = max(0.0,
-        ingresos_laborales - aportes_pension
-        + rentas_capital
-        + rentas_no_lab
-    )
+                         ingresos_laborales - aportes_pension
+                         + rentas_capital
+                         + rentas_no_lab
+                         )
 
     # Límite 40% / 1.340 UVT (Art. 336 ET) sobre total consolidado
     tope_limitadas = min(ingresos_netos * 0.40, 1340 * uvt)
@@ -241,7 +240,7 @@ def _consolidar_datos(
     exento_laboral_bruto = min(ingresos_laborales * 0.25, limite_exento_anual) + afc_fvp_val
 
     # Deducciones
-    deduccion_dep      = min(num_dependientes, 4) * 72 * uvt
+    deduccion_dep = min(num_dependientes, 4) * 72 * uvt
     deducciones_brutas = intereses_viv + medicina_prep + deduccion_dep
 
     # Aplicar tope global y distribuir proporcionalmente
@@ -250,24 +249,24 @@ def _consolidar_datos(
     if total_bruto > 0:
         factor = exentas_y_deduc_aplicar / total_bruto
         rentas_exentas_final = round(exento_laboral_bruto * factor, 2)
-        deducciones_final    = round(deducciones_brutas * factor, 2)
+        deducciones_final = round(deducciones_brutas * factor, 2)
     else:
         rentas_exentas_final = 0.0
-        deducciones_final    = 0.0
+        deducciones_final = 0.0
 
     renta_gravable = max(0.0, ingresos_netos - rentas_exentas_final - deducciones_final)
 
     return {
-        "ingresos_laborales":    round(ingresos_laborales, 2),
-        "rentas_capital":        round(rentas_capital, 2),
-        "rentas_no_laborales":   round(rentas_no_lab, 2),
-        "dividendos":            round(dividendos, 2),
+        "ingresos_laborales": round(ingresos_laborales, 2),
+        "rentas_capital": round(rentas_capital, 2),
+        "rentas_no_laborales": round(rentas_no_lab, 2),
+        "dividendos": round(dividendos, 2),
         "ganancias_ocasionales": round(ganancias_oc, 2),
-        "retenciones":           round(retenciones, 2),
-        "patrimonio_bruto":      round(patrimonio_bruto, 2),
-        "rentas_exentas":        rentas_exentas_final,
-        "deducciones":           deducciones_final,
-        "renta_gravable":        round(renta_gravable, 2),
+        "retenciones": round(retenciones, 2),
+        "patrimonio_bruto": round(patrimonio_bruto, 2),
+        "rentas_exentas": rentas_exentas_final,
+        "deducciones": deducciones_final,
+        "renta_gravable": round(renta_gravable, 2),
     }
 
 
@@ -309,10 +308,10 @@ def _tramo_aplicado(renta_gravable: float, reglas: dict) -> dict:
     for tramo in reversed(tabla):
         if renta_en_uvt > tramo["desde_uvt"]:
             return {
-                "desde_uvt":       tramo["desde_uvt"],
-                "hasta_uvt":       tramo.get("hasta_uvt"),
+                "desde_uvt": tramo["desde_uvt"],
+                "hasta_uvt": tramo.get("hasta_uvt"),
                 "tarifa_marginal": tramo["tarifa_marginal"],
-                "renta_en_uvt":    round(renta_en_uvt, 2),
+                "renta_en_uvt": round(renta_en_uvt, 2),
             }
     return {"tarifa_marginal": 0.0, "renta_en_uvt": round(renta_en_uvt, 2)}
 

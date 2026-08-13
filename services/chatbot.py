@@ -21,51 +21,54 @@ def _get_key(name: str) -> str:
 # ── Catálogos de modelos ──────────────────────────────────────────────────────
 
 GROQ_MODELS_FALLBACK: list[dict] = [
-    {"id": "llama-3.3-70b-versatile",                    "label": "Llama 3.3 70B · Versatile (recomendado)"},
-    {"id": "llama-3.1-8b-instant",                       "label": "Llama 3.1 8B · Instant (más rápido)"},
-    {"id": "llama3-70b-8192",                            "label": "Llama 3 70B · 8k ctx"},
-    {"id": "meta-llama/llama-4-scout-17b-16e-instruct",  "label": "Llama 4 Scout 17B · Meta"},
+    {"id": "llama-3.3-70b-versatile", "label": "Llama 3.3 70B · Versatile (recomendado)"},
+    {"id": "llama-3.1-8b-instant", "label": "Llama 3.1 8B · Instant (más rápido)"},
+    {"id": "llama3-70b-8192", "label": "Llama 3 70B · 8k ctx"},
+    {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "label": "Llama 4 Scout 17B · Meta"},
     {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "label": "Llama 4 Maverick 17B · Meta"},
-    {"id": "deepseek-r1-distill-llama-70b",              "label": "DeepSeek R1 70B · Razonamiento"},
-    {"id": "gemma2-9b-it",                               "label": "Gemma 2 9B · Google"},
-    {"id": "qwen-qwq-32b",                               "label": "Qwen QwQ 32B · Razonamiento"},
-    {"id": "mistral-saba-24b",                           "label": "Mistral Saba 24B"},
-    {"id": "compound-beta",                              "label": "Compound Beta · Con búsqueda web"},
+    {"id": "deepseek-r1-distill-llama-70b", "label": "DeepSeek R1 70B · Razonamiento"},
+    {"id": "gemma2-9b-it", "label": "Gemma 2 9B · Google"},
+    {"id": "qwen-qwq-32b", "label": "Qwen QwQ 32B · Razonamiento"},
+    {"id": "mistral-saba-24b", "label": "Mistral Saba 24B"},
+    {"id": "compound-beta", "label": "Compound Beta · Con búsqueda web"},
 ]
 
 OPENAI_MODELS: list[dict] = [
-    {"id": "gpt-4o",       "label": "GPT-4o · Multimodal (recomendado)"},
-    {"id": "gpt-4o-mini",  "label": "GPT-4o mini · Rápido y económico"},
-    {"id": "gpt-4-turbo",  "label": "GPT-4 Turbo"},
-    {"id": "o1",           "label": "o1 · Razonamiento avanzado"},
-    {"id": "o1-mini",      "label": "o1-mini · Razonamiento rápido"},
-    {"id": "o3-mini",      "label": "o3-mini · Razonamiento (más reciente)"},
+    {"id": "gpt-4o", "label": "GPT-4o · Multimodal (recomendado)"},
+    {"id": "gpt-4o-mini", "label": "GPT-4o mini · Rápido y económico"},
+    {"id": "gpt-4-turbo", "label": "GPT-4 Turbo"},
+    {"id": "o1", "label": "o1 · Razonamiento avanzado"},
+    {"id": "o1-mini", "label": "o1-mini · Razonamiento rápido"},
+    {"id": "o3-mini", "label": "o3-mini · Razonamiento (más reciente)"},
 ]
 
 ANTHROPIC_MODELS: list[dict] = [
-    {"id": "claude-opus-4-5",              "label": "Claude Opus 4.5 · Más potente"},
-    {"id": "claude-sonnet-4-5",            "label": "Claude Sonnet 4.5 · Balanceado"},
-    {"id": "claude-haiku-3-5",             "label": "Claude Haiku 3.5 · Rápido"},
-    {"id": "claude-3-7-sonnet-20250219",   "label": "Claude 3.7 Sonnet · Razonamiento"},
-    {"id": "claude-3-5-sonnet-20241022",   "label": "Claude 3.5 Sonnet"},
-    {"id": "claude-3-5-haiku-20241022",    "label": "Claude 3.5 Haiku"},
-    {"id": "claude-3-opus-20240229",       "label": "Claude 3 Opus"},
+    {"id": "claude-opus-4-5", "label": "Claude Opus 4.5 · Más potente"},
+    {"id": "claude-sonnet-4-5", "label": "Claude Sonnet 4.5 · Balanceado"},
+    {"id": "claude-haiku-3-5", "label": "Claude Haiku 3.5 · Rápido"},
+    {"id": "claude-3-7-sonnet-20250219", "label": "Claude 3.7 Sonnet · Razonamiento"},
+    {"id": "claude-3-5-sonnet-20241022", "label": "Claude 3.5 Sonnet"},
+    {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku"},
+    {"id": "claude-3-opus-20240229", "label": "Claude 3 Opus"},
 ]
 
 GOOGLE_MODELS: list[dict] = [
-    {"id": "gemini-2.0-flash",               "label": "Gemini 2.0 Flash · Recomendado"},
-    {"id": "gemini-2.0-flash-exp",           "label": "Gemini 2.0 Flash Experimental"},
-    {"id": "gemini-2.0-flash-thinking-exp",  "label": "Gemini 2.0 Flash Thinking"},
-    {"id": "gemini-1.5-pro",                 "label": "Gemini 1.5 Pro"},
-    {"id": "gemini-1.5-flash",               "label": "Gemini 1.5 Flash · Rápido"},
-    {"id": "gemini-1.5-flash-8b",            "label": "Gemini 1.5 Flash 8B · Más rápido"},
+    {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash · Recomendado"},
+    {"id": "gemini-2.0-flash-exp", "label": "Gemini 2.0 Flash Experimental"},
+    {"id": "gemini-2.0-flash-thinking-exp", "label": "Gemini 2.0 Flash Thinking"},
+    {"id": "gemini-1.5-pro", "label": "Gemini 1.5 Pro"},
+    {"id": "gemini-1.5-flash", "label": "Gemini 1.5 Flash · Rápido"},
+    {"id": "gemini-1.5-flash-8b", "label": "Gemini 1.5 Flash 8B · Más rápido"},
 ]
 
-PROVIDERS: dict[str, dict] = {
-    "groq": {"name": "🟢 Groq (Llama, Gemma, Mistral…)", "models": GROQ_MODELS_FALLBACK, "key_name": "GROQ_API_KEY", "free": True},
-}
+PROVIDERS: dict[str,
+                dict] = {"groq": {"name": "🟢 Groq (Llama, Gemma, Mistral…)",
+                                  "models": GROQ_MODELS_FALLBACK,
+                                  "key_name": "GROQ_API_KEY",
+                                  "free": True},
+                         }
 
-MODEL_DEFAULT   = "llama-3.3-70b-versatile"
+MODEL_DEFAULT = "llama-3.3-70b-versatile"
 PROVIDER_DEFAULT = "groq"
 
 # ── System prompt ─────────────────────────────────────────────────────────────
@@ -131,7 +134,10 @@ TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "consultar_iva_mes",
-            "description": "Retorna IVA total, descontable y de mandatos para un mes YYYY-MM desde las facturas cargadas.",
+            "description": (
+                "Retorna IVA total, descontable y de mandatos para un mes "
+                "YYYY-MM desde las facturas cargadas."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"mes": {"type": "string", "description": "Mes en formato YYYY-MM"}},
@@ -248,7 +254,7 @@ def _tool_consultar_iva_mes(df: pd.DataFrame, mes: str) -> str:
     if df_mes.empty:
         return f"No hay facturas para el mes {mes}."
     mandatos = df_mes[df_mes["tipo"].str.contains("mandato|peaje", case=False, na=False)]
-    normales  = df_mes[~df_mes["tipo"].str.contains("mandato|peaje", case=False, na=False)]
+    normales = df_mes[~df_mes["tipo"].str.contains("mandato|peaje", case=False, na=False)]
     return (
         f"IVA {mes}:\n"
         f"- Total: {_fmt_cop(df_mes['iva_19'].sum() + df_mes['iva_5'].sum())}\n"
@@ -260,7 +266,10 @@ def _tool_consultar_iva_mes(df: pd.DataFrame, mes: str) -> str:
 
 def _tool_top_proveedores(df: pd.DataFrame, n: int = 10) -> str:
     if not _is_facturas_df(df):
-        return "Esta herramienta requiere datos de facturas. Para ver los mayores agentes retenedores usa 'resumen_exogenas' o 'top_agentes_retension'."
+        return (
+            "Esta herramienta requiere datos de facturas. Para ver los mayores "
+            "agentes retenedores usa 'resumen_exogenas' o 'top_agentes_retension'."
+        )
     if "nombre_emisor" not in df.columns:
         return "Sin datos de proveedores."
     top = (
@@ -269,7 +278,7 @@ def _tool_top_proveedores(df: pd.DataFrame, n: int = 10) -> str:
     )
     lines = [f"Top {n} proveedores:"]
     for i, row in top.iterrows():
-        lines.append(f"{i+1}. {row['nombre_emisor']} (NIT {row['nit_emisor']}): {_fmt_cop(row['subtotal'])}")
+        lines.append(f"{i + 1}. {row['nombre_emisor']} (NIT {row['nit_emisor']}): {_fmt_cop(row['subtotal'])}")
     return "\n".join(lines)
 
 
@@ -302,13 +311,19 @@ def _tool_resumen_errores(df: pd.DataFrame) -> str:
         return "Sin errores. Todas las facturas están OK."
     lines = [f"{len(err)} factura(s) con errores:"]
     for _, row in err.iterrows():
-        lines.append(f"- {row.get('folio','?')} | {row.get('nombre_emisor','?')} | {row.get('observacion','sin detalle')}")
+        folio = row.get("folio", "?")
+        emisor = row.get("nombre_emisor", "?")
+        observacion = row.get("observacion", "sin detalle")
+        lines.append(f"- {folio} | {emisor} | {observacion}")
     return "\n".join(lines)
 
 
 def _tool_resumen_general(df: pd.DataFrame) -> str:
     if not _is_facturas_df(df):
-        return "Esta herramienta requiere datos de facturas. Usa 'resumen_exogenas' para ver el resumen del Formato 1003."
+        return (
+            "Esta herramienta requiere datos de facturas. "
+            "Usa 'resumen_exogenas' para ver el resumen del Formato 1003."
+        )
     return (
         f"Resumen:\n"
         f"- Documentos: {len(df)}\n"
@@ -323,10 +338,11 @@ def _tool_resumen_exogenas(df: pd.DataFrame) -> str:
     if df is None or df.empty:
         return "No hay datos de exógenas (Formato 1003) cargados en la sesión."
     total_base = df.get("base", pd.Series(dtype=float)).sum()
-    total_ret  = df.get("retencion", pd.Series(dtype=float)).sum()
-    por_concepto = df.groupby("concepto")[["base", "retencion"]].sum().reset_index() if "concepto" in df.columns else pd.DataFrame()
+    total_ret = df.get("retencion", pd.Series(dtype=float)).sum()
+    por_concepto = df.groupby("concepto")[["base", "retencion"]].sum(
+    ).reset_index() if "concepto" in df.columns else pd.DataFrame()
     lines = [
-        f"Resumen Formato 1003:",
+        "Resumen Formato 1003:",
         f"- Filas: {len(df)}",
         f"- Base total: {_fmt_cop(total_base)}",
         f"- Retención total: {_fmt_cop(total_ret)}",
@@ -349,18 +365,25 @@ def _tool_top_agentes_retencion(df: pd.DataFrame, n: int = 10) -> str:
     )
     lines = [f"Top {n} agentes retenedores por retención:"]
     for i, row in top.iterrows():
-        lines.append(f"{i+1}. {row['razon_social']} (NIT {row['nit']}): {_fmt_cop(row['retencion'])}")
+        lines.append(f"{i + 1}. {row['razon_social']} (NIT {row['nit']}): {_fmt_cop(row['retencion'])}")
     return "\n".join(lines)
 
 
 def _ejecutar_herramienta(nombre: str, args: dict, df: pd.DataFrame) -> str:
-    if nombre == "consultar_iva_mes":      return _tool_consultar_iva_mes(df, args.get("mes", ""))
-    if nombre == "top_proveedores":        return _tool_top_proveedores(df, args.get("n", 10))
-    if nombre == "buscar_factura":         return _tool_buscar_factura(df, args.get("query", ""))
-    if nombre == "resumen_errores":        return _tool_resumen_errores(df)
-    if nombre == "resumen_general":        return _tool_resumen_general(df)
-    if nombre == "resumen_exogenas":       return _tool_resumen_exogenas(df)
-    if nombre == "top_agentes_retension":  return _tool_top_agentes_retencion(df, args.get("n", 10))
+    if nombre == "consultar_iva_mes":
+        return _tool_consultar_iva_mes(df, args.get("mes", ""))
+    if nombre == "top_proveedores":
+        return _tool_top_proveedores(df, args.get("n", 10))
+    if nombre == "buscar_factura":
+        return _tool_buscar_factura(df, args.get("query", ""))
+    if nombre == "resumen_errores":
+        return _tool_resumen_errores(df)
+    if nombre == "resumen_general":
+        return _tool_resumen_general(df)
+    if nombre == "resumen_exogenas":
+        return _tool_resumen_exogenas(df)
+    if nombre == "top_agentes_retension":
+        return _tool_top_agentes_retencion(df, args.get("n", 10))
     return f"Herramienta '{nombre}' no reconocida."
 
 
@@ -484,7 +507,7 @@ def _handle_error(e: Exception, model: str) -> str:
     if "rate_limit" in err.lower():
         return "⏳ Límite de velocidad alcanzado. Espera unos segundos e intenta de nuevo."
     if "authentication" in err.lower() or "api_key" in err.lower() or "invalid" in err.lower():
-        return f"🔑 API key inválida o sin permisos. Verifica tu clave en `secrets.toml`."
+        return "🔑 API key inválida o sin permisos. Verifica tu clave en `secrets.toml`."
     if "not found" in err.lower() or "404" in err or "models/" in err.lower():
         return (
             f"❌ Modelo `{model}` no encontrado.\n\n"
@@ -504,8 +527,12 @@ def responder(
     model: str = MODEL_DEFAULT,
     provider: str = PROVIDER_DEFAULT,
 ) -> str:
-    if provider == "groq":      return _responder_groq(prompt, df, historial, model)
-    if provider == "openai":    return _responder_openai(prompt, df, historial, model)
-    if provider == "anthropic": return _responder_anthropic(prompt, df, historial, model)
-    if provider == "google":    return _responder_google(prompt, df, historial, model)
+    if provider == "groq":
+        return _responder_groq(prompt, df, historial, model)
+    if provider == "openai":
+        return _responder_openai(prompt, df, historial, model)
+    if provider == "anthropic":
+        return _responder_anthropic(prompt, df, historial, model)
+    if provider == "google":
+        return _responder_google(prompt, df, historial, model)
     return f"Proveedor '{provider}' no reconocido."

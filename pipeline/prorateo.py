@@ -40,11 +40,11 @@ def calcular_prorateo(
     filas = []
     for mes, grupo in df.groupby("mes"):
         es_mandato = grupo["tipo"].str.lower().str.contains("mandato|peaje", na=False)
-        mandatos  = grupo[es_mandato]["iva_total"].sum()
-        iva_base  = grupo[~es_mandato]["iva_total"].sum()  # IVA sujeto a prorrateo
+        mandatos = grupo[es_mandato]["iva_total"].sum()
+        iva_base = grupo[~es_mandato]["iva_total"].sum()  # IVA sujeto a prorrateo
 
-        grav  = ingresos_gravados.get(mes, 0.0)
-        excl  = ingresos_excluidos.get(mes, 0.0)
+        grav = ingresos_gravados.get(mes, 0.0)
+        excl = ingresos_excluidos.get(mes, 0.0)
         total_ing = grav + excl
 
         if total_ing > 0:
@@ -52,18 +52,18 @@ def calcular_prorateo(
         else:
             pct = 1.0  # sin datos → conservador: 100% descontable
 
-        iva_desc     = round(iva_base * pct, 2)
-        iva_no_desc  = round(iva_base * (1 - pct) + mandatos, 2)
+        iva_desc = round(iva_base * pct, 2)
+        iva_no_desc = round(iva_base * (1 - pct) + mandatos, 2)
 
         filas.append({
-            "mes":               mes,
-            "iva_total":         round(iva_base + mandatos, 2),
-            "iva_mandatos":      round(mandatos, 2),
+            "mes": mes,
+            "iva_total": round(iva_base + mandatos, 2),
+            "iva_mandatos": round(mandatos, 2),
             "iva_base_prorateo": round(iva_base, 2),
             "ingresos_gravados": grav,
             "ingresos_excluidos": excl,
-            "pct_prorateo":      round(pct * 100, 2),
-            "iva_descontable":   iva_desc,
+            "pct_prorateo": round(pct * 100, 2),
+            "iva_descontable": iva_desc,
             "iva_no_descontable": iva_no_desc,
         })
 
