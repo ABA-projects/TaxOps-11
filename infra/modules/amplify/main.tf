@@ -4,10 +4,17 @@
 # el rollback más simple si algo falla.
 
 resource "aws_amplify_app" "web" {
-  name         = "taxops-web-prod"
-  repository   = var.github_repo_url
+  name       = "taxops-web-prod"
+  repository = var.github_repo_url
   access_token = var.github_access_token
   platform     = "WEB_COMPUTE"
+  # Dos argumentos de rol distintos en este recurso — iam_service_role_arn (general) y
+  # compute_role_arn (específico del compute SSR de WEB_COMPUTE). El build real falló con
+  # "Unable to assume specified IAM Role" sin ninguno de los dos seteados; se apunta ambos
+  # al mismo rol (aws_iam_role.amplify_ssr) para cubrir los dos casos sin adivinar cuál
+  # exactamente lo pedía.
+  iam_service_role_arn = aws_iam_role.amplify_ssr.arn
+  compute_role_arn      = aws_iam_role.amplify_ssr.arn
 
   build_spec = <<-YAML
     version: 1
