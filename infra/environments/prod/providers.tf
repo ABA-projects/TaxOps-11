@@ -9,6 +9,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     } # solo para el workaround temporal en infra/modules/lambda-api/main.tf (ver comentario ahí)
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
   }
 }
 
@@ -26,3 +30,8 @@ provider "aws" {
     }
   }
 }
+
+# Sin api_token explícito a propósito: el provider lo lee solo de la env var
+# CLOUDFLARE_API_TOKEN — localmente vía direnv (.envrc, gitignored), en CI vía el secret
+# CLOUDFLARE_API_TOKEN inyectado como env var en terraform-plan.yml/terraform-apply.yml.
+provider "cloudflare" {}

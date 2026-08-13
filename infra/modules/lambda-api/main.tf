@@ -3,18 +3,16 @@
 # reservada de Lambda (Terraform fallaría si se intenta) — Lambda ya la inyecta sola con
 # la región de la función, y el default de Settings ("us-east-1") ya coincide.
 locals {
-  # API_BASE_URL: NO se referencia aws_lambda_function_url.api acá — crearía un ciclo
-  # (la función necesitaría su propia URL antes de poder crearse). Se queda con el
-  # default de Settings ("http://localhost:8000") hasta el Chunk 5, cuando haya dominio
-  # propio vía CloudFront — ahí sí es un valor conocido de antemano, sin ciclo. Solo
-  # afecta el redirect_uri de Google OAuth, que tampoco está configurado todavía para
-  # esta URL en Google Cloud Console — no bloquea nada de lo que se prueba hoy.
+  # API_BASE_URL viene de var.api_base_url (Chunk 5) — string estático construido en el
+  # root a partir del dominio, NO una referencia a module.cdn (crearía un ciclo: cdn ya
+  # depende de aws_lambda_function_url.api.function_url para su origin de CloudFront).
   lambda_env = merge(var.secrets, {
     ALGORITHM                   = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES = "30"
     REFRESH_TOKEN_EXPIRE_DAYS   = "7"
     ALLOWED_ORIGINS             = var.allowed_origins
     FRONTEND_URL                = var.frontend_url
+    API_BASE_URL                = var.api_base_url
     JOBS_TABLE_NAME             = var.jobs_table_name
     S3_BUCKET_RENTA_DOCS        = var.s3_bucket_renta_docs
     SQS_QUEUE_URL               = var.sqs_queue_url

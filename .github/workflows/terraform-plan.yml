@@ -18,6 +18,8 @@ jobs:
     defaults:
       run:
         working-directory: infra/environments/prod
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # el provider cloudflare lo lee solo de esta env var, sin declararlo en el .tf
     steps:
       - uses: actions/checkout@v7
 
