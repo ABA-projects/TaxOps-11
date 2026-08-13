@@ -13,6 +13,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.9"
+    } # espera de propagación de IAM antes de que Amplify valide el compute role (ver infra/modules/amplify/main.tf)
   }
 }
 
