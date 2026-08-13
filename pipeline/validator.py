@@ -4,7 +4,7 @@ import re
 import pandas as pd
 
 _CUFE_RE = re.compile(r"^[a-f0-9]{96}$", re.I)
-_NIT_RE  = re.compile(r"^\d{6,12}$")
+_NIT_RE = re.compile(r"^\d{6,12}$")
 TOLERANCE = 1.0  # tolerancia COP para diferencias de redondeo
 
 
@@ -33,13 +33,13 @@ def _validate_row(row: pd.Series, cufe_counts: dict) -> tuple[str, str]:
 
     # 5. Cuadre contable: subtotal + iva_19 + iva_5 ≈ total
     subtotal = float(row.get("subtotal", 0) or 0)
-    iva19    = float(row.get("iva_19", 0) or 0)
-    iva5     = float(row.get("iva_5", 0) or 0)
-    total    = float(row.get("total", 0) or 0)
-    calc     = subtotal + iva19 + iva5
+    iva19 = float(row.get("iva_19", 0) or 0)
+    iva5 = float(row.get("iva_5", 0) or 0)
+    total = float(row.get("total", 0) or 0)
+    calc = subtotal + iva19 + iva5
     if total != 0 and abs(calc - total) > TOLERANCE:
         errors.append(
-            f"Descuadre: {calc:,.0f} calculado ≠ {total:,.0f} total (dif={abs(calc-total):,.0f})"
+            f"Descuadre: {calc:,.0f} calculado ≠ {total:,.0f} total (dif={abs(calc - total):,.0f})"
         )
 
     # 6. Mandatos: no deben tener IVA descontable
@@ -62,7 +62,7 @@ def validate(df: pd.DataFrame) -> pd.DataFrame:
 
     resultados = [_validate_row(row, cufe_counts) for _, row in df.iterrows()]
     df = df.copy()
-    df["validacion"]  = [r[0] for r in resultados]
+    df["validacion"] = [r[0] for r in resultados]
     df["observacion"] = [r[1] for r in resultados]
     return df
 

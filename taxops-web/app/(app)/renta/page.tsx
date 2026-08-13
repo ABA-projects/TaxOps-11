@@ -400,7 +400,11 @@ export default function RentaPage() {
   function toggleCat(cat: string) {
     setExpandedCats(prev => {
       const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
+      if (next.has(cat)) {
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
       return next;
     });
   }
@@ -1208,7 +1212,11 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                                     checked={selectedDocs.has(doc.id)}
                                     onChange={e => setSelectedDocs(prev => {
                                       const next = new Set(prev);
-                                      e.target.checked ? next.add(doc.id) : next.delete(doc.id);
+                                      if (e.target.checked) {
+                                        next.add(doc.id);
+                                      } else {
+                                        next.delete(doc.id);
+                                      }
                                       return next;
                                     })}
                                     className="flex-shrink-0 rounded border-gray-300 text-red-500 cursor-pointer"
@@ -1388,15 +1396,6 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function InfoCard({ label, value, highlight }: { label: string; value: number | string; highlight?: boolean }) {
-  return (
-    <div className={`rounded-xl border p-3 text-center ${highlight ? "border-red-100 bg-red-50" : "border-gray-200 bg-white"}`}>
-      <p className={`text-2xl font-bold ${highlight ? "text-red-600" : "text-gray-900"}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-gray-500">{label}</p>
     </div>
   );
 }

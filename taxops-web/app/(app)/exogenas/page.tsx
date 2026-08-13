@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Upload, Download, X, AlertCircle, CheckCircle,
-  BarChart2, TrendingUp, Bot, Send, ChevronDown, ChevronUp,
+  BarChart2, TrendingUp, Bot, Send, ChevronDown,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
 

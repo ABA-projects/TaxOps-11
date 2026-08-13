@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { MessageCircle, X, Send, Loader2, Bot, Trash2 } from "lucide-react";
+import { X, Send, Loader2, Bot, Trash2 } from "lucide-react";
 import { useApi } from "@/lib/api";
 
 type Message = { role: "user" | "assistant"; content: string };

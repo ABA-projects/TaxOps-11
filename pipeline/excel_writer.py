@@ -7,25 +7,25 @@ from openpyxl.styles import (
 )
 from openpyxl.utils import get_column_letter
 
-_HEADER_FILL  = PatternFill("solid", fgColor="1F4E79")
-_ERROR_FILL   = PatternFill("solid", fgColor="FF0000")
-_WARN_FILL    = PatternFill("solid", fgColor="FFC000")
-_OK_FILL      = PatternFill("solid", fgColor="70AD47")
-_WHITE_FONT   = Font(color="FFFFFF", bold=True)
-_THIN_BORDER  = Border(
+_HEADER_FILL = PatternFill("solid", fgColor="1F4E79")
+_ERROR_FILL = PatternFill("solid", fgColor="FF0000")
+_WARN_FILL = PatternFill("solid", fgColor="FFC000")
+_OK_FILL = PatternFill("solid", fgColor="70AD47")
+_WHITE_FONT = Font(color="FFFFFF", bold=True)
+_THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
     top=Side(style="thin"), bottom=Side(style="thin"),
 )
-_MONEY_FMT    = '#,##0.00'
-_PCT_FMT      = '0.00"%"'
+_MONEY_FMT = '#,##0.00'
+_PCT_FMT = '0.00"%"'
 
 
 def _style_header(ws):
     for cell in ws[1]:
-        cell.font      = _WHITE_FONT
-        cell.fill      = _HEADER_FILL
+        cell.font = _WHITE_FONT
+        cell.fill = _HEADER_FILL
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell.border    = _THIN_BORDER
+        cell.border = _THIN_BORDER
 
 
 def _autofit(ws, max_width=45):
@@ -53,7 +53,7 @@ def write_excel(
         "subtotal", "base_iva_19", "iva_19", "base_iva_5", "iva_5",
         "no_gravado", "total", "retencion_fuente",
     ]
-    money_val  = ["total"]
+    money_val = ["total"]
     money_pror = [
         "iva_total", "iva_mandatos", "iva_base_prorateo",
         "ingresos_gravados", "ingresos_excluidos",

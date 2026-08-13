@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime
 
 from api.core import job_store
 
@@ -101,13 +99,13 @@ def _update_doc_in_db(
                 WHERE id = :doc_id
             """),
             {
-                "s3_key":        s3_key,
-                "texto_ocr":      texto_ocr[:50_000],  # cap at 50k chars
-                "categoria":      classification["categoria"],
+                "s3_key": s3_key,
+                "texto_ocr": texto_ocr[:50_000],  # cap at 50k chars
+                "categoria": classification["categoria"],
                 "carpeta_virtual": classification["carpeta_virtual"],
-                "confianza":      classification["confianza"],
+                "confianza": classification["confianza"],
                 "datos_extraidos": json.dumps(classification["datos_extraidos"]),
-                "doc_id":         doc_id,
+                "doc_id": doc_id,
             },
         )
 

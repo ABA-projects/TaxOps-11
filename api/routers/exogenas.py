@@ -49,7 +49,7 @@ async def process_exogenas(
                 raise HTTPException(
                     status_code=415,
                     detail=f"Formato no soportado: {safe_name}. "
-                           "Soportados: PDF, DOCX, XLSX, JPG, PNG.",
+                    "Soportados: PDF, DOCX, XLSX, JPG, PNG.",
                 )
             dest = Path(tmpdir) / safe_name
             with dest.open("wb") as fout:
@@ -232,7 +232,7 @@ async def stream_job(job_id: str) -> StreamingResponse:
                         warnings.append(
                             f"⚠️ {archivo}: fila excluida del Formato 1003 "
                             f"({', '.join(motivos)}) — "
-                            f"retenedor: '{fila.get('razon_social','') or fila.get('nit','') or '?'}'"
+                            f"retenedor: '{fila.get('razon_social', '') or fila.get('nit', '') or '?'}'"
                         )
 
             df_1003 = _agregar(df)
@@ -240,8 +240,8 @@ async def stream_job(job_id: str) -> StreamingResponse:
             sin_mpio = df_1003[df_1003["cod_dpto"] == ""]
             for _, row in sin_mpio.iterrows():
                 warnings.append(
-                    f"ℹ️ No se encontró código DIAN para ciudad '{row.get('ciudad_retencion','')}' "
-                    f"({row.get('razon_social','')}). Completa manualmente."
+                    f"ℹ️ No se encontró código DIAN para ciudad '{row.get('ciudad_retencion', '')}' "
+                    f"({row.get('razon_social', '')}). Completa manualmente."
                 )
 
             if org_id and not df_1003.empty:

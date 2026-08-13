@@ -10,20 +10,31 @@ el directorio raíz del proyecto quede en el path de Python.
 from __future__ import annotations
 
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Asegurar que pipeline/, services/, db/, exogenas/ sean importables
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
+
+# Asegurar que pipeline/, services/, db/, exogenas/ sean importables ANTES de
+# importar routers/core.config (que a su vez importan services.*, db.*, etc.)
 _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from core.config import get_settings
-from routers import admin, auth, calendario, chatbot, exogenas, invoices, nomina, renta, renta_documentos
+from core.config import get_settings  # noqa: E402
+from routers import (  # noqa: E402
+    admin,
+    auth,
+    calendario,
+    chatbot,
+    exogenas,
+    invoices,
+    nomina,
+    renta,
+    renta_documentos,
+)
 
 settings = get_settings()
 
@@ -132,8 +143,6 @@ async def bootstrap(secret: str, org_slug: str, org_name: str,
     return {"org": {"id": str(org["id"]), "slug": org["slug"], "name": org["name"]},
             "user": {"id": str(user["id"]), "email": user["email"], "role": user["role"]}}
 
-
-from mangum import Mangum
 
 # lifespan="off": el `lifespan` de este archivo dispara un thread de background
 # para migraciones Alembic pensado para un servidor long-running — no es seguro

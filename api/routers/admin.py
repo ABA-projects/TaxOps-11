@@ -761,7 +761,10 @@ async def superadmin_change_role(
     get_db = _get_db()
     with get_db() as db:
         result = db.execute(
-            text("UPDATE users SET role = :r, admin_requested_at = NULL WHERE id = :id AND deleted_at IS NULL RETURNING id"),
+            text(
+                "UPDATE users SET role = :r, admin_requested_at = NULL "
+                "WHERE id = :id AND deleted_at IS NULL RETURNING id"
+            ),
             {"r": body.role, "id": user_id},
         ).fetchone()
     if result is None:
@@ -847,7 +850,8 @@ async def add_autorretenedor(body: dict, admin: dict = Depends(require_admin)) -
         db.execute(
             text(
                 "INSERT INTO autorretenedores (nit, razon_social) VALUES (:nit, :rs) "
-                "ON CONFLICT (nit) DO UPDATE SET vigente = TRUE, razon_social = EXCLUDED.razon_social, updated_at = NOW()"
+                "ON CONFLICT (nit) DO UPDATE SET vigente = TRUE, "
+                "razon_social = EXCLUDED.razon_social, updated_at = NOW()"
             ),
             {"nit": nit, "rs": razon_social},
         )

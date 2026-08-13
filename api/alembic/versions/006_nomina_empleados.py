@@ -64,7 +64,10 @@ def upgrade() -> None:
     """)
 
     op.execute("CREATE INDEX IF NOT EXISTS ix_empleados_org ON empleados(org_id) WHERE activo = TRUE")
-    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_empleados_org_cedula ON empleados(org_id, cedula) WHERE cedula != ''")
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_empleados_org_cedula "
+        "ON empleados(org_id, cedula) WHERE cedula != ''"
+    )
 
     op.execute("CREATE INDEX IF NOT EXISTS ix_nomina_periodos_org ON nomina_periodos(org_id)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_nomina_detalle_periodo ON nomina_detalle(periodo_id)")
