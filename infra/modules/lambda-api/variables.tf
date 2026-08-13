@@ -52,3 +52,9 @@ variable "frontend_url" {
   type        = string
   default     = "https://taxops-app.vercel.app"
 }
+
+variable "api_base_url" {
+  description = "URL pública final de la API (dominio propio vía CloudFront, Chunk 5) — para redirect_uri de Google OAuth. String estático construido en el root a partir del nombre de dominio, NO una referencia a module.cdn (crearía un ciclo: cdn ya depende de lambda_api.function_url)"
+  type        = string
+  default     = "http://localhost:8000"
+}
