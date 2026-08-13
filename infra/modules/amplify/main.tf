@@ -3,9 +3,19 @@
 # corre en paralelo hasta que Amplify esté probado y el Chunk 8 confirme el cutover — es
 # el rollback más simple si algo falla.
 
+# IAM es eventualmente consistente entre regiones/servicios — un apply real falló con
+# "The compute role provided cannot be assumed by Amplify" porque Amplify intentó validar
+# el rol ~1s después de creado, antes de que la propagación global terminara. Se espera
+# explícito en vez de reintentar a ciegas.
+resource "time_sleep" "wait_for_iam_propagation" {
+  depends_on = [aws_iam_role.amplify_ssr, aws_iam_role_policy.amplify_ssr_logs]
+
+  create_duration = "15s"
+}
+
 resource "aws_amplify_app" "web" {
-  name       = "taxops-web-prod"
-  repository = var.github_repo_url
+  name         = "taxops-web-prod"
+  repository   = var.github_repo_url
   access_token = var.github_access_token
   platform     = "WEB_COMPUTE"
   # Dos argumentos de rol distintos en este recurso — iam_service_role_arn (general) y
@@ -14,7 +24,9 @@ resource "aws_amplify_app" "web" {
   # al mismo rol (aws_iam_role.amplify_ssr) para cubrir los dos casos sin adivinar cuál
   # exactamente lo pedía.
   iam_service_role_arn = aws_iam_role.amplify_ssr.arn
-  compute_role_arn      = aws_iam_role.amplify_ssr.arn
+  compute_role_arn     = aws_iam_role.amplify_ssr.arn
+
+  depends_on = [time_sleep.wait_for_iam_propagation]
 
   build_spec = <<-YAML
     version: 1
