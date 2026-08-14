@@ -4,20 +4,21 @@
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-15.3-black?logo=next.js&logoColor=white)](https://nextjs.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://postgresql.org)
-[![Cloud Run](https://img.shields.io/badge/API-Cloud%20Run-4285F4?logo=googlecloud&logoColor=white)](https://taxops-api-fh5jvzgf7q-uc.a.run.app)
-[![Vercel](https://img.shields.io/badge/Frontend-Vercel-black?logo=vercel&logoColor=white)](https://taxops-app.vercel.app)
-[![CI/CD](https://img.shields.io/github/actions/workflow/status/ABA-projects/TaxOps-11/deploy-cloud-run.yml?label=deploy&logo=githubactions&logoColor=white)](https://github.com/ABA-projects/TaxOps-11/actions)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://neon.tech)
+[![AWS Lambda](https://img.shields.io/badge/API-AWS%20Lambda-FF9900?logo=awslambda&logoColor=white)](https://api.taxopsapp.com)
+[![AWS Amplify](https://img.shields.io/badge/Frontend-AWS%20Amplify-FF9900?logo=awsamplify&logoColor=white)](https://app.taxopsapp.com)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](infra/)
+[![CI/CD](https://img.shields.io/github/actions/workflow/status/ABA-projects/TaxOps-11/deploy-lambda.yml?label=deploy&logo=githubactions&logoColor=white)](https://github.com/ABA-projects/TaxOps-11/actions)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
 
-**Producción:**
+**Producción (AWS — migrado desde GCP Cloud Run + Vercel, ver [case study](docs/MIGRACION-AWS-CASE-STUDY.md)):**
 
 | Servicio | URL |
 |----------|-----|
-| Frontend | [https://taxops-app.vercel.app](https://taxops-app.vercel.app) |
-| API | [https://taxops-api-fh5jvzgf7q-uc.a.run.app](https://taxops-api-fh5jvzgf7q-uc.a.run.app) |
-| Swagger UI | [https://taxops-api-fh5jvzgf7q-uc.a.run.app/docs](https://taxops-api-fh5jvzgf7q-uc.a.run.app/docs) |
+| Frontend | [https://app.taxopsapp.com](https://app.taxopsapp.com) (AWS Amplify) |
+| API | [https://api.taxopsapp.com](https://api.taxopsapp.com) (CloudFront → Lambda) |
+| Swagger UI | [https://api.taxopsapp.com/docs](https://api.taxopsapp.com/docs) |
 
 ---
 
@@ -30,7 +31,7 @@
 5. [Inicio rápido (local)](#inicio-rápido-local)
 6. [Variables de entorno](#variables-de-entorno)
 7. [API Reference](#api-reference)
-8. [Despliegue en Google Cloud Run](#despliegue-en-google-cloud-run)
+8. [Infraestructura AWS (Terraform)](#infraestructura-aws-terraform)
 9. [CI/CD Pipeline](#cicd-pipeline)
 10. [Estructura del repositorio](#estructura-del-repositorio)
 11. [Tests](#tests)
@@ -46,6 +47,7 @@
 | **Prorrateo IVA** | Cálculo Art. 490 ET para IVA descontable parcial |
 | **Nómina CST 2026** | Nómina mensual + liquidación definitiva con parafiscales correctos |
 | **Exógenas 1003** | Generación Formato 1003 DIAN — soporta 12+ layouts de certificados |
+| **Renta** | Formulario 210, documentos soporte con OCR, motor de liquidación |
 | **Calendario DIAN** | 31 fechas tributarias 2026 con alertas automáticas |
 | **Chatbot IA** | Asistente contable sobre Groq llama-3.3-70b-versatile |
 | **Dashboard** | Métricas, accesos rápidos y notificaciones de vencimiento |
@@ -57,18 +59,23 @@
 | Capa | Tecnología |
 |------|-----------|
 | Frontend | Next.js 15.3 · App Router · TypeScript · Tailwind CSS |
-| Backend | FastAPI 0.115 + Uvicorn · Python 3.12 · Docker |
-| Base de datos | PostgreSQL 16 — **Neon** (serverless, multi-tenant) |
-| Auth | JWT (access 30 min / refresh 7 d) + bcrypt |
+| Backend | FastAPI 0.115 + Mangum (adaptador ASGI→Lambda) · Python 3.12 · Docker |
+| Base de datos | PostgreSQL 16 — **Neon** (serverless, multi-tenant, se queda fuera de AWS a propósito — evita el costo de un NAT Gateway) |
+| Auth | JWT (access 30 min / refresh 7 d) + bcrypt + Google OAuth |
 | IA | Groq API — llama-3.3-70b-versatile |
 | PDF export | ReportLab 4.2 |
 | Excel export | openpyxl 3.1 |
-| Extracción PDF/XML | pdfplumber 0.11 + lxml 5.3 · Tesseract OCR (imágenes) |
-| Deploy API | **Google Cloud Run** — us-central1 · 2 GB RAM · scale-to-zero |
-| Image Registry | **Google Artifact Registry** — us-central1-docker.pkg.dev |
-| Deploy Frontend | **Vercel** — hobby tier, Next.js nativo |
-| CI/CD | **GitHub Actions** — lint + test + build + deploy |
-| GCP APIs habilitadas | `run.googleapis.com` · `artifactregistry.googleapis.com` |
+| Extracción PDF/XML | pdfplumber 0.11 + lxml 5.3 · Tesseract OCR (imágenes, baked en la imagen Lambda) |
+| Compute API | **AWS Lambda** (container image) — Function URL detrás de CloudFront |
+| Compute Worker | **AWS Lambda** — disparado por SQS, jobs largos (OCR/exógenas) |
+| CDN + TLS | **CloudFront** + **ACM** (`api.taxopsapp.com`) |
+| Job state | **DynamoDB** + **SQS** (reemplaza el `ThreadPoolExecutor` in-memory original) |
+| Storage | **S3** (documentos de Renta, artefactos de exógenas) |
+| Secretos | **SSM Parameter Store** (SecureString, no Secrets Manager — gratis) |
+| Deploy Frontend | **AWS Amplify Hosting** (`app.taxopsapp.com`) — SSR nativo Next.js 15 |
+| DNS + Registro | **Cloudflare** (registrador + DNS, no Route53 — evita el costo del hosted zone) |
+| IaC | **Terraform** — todo el stack AWS, PR-gated (`infra/`) |
+| CI/CD | **GitHub Actions** — lint + test + build + deploy, OIDC (sin llaves AWS de larga duración) |
 
 ---
 
@@ -82,91 +89,82 @@ graph TD
         U([👤 Usuario])
     end
 
-    subgraph Vercel
-        FE["🌐 Frontend\nNext.js 15.3\ntaxops-app.vercel.app\n\nmiddleware.ts → auth gate\nuseApi hook → Bearer token"]
+    subgraph Cloudflare["Cloudflare — DNS + Registro"]
+        DNS["taxopsapp.com\napp.* → Amplify\napi.* → CloudFront"]
     end
 
-    subgraph GCP["Google Cloud — taxops-497921 (us-central1)"]
-        CR["⚙️ Cloud Run\ntaxops-api\nFastAPI 0.115 + Uvicorn\n2 GB RAM · 1 vCPU · timeout 600s\nscale-to-zero · max-instances 1"]
-        AR["📦 Artifact Registry\nus-central1-docker.pkg.dev\ntaxops-497921/taxops/api\nImagen por SHA de commit"]
-        CR -->|docker pull| AR
+    subgraph Amplify["AWS Amplify Hosting"]
+        FE["🌐 Frontend\nNext.js 15.3 SSR\napp.taxopsapp.com"]
+    end
+
+    subgraph AWS["AWS (us-east-1)"]
+        CF["☁️ CloudFront\napi.taxopsapp.com\nACM cert"]
+        LAPI["⚙️ Lambda API\ntaxops-api-prod\nMangum + FastAPI\n1024MB · timeout 60s"]
+        LWRK["⚙️ Lambda Worker\ntaxops-worker-prod\nOCR/exógenas · timeout 14min"]
+        SQS[("📬 SQS\ntaxops-jobs-prod")]
+        DDB[("🗄️ DynamoDB\ntaxops-jobs-prod\nTTL 48h")]
+        S3[("📦 S3\nrenta-docs · job-artifacts")]
+        SSM["🔐 SSM Parameter Store\nSecureString"]
+        ECR["📦 ECR\ntaxops-api"]
+
+        CF -->|Function URL| LAPI
+        LAPI -->|enqueue| SQS
+        SQS -->|trigger| LWRK
+        LAPI --> DDB
+        LWRK --> DDB
+        LAPI --> S3
+        LWRK --> S3
+        LAPI -.->|env vars| SSM
+        LAPI -.->|docker pull| ECR
+        LWRK -.->|docker pull| ECR
     end
 
     subgraph Neon["Neon Cloud"]
-        DB[("🗄️ PostgreSQL 16\nMulti-tenant\nAlembic migrations\nON CONFLICT DO NOTHING")]
+        DB[("🗄️ PostgreSQL 16\nMulti-tenant\nAlembic migrations")]
     end
 
     subgraph Groq["Groq Cloud"]
         AI["🤖 llama-3.3-70b-versatile\nChatbot contable"]
     end
 
-    U -->|HTTPS| FE
-    FE -->|HTTPS REST| CR
-    CR -->|SQLAlchemy / psycopg2| DB
-    CR -->|API Key| AI
+    U -->|HTTPS| DNS
+    DNS --> FE
+    DNS --> CF
+    FE -->|HTTPS REST| CF
+    LAPI -->|SQLAlchemy| DB
+    LWRK -->|SQLAlchemy| DB
+    LAPI -->|API Key| AI
 ```
 
-### Flujo de autenticación
+### Flujo exógenas/renta — background job vía SQS
 
 ```mermaid
 sequenceDiagram
     actor Browser
-    participant Next as Next.js<br/>vercel.app
-    participant API as FastAPI<br/>Cloud Run
-    participant DB as PostgreSQL<br/>Neon
+    participant API as Lambda API
+    participant S3 as S3
+    participant SQS as SQS
+    participant Worker as Lambda Worker
+    participant DDB as DynamoDB
 
-    Browser->>Next: POST /api/auth/login<br/>{email, password}
-    Next->>API: POST /auth/token
-    API->>DB: SELECT users WHERE email=?
-    DB-->>API: user row + hashed_password
-    API-->>Next: {access_token, refresh_token}
-    Next-->>Browser: Set-Cookie taxops_access_token (httpOnly, 30min)<br/>Set-Cookie taxops_refresh_token (httpOnly, 7d)
+    Browser->>API: POST /renta/documentos<br/>multipart: N archivos
+    API->>S3: upload_to_s3() por archivo (síncrono)
+    API->>SQS: send_message({job_id, s3_keys[]})
+    API->>DDB: put_job(status="processing")
+    API-->>Browser: 200 {job_id}
 
-    note over Browser,API: Requests autenticados
-    Browser->>Next: GET /dashboard
-    Next->>Next: middleware.ts verifica cookie
-    Next->>API: GET /admin/stats<br/>Authorization: Bearer <token>
-    API-->>Browser: 200 OK
-
-    note over Browser,API: Token expirado → refresh automático
-    Browser->>Next: POST /api/auth/session
-    Next->>API: POST /auth/refresh
-    API-->>Browser: nuevo access_token (transparente)
-```
-
-### Flujo exógenas — background job con polling
-
-```mermaid
-sequenceDiagram
-    actor Browser
-    participant API as FastAPI<br/>Cloud Run
-    participant Pool as ThreadPoolExecutor<br/>max_workers=1
-    participant OCR as Tesseract OCR<br/>+ pdfplumber
-    participant FS as /tmp/taxops_jobs/
-
-    Browser->>API: POST /exogenas/process<br/>multipart: 41 archivos PDF
-    API->>Pool: submit(_run_job, job_id, paths)
-    API-->>Browser: 200 {job_id, status: "processing"}
-
-    loop Polling cada 3s
-        Browser->>API: GET /exogenas/status/{job_id}
-        API-->>Browser: {status, progress: N%, current_file}
+    SQS->>Worker: trigger (batch_size=1)
+    loop Por documento
+        Worker->>S3: download_from_s3()
+        Worker->>Worker: OCR (Tesseract) + clasificación
+        Worker->>DDB: update_job(progreso, status)
     end
 
-    Pool->>OCR: extract_many(archivo_1) — timeout 90s
-    OCR-->>Pool: [{nit, base, retencion, concepto...}]
-    Pool->>API: on_progress(i, total, nombre)
-
-    note over Pool,OCR: Repite para cada archivo secuencialmente
-
-    Pool->>FS: Escribe job_id.json (resultado completo)
-    Pool->>API: _jobs[job_id] = {status: "done", result}
-
-    Browser->>API: GET /exogenas/status/{job_id}
-    API-->>Browser: {status: "done", df_1003, df_detalle}
-
-    Browser->>API: POST /exogenas/export<br/>{df_1003, df_detalle}
-    API-->>Browser: taxops_exogenas.xlsx
+    loop Polling cada 3s
+        Browser->>API: GET /renta/jobs/{job_id}
+        API->>DDB: get_job(job_id)
+        API-->>Browser: {status, progreso, resultado}
+    end
 ```
 
 ### Pipeline CI/CD
@@ -176,22 +174,26 @@ graph LR
     DEV([👨‍💻 Developer\ngit push main]) --> GH
 
     subgraph GH["GitHub Actions"]
-        CI["CI\nflake8 + mypy\npytest\nESLint + tsc\nnext build"]
-        DEPLOY["Deploy to Cloud Run\ncheckout → auth GCP\ndocker build\ndocker push\ngcloud run deploy"]
+        CI["CI\nflake8 + pytest\nESLint + tsc\nnext build"]
+        DEPLOY["Deploy to Lambda\ndocker build/push ECR\nalembic upgrade\nupdate-function-code"]
+        TFPLAN["Terraform Plan\n(en PRs que tocan infra/)"]
+        TFAPPLY["Terraform Apply\n(push a main, gate manual)"]
         CI --> DEPLOY
+        TFPLAN --> TFAPPLY
     end
 
-    subgraph GCP["Google Cloud"]
-        AR2["Artifact Registry\napi:SHA"]
-        CR2["Cloud Run\ntaxops-api\nZero-downtime rolling deploy"]
-        DEPLOY -->|docker push| AR2
-        DEPLOY -->|gcloud run deploy| CR2
-        CR2 -->|docker pull| AR2
+    subgraph AWS["AWS"]
+        ECR2["ECR\napi:SHA"]
+        L2["Lambda API + Worker"]
+        DEPLOY -->|push| ECR2
+        DEPLOY -->|update-function-code| L2
+        L2 -->|pull| ECR2
+        TFAPPLY -.->|infra/**| L2
     end
 
     style DEV fill:#f0f0f0,stroke:#666
     style GH fill:#e8f4fd,stroke:#0969da
-    style GCP fill:#e6f4ea,stroke:#34a853
+    style AWS fill:#fff4e6,stroke:#ff9900
 ```
 
 ---
@@ -204,7 +206,7 @@ graph LR
 - Preview calendario DIAN + testimonios
 
 ### 2. Autenticación
-- Login en `/login` con JWT (access + refresh cookie httpOnly)
+- Login en `/login` con JWT (access + refresh cookie httpOnly) + Google OAuth
 - Refresh automático via `/api/auth/session`
 - `useApi` hook maneja Authorization header en todas las llamadas
 
@@ -249,17 +251,21 @@ graph LR
 ### 7. Exógenas Formato 1003 (`/exogenas`)
 - Extracción de certificados de retención (PDF, imagen, Excel, Word)
 - 12+ layouts soportados: SAP bilingüe, Mekano ERP, narrativo, ICA 4-col, Bodega de Moda, Tennis, MEDIFE, PUBLIK MAGIC, SAN JUAN DE DIOS, Multi-concepto tabla…
-- Procesamiento en background (ThreadPoolExecutor) con polling de progreso cada 3s
-- Timeout por archivo (90s) — previene OCR colgado en archivos corruptos
-- Resultado persistido en `/tmp` — sobrevive reinicios menores del contenedor
+- Procesamiento en background vía SQS + Lambda worker (ver diagrama arriba)
+- Resultado persistido en DynamoDB (TTL 48h) — sobrevive cold starts/redeploys
 - Export Excel compatible DIAN
 
-### 8. Chatbot Contable (`/chatbot`)
+### 8. Renta (`/renta`)
+- Documentos soporte con OCR (Tesseract, mismo worker que exógenas)
+- Formulario 210 — motor de liquidación
+- Documentos en S3 (versionado, cifrado SSE)
+
+### 9. Chatbot Contable (`/chatbot`)
 - Groq llama-3.3-70b-versatile
 - Contexto: ET 2026, CST, DIAN, normativa colombiana
 - Tool use: `consultar_iva_mes`, `top_proveedores`, `buscar_factura`
 
-### 9. Admin (`/admin`)
+### 10. Admin (`/admin`)
 - Gestión de usuarios (crear, desactivar, reactivar, eliminar soft-hard)
 - Gestión de grupos con módulos asignados
 - Audit logs con filtros por módulo/acción/email
@@ -332,7 +338,7 @@ cd taxops-web && npm run dev
 
 ## Variables de entorno
 
-### API (`api/.env`)
+### API (`api/.env` local — en AWS se inyectan como env vars de Lambda desde SSM/Terraform)
 
 | Variable | Descripción | Requerida |
 |----------|-------------|-----------|
@@ -340,6 +346,12 @@ cd taxops-web && npm run dev
 | `SECRET_KEY` | Firma JWT — mín. 32 chars aleatorios | ✅ |
 | `GROQ_API_KEY` | API key Groq (`gsk_...`) | ✅ |
 | `ALLOWED_ORIGINS` | CORS origins separados por coma | ✅ |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth Google | No |
+| `API_BASE_URL` | URL pública de la API (redirect Google OAuth) | No (default localhost) |
+| `FRONTEND_URL` | URL pública del frontend (redirect post-login) | No (default localhost) |
+| `JOBS_TABLE_NAME` | Tabla DynamoDB de jobs | Solo en Lambda |
+| `S3_BUCKET_RENTA_DOCS` | Bucket S3 documentos Renta | Solo en Lambda |
+| `SQS_QUEUE_URL` | Cola SQS de jobs | Solo en Lambda |
 | `ALGORITHM` | Algoritmo JWT | No (default: `HS256`) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Vida del access token | No (default: `30`) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Vida del refresh token | No (default: `7`) |
@@ -349,13 +361,14 @@ cd taxops-web && npm run dev
 
 | Variable | Descripción | Valor producción |
 |----------|-------------|-----------------|
-| `NEXT_PUBLIC_API_URL` | URL pública de la API | `https://taxops-api-fh5jvzgf7q-uc.a.run.app` |
+| `NEXT_PUBLIC_API_URL` | URL pública de la API | `https://api.taxopsapp.com` |
+| `INTERNAL_API_URL` | URL que usa el server-side de Next.js para llamar la API | `https://api.taxopsapp.com` |
 
 ---
 
 ## API Reference
 
-Documentación interactiva Swagger: [https://taxops-api-fh5jvzgf7q-uc.a.run.app/docs](https://taxops-api-fh5jvzgf7q-uc.a.run.app/docs)
+Documentación interactiva Swagger: [https://api.taxopsapp.com/docs](https://api.taxopsapp.com/docs)
 
 ### Auth
 
@@ -386,123 +399,67 @@ Documentación interactiva Swagger: [https://taxops-api-fh5jvzgf7q-uc.a.run.app/
 | POST | `/calendario/eventos` | require_superadmin | Agregar evento individual |
 | DELETE | `/calendario/eventos/{id}` | require_superadmin | Eliminar evento |
 
-### Exógenas
+### Renta / Exógenas (background jobs)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/exogenas/process` | Inicia job de extracción → retorna `job_id` inmediatamente |
+| POST | `/renta/documentos` | Sube a S3 + encola en SQS → retorna `job_id` inmediatamente |
+| GET | `/renta/jobs/{job_id}` | Progreso y resultado del job (lee de DynamoDB) |
+| POST | `/exogenas/process` | Inicia job de extracción → retorna `job_id` |
 | GET | `/exogenas/status/{job_id}` | Progreso (`0-100%`) y resultado del job |
 | POST | `/exogenas/export` | Genera Excel Formato 1003 a partir de los datos |
-| GET | `/exogenas/` | Lista exógenas persistidas en DB |
 
 ---
 
-## Despliegue en Google Cloud Run
+## Infraestructura AWS (Terraform)
 
-### GCP APIs habilitadas
-
-Solo se necesitan **dos APIs** en el proyecto `taxops-497921`:
+Todo el stack AWS vive en `infra/`, gestionado 100% por Terraform — **ningún recurso se crea a mano**, salvo el bootstrap del state (`infra/bootstrap/`, con local state, la única excepción documentada).
 
 ```
-run.googleapis.com              — ejecutar el contenedor Cloud Run
-artifactregistry.googleapis.com — almacenar imágenes Docker
+infra/
+├── bootstrap/              # S3 bucket para el state remoto (local state, una sola vez)
+├── environments/prod/      # Root module — wiring de todos los módulos
+└── modules/
+    ├── ecr/                 # Repo de imágenes Docker
+    ├── secrets/             # SSM Parameter Store (SecureString)
+    ├── github-oidc/         # OIDC provider + rol para GitHub Actions (sin llaves)
+    ├── jobs/                # SQS + DynamoDB (estado de jobs largos)
+    ├── storage/             # Buckets S3 (renta docs, job artifacts)
+    ├── lambda-api/          # Lambda API + Worker + IAM + Function URL
+    ├── cdn/                 # CloudFront + ACM + DNS (Cloudflare) para la API
+    ├── amplify/             # Amplify Hosting + dominio propio del frontend
+    └── cost-reminders/      # EventBridge Scheduler + SNS — alertas de free tier
 ```
 
-### Setup inicial (una sola vez)
+**Flujo de cambios (regla de oro, sin excepción):**
 
-**1. Crear proyecto y habilitar APIs**
-```bash
-gcloud projects create taxops-497921 --name="TaxOps"
-gcloud config set project taxops-497921
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com
-```
+1. Rama nueva → cambios en `infra/`
+2. PR → `terraform-plan.yml` corre y comenta el plan en el PR
+3. Merge a `main` → `terraform-apply.yml` se dispara, pero **pausa esperando aprobación manual** (GitHub Environment `production`)
+4. Aprobación → `terraform apply` real
 
-**2. Crear repositorio en Artifact Registry**
-```bash
-gcloud artifacts repositories create taxops \
-  --repository-format=docker \
-  --location=us-central1
-```
+Nunca `terraform apply` manual desde una laptop, salvo el bootstrap inicial.
 
-**3. Crear service account `taxops-deployer` con 3 roles**
-```bash
-SA=taxops-deployer@taxops-497921.iam.gserviceaccount.com
-
-gcloud iam service-accounts create taxops-deployer
-
-gcloud projects add-iam-policy-binding taxops-497921 \
-  --member="serviceAccount:$SA" --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding taxops-497921 \
-  --member="serviceAccount:$SA" --role="roles/artifactregistry.writer"
-
-gcloud iam service-accounts add-iam-policy-binding $SA \
-  --member="serviceAccount:$SA" --role="roles/iam.serviceAccountUser"
-```
-
-**4. Descargar JSON key y configurar GitHub Secrets**
-
-```bash
-gcloud iam service-accounts keys create taxops-key.json --iam-account=$SA
-```
-
-| GitHub Secret | Valor |
-|---------------|-------|
-| `GCP_PROJECT_ID` | `taxops-497921` |
-| `GCP_SA_KEY` | Contenido completo de `taxops-key.json` |
-| `DATABASE_URL` | `postgresql://...` (Neon) |
-| `SECRET_KEY` | Clave JWT (32+ chars) |
-| `GROQ_API_KEY` | `gsk_...` |
-
-### Configuración del servicio Cloud Run
-
-| Parámetro | Valor | Razón |
-|-----------|-------|-------|
-| `--memory 2Gi` | **2 GB RAM** | Tesseract OCR requiere ~500 MB por archivo; necesario para lotes grandes |
-| `--cpu 1` | 1 vCPU | Free tier |
-| `--timeout 600` | 10 min | Procesamiento de lotes de PDFs con OCR |
-| `--max-instances 1` | 1 instancia | Controla costos en free tier |
-| `--allow-unauthenticated` | Sí | JWT se valida en FastAPI, no en Cloud Run |
-| `--region us-central1` | Iowa | Incluido en free tier de Cloud Run |
-
-### Troubleshooting
-
-**Error `Bad syntax for dict arg` en `--set-env-vars`**
-
-Los valores con `:` o `,` (URLs) rompen el parser. Solución: prefijo `^|^` cambia el delimitador de `,` a `|`:
-```bash
---set-env-vars="^|^KEY=val|ALLOWED_ORIGINS=https://app.vercel.app,http://localhost:3000"
-```
-
-**Exógenas stuck en "Procesando... 0%"**
-
-Causas posibles y verificación:
-```bash
-# Ver logs en vivo
-gcloud run services logs tail taxops-api --region us-central1 --project taxops-497921
-```
-
-- **OOM** → aumentar memoria: `gcloud run services update taxops-api --memory 2Gi --region us-central1`
-- **Job colgado** → un archivo corrupto trabó el thread; el timeout de 90s lo resuelve automáticamente en el siguiente intento
+**Principio de costo — "todo gratis, siempre":** cada recurso nuevo se evalúa primero por su capa gratuita (perpetua > 12 meses > pago). Detalle completo de decisiones de costo en el [case study de la migración](docs/MIGRACION-AWS-CASE-STUDY.md).
 
 ---
 
 ## CI/CD Pipeline
 
-Cada `git push` a `main` dispara el workflow completo:
+Cada `git push` a `main` que toca código de app (`api/`, `pipeline/`, `services/`, etc.) dispara `deploy-lambda.yml`:
 
-| Paso | Herramienta | Descripción |
-|------|-------------|-------------|
-| 1 | `actions/checkout@v4` | Clona el repositorio |
-| 2 | `google-github-actions/auth@v2` | Autentica con `GCP_SA_KEY` |
-| 3 | `google-github-actions/setup-gcloud@v2` | Instala `gcloud` CLI |
-| 4 | `gcloud auth configure-docker` | Configura Docker para Artifact Registry |
-| 5 | `docker build` | Construye imagen desde `api/Dockerfile-api` |
-| 6 | `docker push` | Sube imagen tagueada con el SHA del commit |
-| 7 | `gcloud run deploy` | Zero-downtime rolling deploy |
-| 8 | `gcloud run services describe` | Imprime la URL en el Summary del workflow |
+| Paso | Descripción |
+|------|-------------|
+| 1 | Checkout + auth AWS vía OIDC (`aws-actions/configure-aws-credentials`, sin llaves de larga duración) |
+| 2 | `docker build` desde `api/Dockerfile-lambda` (multi-stage, Tesseract embebido) |
+| 3 | `docker push` a ECR, tag = SHA del commit (repo `IMMUTABLE`) |
+| 4 | `alembic upgrade head` como paso de CI separado (no al arrancar Lambda — evita condición de carrera bajo cold-start) |
+| 5 | `aws lambda update-function-code` para `taxops-api-prod` y `taxops-worker-prod` |
+| 6 | Smoke test: `curl` a `/health`, verifica `"status":"ok"` |
 
-**Importante:** el parámetro `--memory 2Gi` en el workflow sobreescribe cualquier cambio manual en la consola GCP. No cambiar la memoria desde la consola — editar el workflow.
+El frontend (`taxops-web/`) se despliega automáticamente vía el webhook nativo de GitHub que Amplify configura al conectar el repo — push a `main` dispara un build de Amplify sin workflow propio.
+
+Cambios en `infra/**` van por el flujo de Terraform descrito arriba (`terraform-plan.yml` / `terraform-apply.yml`), separado del deploy de código — `lifecycle.ignore_changes = [image_uri]` en los recursos Lambda evita que ambos flujos se pisen.
 
 ---
 
@@ -512,16 +469,22 @@ Cada `git push` a `main` dispara el workflow completo:
 TaxOps-11/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                    # Lint + tests (Python + Next.js)
-│       └── deploy-cloud-run.yml      # Build → Artifact Registry → Cloud Run
+│       ├── ci.yml                    # Lint + tests (Python + Next.js) — gatea PRs
+│       ├── deploy-lambda.yml         # Build → ECR → Lambda (API + Worker)
+│       ├── terraform-plan.yml        # Comenta el plan en PRs que tocan infra/
+│       └── terraform-apply.yml       # Apply con gate manual (push a main)
+│
+├── infra/                            # Terraform — ver sección de arriba
 │
 ├── api/                              # FastAPI backend
-│   ├── Dockerfile-api                # Build desde raíz del repo (no api/)
-│   ├── main.py                       # App entry point: CORS, routers, Alembic
+│   ├── Dockerfile-lambda             # Imagen Lambda (Amazon Linux + Tesseract embebido)
+│   ├── Dockerfile-api                # Legacy (Cloud Run) — histórico
+│   ├── main.py                       # App entry point: CORS, routers, Mangum handler
+│   ├── worker_handler.py             # Entry point del Lambda worker (SQS trigger)
 │   ├── requirements-api.txt
 │   ├── .env.example
-│   ├── alembic/                      # Migraciones DB (corre automático al iniciar)
-│   ├── core/                         # config.py, security.py
+│   ├── alembic/                      # Migraciones DB (corren en CI, no al arrancar)
+│   ├── core/                         # config.py, security.py, job_store.py (DynamoDB)
 │   ├── data/
 │   │   └── calendario_2026.json      # 31 eventos DIAN (fuente de verdad)
 │   └── routers/
@@ -529,11 +492,13 @@ TaxOps-11/
 │       ├── admin.py
 │       ├── nomina.py
 │       ├── facturas.py
-│       ├── exogenas.py               # Background jobs + persistencia /tmp
+│       ├── exogenas.py
+│       ├── renta_documentos.py       # Upload S3 + encolado SQS
 │       ├── chatbot.py
 │       └── calendario.py
 │
 ├── taxops-web/                       # Next.js 15.3 frontend
+│   ├── eslint.config.mjs             # Flat config, next/core-web-vitals + typescript
 │   ├── middleware.ts                 # Auth gate JWT (protege rutas /dashboard /*)
 │   ├── app/
 │   │   ├── page.tsx                  # Landing pública
@@ -544,6 +509,7 @@ TaxOps-11/
 │   │       ├── nomina/
 │   │       ├── calendario/
 │   │       ├── facturas/
+│   │       ├── renta/
 │   │       ├── exogenas/
 │   │       ├── chatbot/
 │   │       ├── admin/
@@ -563,25 +529,34 @@ TaxOps-11/
 │
 ├── services/
 │   ├── processor.py                 # Orquestación pipeline facturas
-│   ├── processor_exogenas.py        # Orquestación pipeline exógenas + timeout 90s
+│   ├── processor_exogenas.py        # Orquestación pipeline exógenas
 │   ├── chatbot.py                   # Multi-provider (Groq/OpenAI/Anthropic/Google)
-│   └── nomina.py                    # Cálculos CST 2026
+│   ├── nomina.py                    # Cálculos CST 2026
+│   └── renta/                       # Formulario 210, OCR agent, tax engine, storage S3
 │
 ├── db/
 │   ├── init.sql                     # Schema multi-tenant completo
 │   └── database.py                  # Capa SQLAlchemy — degraded mode si no hay DB
 │
 ├── docs/
-│   └── GCP_MONITORING.md            # Guía de monitoreo Google Cloud
+│   ├── MIGRACION-AWS-CASE-STUDY.md  # Case study de portafolio — migración GCP→AWS
+│   ├── MIGRACION-AWS-DISCOVERY.md   # Discovery inicial
+│   ├── AWS-ACCOUNT-SETUP-GUIDE.md   # Setup de cuenta AWS (seguridad, billing)
+│   ├── CI-CD-GITOPS-GUIDE.md        # Roadmap de madurez del pipeline
+│   ├── DIRENV-AWS-PROFILE.md        # Aislamiento de credenciales vía direnv
+│   ├── superpowers/plans/           # Plan ejecutable de la migración (8 chunks)
+│   └── GCP_MONITORING.md            # Histórico — arquitectura ya no vigente
 │
 ├── manage.py                        # CLI operator: init-db, create-org
 ├── Home.py                          # Streamlit UI (legacy local)
 ├── requirements.txt                 # Dependencias Streamlit
-└── tests/                           # 150+ tests
+└── tests/                           # 170+ tests
     ├── test_extractor.py            # 44 tests
     ├── test_validator.py            # 19 tests
     ├── test_prorateo.py             # 12 tests
     ├── test_chatbot.py              # 11 tests
+    ├── test_worker_handler.py       # Lambda worker (moto-mocked SQS/S3)
+    ├── test_job_store.py            # DynamoDB (moto-mocked)
     ├── test_e2e.py                  # 32 tests (requieren PDFs reales)
     └── ...
 ```
@@ -608,7 +583,7 @@ python -m pytest --cov=. --cov-report=term-missing
 
 ### ✅ v1.0 — Implementado
 
-- [x] Autenticación JWT multi-tenant (login/logout/refresh/cookies httpOnly)
+- [x] Autenticación JWT multi-tenant (login/logout/refresh/cookies httpOnly) + Google OAuth
 - [x] Dashboard con KPIs y quick actions
 - [x] Nómina mensual CST 2026 (parafiscales, HE, exoneración SENA/ICBF)
 - [x] Liquidación definitiva (cesantías, prima, vacaciones, indemnización)
@@ -618,20 +593,21 @@ python -m pytest --cov=. --cov-report=term-missing
 - [x] Notification bell con alertas 30 días
 - [x] Chatbot IA (Groq) embebible por módulo
 - [x] Facturas DIAN PDF/XML (extracción, validación, prorrateo, deduplicación)
-- [x] Exógenas Formato 1003 (12+ layouts, background job con polling)
+- [x] Exógenas Formato 1003 (12+ layouts, background job vía SQS)
+- [x] Renta — Formulario 210, OCR de documentos soporte
 - [x] Admin panel (usuarios, grupos, audit logs)
-- [x] Migración a **Google Cloud Run** (2 GB RAM, scale-to-zero, deploy automático)
-- [x] CI/CD GitHub Actions → Artifact Registry → Cloud Run (zero-downtime)
-- [x] Timeout 90s por archivo en OCR — previene cuelgues en archivos corruptos
-- [x] Persistencia de resultados en `/tmp` — sobrevive reinicios menores
+- [x] **Migración completa GCP→AWS**: Lambda (API+Worker) · CloudFront+ACM · SQS+DynamoDB · S3 · Amplify Hosting · Cloudflare DNS — 100% Terraform, PR-gated
+- [x] CI/CD GitHub Actions → ECR → Lambda (zero llaves de larga duración, OIDC)
+- [x] flake8/ESLint configurados y en verde en CI (deuda de estilo preexistente resuelta)
 
 ### 🚧 v1.1 — Próximo
 
+- [ ] Decomisión completa de Vercel (soak period de Amplify en curso)
 - [ ] Rate limiting por organización
 - [ ] Invitaciones por email (hoy el owner crea usuarios directamente)
 - [ ] Permisos por grupo (módulos bloqueados en frontend según grupo asignado)
 - [ ] Script auto-update calendario DIAN (parsear PDF DIAN anual → JSON)
-- [ ] Fixes extractor exógenas (5 layouts pendientes — ver `CLAUDE.md`)
+- [ ] Acotar el rol OIDC de GitHub Actions (hoy `AdministratorAccess`, deuda técnica documentada)
 
 ### 🔮 v2.0 — Futuro
 
@@ -639,6 +615,7 @@ python -m pytest --cov=. --cov-report=term-missing
 - [ ] ZIP batch upload de facturas
 - [ ] Integración ERP (SIIGO / Helisa)
 - [ ] App móvil (React Native / Expo)
+- [ ] Agentes con AWS Bedrock (en evaluación)
 
 ---
 
