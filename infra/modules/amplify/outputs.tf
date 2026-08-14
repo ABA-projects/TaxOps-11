@@ -6,3 +6,8 @@ output "default_domain" {
 output "app_id" {
   value = aws_amplify_app.web.id
 }
+
+output "custom_domain" {
+  value       = "https://${var.app_subdomain}.${var.domain_name}"
+  description = "Dominio propio del frontend — verificación DNS puede tardar hasta 48h (nota oficial de AWS para dominios de terceros como Cloudflare)"
+}

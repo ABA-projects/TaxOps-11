@@ -14,3 +14,14 @@ variable "api_domain" {
   description = "module.cdn.api_domain — para NEXT_PUBLIC_API_URL en el build de Amplify"
   type        = string
 }
+
+variable "domain_name" {
+  description = "Dominio raíz en Cloudflare (ej. taxopsapp.com) — el frontend cuelga de app.<domain_name>"
+  type        = string
+}
+
+variable "app_subdomain" {
+  description = "Subdominio del frontend (ej. app → app.taxopsapp.com)"
+  type        = string
+  default     = "app"
+}
