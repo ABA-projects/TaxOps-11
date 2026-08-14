@@ -63,8 +63,8 @@ Nuevo `taxops-web/lib/directUpload.ts`: recibe `File[]` + contexto, llama a `/up
 
 ### 3. Facturas (`POST /invoices/process`)
 
-- Cambia el body de `files: UploadFile` a `s3_keys: list[str]`
-- Descarga cada archivo de S3 dentro de la Lambda. `services/renta/storage.download_from_s3` hace exactamente esto pero vive namespaced bajo `renta/` — se reutiliza tal cual vía import cruzado (aceptado a propósito, no vale la pena mover/renombrar un módulo de 3 funciones por esto), no se relocaliza a un paquete compartido
+- Cambia el body de `files: UploadFile` a `s3_keys: list[str]` — el request deja de ser `multipart/form-data` y pasa a JSON puro; `ingresos_json` (hoy un `Form(...)` junto a `files`) se mueve a un campo normal del mismo body JSON (`ingresos: list[...]`, ya no un string a parsear con `json.loads`, el parseo lo hace FastAPI/Pydantic directo)
+- Descarga cada archivo de S3 dentro de la Lambda. **Corrección tras spec review:** `services/renta/storage.download_from_s3` NO sirve tal cual — está hardcodeado a `Bucket=settings.S3_BUCKET_RENTA_DOCS` (`taxops-renta-docs-prod`), sin parámetro de bucket, y el presign (§1) siempre firma contra `taxops-job-artifacts-prod` (bucket distinto). Reusarlo sin modificar apuntaría al bucket equivocado y fallaría en cada request. En vez de forzar una abstracción compartida para una operación de 3 líneas, Facturas hace su propio `boto3.client("s3").get_object(Bucket=settings.S3_BUCKET_JOB_ARTIFACTS, Key=s3_key)` inline — no se toca `services/renta/storage.py` (cero riesgo de regresión en Renta, que ya funciona)
 - **Sin cambio de UX** — sigue respondiendo el resultado completo en la misma llamada (rápido, sin OCR pesado, no hay riesgo real de timeout de 60s)
 
 ### 4. Exógenas — migración completa a async
@@ -72,18 +72,26 @@ Nuevo `taxops-web/lib/directUpload.ts`: recibe `File[]` + contexto, llama a `/up
 - `POST /exogenas/process`: recibe `s3_keys`, crea job en DynamoDB (`core.job_store.put_job`, mismo store que ya usa Renta), manda un mensaje a la SQS existente (`taxops-jobs-prod`) con `{"tipo": "exogenas", "job_id", "org_id", "s3_keys": [...]}`, responde `{job_id}` de inmediato
 - `GET /exogenas/jobs/{job_id}` (nuevo — reemplaza el endpoint SSE real, que es `GET /exogenas/stream/{job_id}`, **corrección tras spec review**: el spec original decía por error `/exogenas/status/{job_id}`, que no existe en el código actual): lee de DynamoDB vía `job_store.get_job`. Cuando `status == "done"`, además descarga el resultado completo desde S3 (ver punto de `df_detalle`/`df_1003` más abajo) y lo devuelve embebido en la misma respuesta — mismo contrato que consumía el frontend desde el payload `"done"` del SSE, solo que ahora llega por polling en vez de streaming
 - **Corrección tras spec review — `worker_handler.py` NO despacha por tipo hoy.** `handler()` llama `_process_batch(body)` sin condicional alguno para cada mensaje SQS, y el mensaje que arma `renta_documentos.py` no tiene ninguna clave `"tipo"`. Este spec introduce el dispatch por primera vez: `tipo = body.get("tipo", "renta")` (default `"renta"` preserva compatibilidad con mensajes ya en vuelo/existentes, sin tener que tocar `renta_documentos.py`), luego `if tipo == "renta": _process_renta_batch(body) elif tipo == "exogenas": _process_exogenas_batch(body)`. La lógica de Renta que hoy vive inline en `_process_batch` se renombra a `_process_renta_batch` sin cambiar su comportamiento.
-- **Nuevo:** `services/exogenas/job_processor.py` (mirror de `services/renta/job_processor.py` — mismo patrón de boundary ya establecido en el proyecto) contiene `_process_exogenas_batch`: descarga cada `s3_key`, corre la extracción (la misma lógica que hoy vive en `extract_one.py`, invocada directo — ya no hace falta el subprocess aislado porque el worker Lambda ya es su propio proceso, no compite con la API), agrega resultados (`df_1003`, `df_detalle`), sube el resultado combinado como JSON a S3 (`job-artifacts/results/exogenas/{job_id}.json`), y actualiza el job en DynamoDB con `{"status": "done", "result_s3_key": "..."}` — **nunca el resultado completo directo en el item de DynamoDB** (ver siguiente punto)
+- **Nuevo:** `services/exogenas/job_processor.py` (mirror de `services/renta/job_processor.py` — mismo patrón de boundary ya establecido en el proyecto) contiene `_process_exogenas_batch`: descarga cada `s3_key`, corre la extracción (la lógica reutilizable real es `exogenas.extractor.extract_many` — **corrección tras spec review**: `extract_one.py` es solo el wrapper CLI de subprocess que se elimina, no la lógica en sí, invocada directo ahora — ya no hace falta el subprocess aislado porque el worker Lambda ya es su propio proceso, no compite con la API), agrega resultados (`df_1003`, `df_detalle`), sube el resultado combinado como JSON a S3 bajo `uploads/results/exogenas/{job_id}.json` (**corrección tras spec review**: debe vivir bajo el prefijo `uploads/` para heredar el lifecycle de 3 días de §6 — la ruta original `job-artifacts/results/exogenas/...` en una versión previa de este spec no calzaba con esa regla y hubiera quedado bajo el lifecycle de 30 días por error), y actualiza el job en DynamoDB con `{"status": "done", "result_s3_key": "..."}` — **nunca el resultado completo directo en el item de DynamoDB** (ver siguiente punto)
 - Se elimina: el streaming SSE (`StreamingResponse` en `/exogenas/stream/{job_id}`), el subprocess aislado, y el dict `_pending` module-level
 
 ### 4.1. Dónde vive `df_detalle`/`df_1003` tras el job — hueco encontrado en spec review
 
 Hoy, `POST /exogenas/export` recibe `df_1003` **y** `df_detalle` directo del frontend, que los tenía en memoria desde el payload `"done"` del SSE — `df_detalle` nunca se persiste en DB (solo `df_1003` vía `insert_exogenas_batch`). Con polling ya no hay ese payload disponible en el mismo request/response.
 
-**Decisión:** el worker sube el resultado combinado (`{"df_1003": [...], "df_detalle": [...]}`) como un único JSON a S3 bajo el mismo prefijo `uploads/` (mismo lifecycle de 3 días — es dato derivado temporal, no el documento fuente). El job en DynamoDB solo guarda la referencia (`result_s3_key`), evitando el límite de 400KB por item de DynamoDB — justo el caso (lotes grandes, 41+ archivos) que motivó este spec. `GET /exogenas/jobs/{job_id}` descarga y embebe ese JSON en la respuesta cuando el job está `done` (mismo patrón "proxy vía API" que ya usa `renta_documentos.preview_documento` para servir contenido de S3 sin exponer URLs firmadas de lectura al frontend). El frontend sigue llamando `/exogenas/export` exactamente igual que hoy, sin cambios en ese endpoint.
+**Decisión:** el worker sube el resultado combinado (`{"df_1003": [...], "df_detalle": [...]}`) como un único JSON a S3 bajo `uploads/results/exogenas/{job_id}.json` (mismo prefijo `uploads/` → mismo lifecycle de 3 días — es dato derivado temporal, no el documento fuente). El job en DynamoDB solo guarda la referencia (`result_s3_key`), evitando el límite de 400KB por item de DynamoDB — justo el caso (lotes grandes, 41+ archivos) que motivó este spec. `GET /exogenas/jobs/{job_id}` descarga y embebe ese JSON en la respuesta cuando el job está `done` (mismo patrón "proxy vía API" que ya usa `renta_documentos.preview_documento` para servir contenido de S3 sin exponer URLs firmadas de lectura al frontend). El frontend sigue llamando `/exogenas/export` exactamente igual que hoy, sin cambios en ese endpoint.
 
 ### 5. Frontend de Exógenas
 
 - Cambia de consumir `EventSource` (SSE) a: subir vía `directUpload.ts` → llamar `/exogenas/process` con los `s3_keys` → polling cada 3s contra `/exogenas/jobs/{job_id}` — mismo patrón visual/UX que ya usa la página de Renta (barra de progreso, lista de completados/pendientes)
+
+### 5.1. Config/env var faltante — encontrado en spec review
+
+Ni `api/core/config.py` (`Settings` solo tiene `S3_BUCKET_RENTA_DOCS`) ni `local.lambda_env` en `infra/modules/lambda-api/main.tf` (compartido entre API y worker, confirmado en `worker.tf`) exponen el nombre del bucket `job-artifacts` como env var — aunque el rol IAM ya tiene permiso sobre ambos buckets (`s3_bucket_arns`). El endpoint de presign (§1), Facturas (§3) y el nuevo `job_processor.py` de Exógenas (§4) necesitan este nombre.
+
+**Se agrega:**
+- `Settings.S3_BUCKET_JOB_ARTIFACTS: str` en `api/core/config.py`, mismo patrón que `S3_BUCKET_RENTA_DOCS`
+- `S3_BUCKET_JOB_ARTIFACTS = var.s3_bucket_job_artifacts` en `local.lambda_env` (`infra/modules/lambda-api/main.tf`), nueva variable del módulo, wireada desde `module.storage.job_artifacts_bucket` en el root — mismo patrón que ya existe para `s3_bucket_renta_docs`
 
 ### 6. Terraform — lifecycle rule + CORS (nuevo, encontrado en spec review)
 
@@ -110,14 +118,18 @@ resource "aws_s3_bucket_cors_configuration" "job_artifacts" {
 
   cors_rule {
     allowed_methods = ["PUT"]
-    allowed_origins = ["https://app.taxopsapp.com", "https://taxops-app.vercel.app", "http://localhost:3000"]
+    allowed_origins = ["https://app.taxopsapp.com", "http://localhost:3000"]
     allowed_headers = ["*"]
     max_age_seconds = 3000
   }
 }
 ```
 
-Los mismos 3 orígenes que ya están en `ALLOWED_ORIGINS` de la Lambda (Chunk 6) — mantener sincronizados si alguno cambia (ej. al decomisionar Vercel en el Chunk 8, quitar ese origin de ambos lugares).
+**Corrección tras spec review — NO copiar `ALLOWED_ORIGINS` de la Lambda tal cual.** El valor real de `ALLOWED_ORIGINS` hoy (`infra/environments/prod/main.tf`, `local.allowed_origins`) es `"https://taxops-app.vercel.app,https://main.d2mechz6r82w9f.amplifyapp.com,http://localhost:3000"` — todavía apunta al dominio *default* de Amplify, no a `app.taxopsapp.com` (quedó así desde antes de que existiera el dominio propio del frontend, Chunk 6 tardío). Ese es un gap preexistente, independiente de este spec.
+
+Lo que sí importa acá: el CORS de S3 lo evalúa el **navegador real del usuario**, que carga `app.taxopsapp.com` (el dominio real, confirmado funcionando en producción) — no tiene sentido copiar un valor que ya está desactualizado. Se usa el dominio real directamente.
+
+**Relacionado, no bloqueante pero barato de arreglar en el mismo PR:** ya que se está tocando esta parte de la infra, actualizar también `local.allowed_origins` en `infra/environments/prod/main.tf` para reemplazar el dominio default de Amplify por `app.taxopsapp.com` — un cambio de una línea, cierra el gap preexistente de paso.
 
 ## Manejo de errores
 
