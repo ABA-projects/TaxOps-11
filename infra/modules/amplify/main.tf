@@ -48,6 +48,11 @@ resource "aws_amplify_app" "web" {
   environment_variables = {
     NEXT_PUBLIC_API_URL = var.api_domain
     INTERNAL_API_URL    = var.api_domain
+    # Necesaria pese a que build_spec ya declara appRoot: taxops-web — el paso de
+    # detección de framework corre ANTES del build_spec custom y necesita esto para
+    # encontrar el package.json (confirmado con un build real: "Cannot read 'next'
+    # version in package.json" sin esta env var).
+    AMPLIFY_MONOREPO_APP_ROOT = "taxops-web"
   }
 
   lifecycle {
