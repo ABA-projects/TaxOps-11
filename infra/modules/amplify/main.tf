@@ -111,18 +111,19 @@ resource "cloudflare_dns_record" "app_cert_validation" {
 }
 
 # sub_domain es un set (no list) — no se puede indexar con [0], se extrae con un for.
+# dns_record viene en el MISMO formato "name CNAME value" que certificate_verification_
+# dns_record — confirmado con un apply real: la doc de AWS para Cloudflare describe lo que
+# muestra la CONSOLA (name y target ya separados), no el shape real del campo de la API/
+# Terraform, que sí trae ambos juntos en un solo string. Se parsea igual con split.
 locals {
   app_sub_domain_dns_record = [for sd in aws_amplify_domain_association.app.sub_domain : sd.dns_record if sd.prefix == var.app_subdomain][0]
 }
 
-# sub_domain[*].dns_record es directo el target (ej. "xxxx.cloudfront.net"), no un string
-# "name CNAME value" como el de arriba — confirmado contra la doc oficial de AWS para
-# Cloudflare (to-add-a-custom-domain-managed-by-cloudflare.html).
 resource "cloudflare_dns_record" "app" {
   zone_id = local.zone_id
   name    = "${var.app_subdomain}.${var.domain_name}"
   type    = "CNAME"
-  content = local.app_sub_domain_dns_record
+  content = trimsuffix(split(" CNAME ", local.app_sub_domain_dns_record)[1], ".")
   ttl     = 300
   proxied = false # ídem — mantener DNS-only también para el registro final, no solo el de validación (mismo motivo)
 }
