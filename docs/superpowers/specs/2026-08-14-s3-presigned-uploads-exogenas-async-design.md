@@ -15,9 +15,9 @@ Frontend                    API Lambda                  S3              SQS/Work
    │                            │                         │                     │
    │─POST /uploads/presign─────>│                         │                     │
    │  {contexto, archivos[]}    │                         │                     │
-   │<──N presigned PUT URLs─────│                         │                     │
+   │<──N presigned POST policies─│                         │                     │
    │                            │                         │                     │
-   │──────PUT (bytes) directo a S3, uno por archivo───────>│                     │
+   │────POST multipart (bytes) directo a S3, uno por archivo──>│                     │
    │                            │                         │                     │
    │─POST /{modulo}/process─────>│                         │                     │
    │  {s3_keys[]}               │──(Facturas: lee S3,     │                     │
@@ -55,7 +55,7 @@ Frontend                    API Lambda                  S3              SQS/Work
 
   **Fix:** se usa `generate_presigned_post` (no `generate_presigned_url`) con una condición `["content-length-range", 0, max_bytes]` en la policy — S3 rechaza el upload en el momento (`400 EntityTooLarge`) si excede el límite, exigido por el servicio mismo, no por confianza en el cliente. Esto cambia el mecanismo de subida de un `PUT` simple a un POST `multipart/form-data` con los campos firmados que devuelve la policy — el progreso de subida (`XMLHttpRequest.upload.onprogress`) se sigue pudiendo trackear igual, no se pierde nada de UX por el cambio.
 - `max_bytes` por `contexto`: se define un límite explícito nuevo para Facturas y Exógenas (no existía ninguno hoy) — mismo valor que ya usa Renta, **20MB por archivo**, por consistencia entre los 3 módulos salvo que se decida diferenciar más adelante
-- Valida tipo permitido según `contexto` (lista específica por módulo — reusar el `_ALLOWED` set que ya existe en `exogenas.py`, y definir uno equivalente para Facturas si no existe todavía)
+- Valida tipo permitido según `contexto` (lista específica por módulo — reusar el `_ALLOWED` set que ya existe en `exogenas.py`; hoy es una variable local dentro de `process_exogenas()`, no una constante a nivel de módulo — hay que subirla de nivel para poder importarla desde `uploads.py` sin duplicarla. Definir un set equivalente para Facturas si no existe todavía)
 - Policy con expiración de 5 minutos
 - `s3_key` incluye `org_id` del usuario autenticado (aislamiento multi-tenant) y un `uuid` para evitar colisiones de nombre
 - Vive en un nuevo router `api/routers/uploads.py`, usa boto3 `generate_presigned_post` sobre `taxops-job-artifacts-prod` — sin llamada a AWS al generar la policy, sin costo
@@ -119,14 +119,14 @@ La regla existente (`expire-old-exports`, 30 días, sin filtro de prefijo) tambi
 
 Storage class: **Standard** (no IA/One Zone-IA — para objetos que se borran en días, esos tiers salen más caros por el cargo mínimo de 30 días de storage).
 
-**CORS — bloqueante, faltaba en la versión original del spec.** El `PUT` directo desde el navegador a S3 no funciona sin una configuración CORS en el bucket (el preflight `OPTIONS` falla si no está). Nuevo recurso:
+**CORS — bloqueante, faltaba en la versión original del spec.** El POST `multipart/form-data` directo desde el navegador a S3 (`generate_presigned_post`, §1/§2) no funciona sin una configuración CORS en el bucket (el preflight `OPTIONS` falla si no está). Nuevo recurso:
 
 ```hcl
 resource "aws_s3_bucket_cors_configuration" "job_artifacts" {
   bucket = aws_s3_bucket.job_artifacts.id
 
   cors_rule {
-    allowed_methods = ["PUT"]
+    allowed_methods = ["POST"] # generate_presigned_post (§1) — NO "PUT", el mecanismo de subida es multipart/form-data, no un PUT simple
     allowed_origins = ["https://app.taxopsapp.com", "http://localhost:3000"]
     allowed_headers = ["*"]
     max_age_seconds = 3000
@@ -142,7 +142,7 @@ Lo que sí importa acá: el CORS de S3 lo evalúa el **navegador real del usuari
 
 ## Manejo de errores
 
-- **Falla un `PUT` a S3** (red, etc.): se marca ese archivo específico como fallido en el frontend; el usuario puede reintentar solo ese archivo antes de llamar a `/process`. No se bloquea el resto del lote.
+- **Falla el POST a S3** (red, `EntityTooLarge` por exceder `content-length-range`, etc.): se marca ese archivo específico como fallido en el frontend; el usuario puede reintentar solo ese archivo antes de llamar a `/process`. No se bloquea el resto del lote.
 - **Falla `/uploads/presign` para algún archivo** (tipo no permitido): esa entrada se excluye de la respuesta con un motivo; el resto de archivos válidos sigue.
 - **Facturas — falla la descarga de S3 al procesar:** intención es preservar el comportamiento actual del módulo (error reportado por archivo, no aborta el lote completo). **Pregunta abierta, no confirmada todavía** — verificar contra `services/processor.py` durante la implementación antes de asumir que ya funciona así; si no es el caso, ajustar en el mismo PR en vez de heredar el comportamiento incorrecto.
 - **Exógenas — falla un documento en el worker:** mismo manejo que ya tiene Renta (el job registra el error de ese documento específico, el worker sigue con el resto, no se cae la invocación completa).
