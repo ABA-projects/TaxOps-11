@@ -71,3 +71,58 @@ resource "aws_amplify_branch" "main" {
 # Amplify crea el webhook de GitHub automáticamente al conectar el repo (usa el
 # access_token de arriba una sola vez, en la creación) — no hace falta un
 # aws_amplify_webhook aparte para auto-deploy en push a main.
+
+# Dominio propio para el frontend (app.taxopsapp.com) — mismo patrón que module.cdn para
+# la API: Cloudflare como DNS, certificado gestionado por Amplify (no ACM directo, a
+# diferencia de CloudFront).
+data "cloudflare_zones" "main" {
+  name = var.domain_name
+}
+
+locals {
+  zone_id = data.cloudflare_zones.main.result[0].id
+}
+
+# wait_for_verification = false a propósito — este recurso, a diferencia de
+# aws_acm_certificate/aws_acm_certificate_validation (2 recursos separados en module.cdn),
+# bundlea la creación Y la espera de verificación en uno solo. Con wait_for_verification
+# = true, Terraform esperaría a que el dominio verifique ANTES de crear los registros DNS
+# de abajo (que son justo lo que hace falta para que verifique) — deadlock. La
+# verificación real ocurre async en AWS después del apply, no bloquea nada acá.
+resource "aws_amplify_domain_association" "app" {
+  app_id                = aws_amplify_app.web.id
+  domain_name           = var.domain_name
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.main.branch_name
+    prefix      = var.app_subdomain
+  }
+}
+
+# certificate_verification_dns_record viene como "name CNAME value" en un solo string.
+resource "cloudflare_dns_record" "app_cert_validation" {
+  zone_id = local.zone_id
+  name    = trimsuffix(split(" CNAME ", aws_amplify_domain_association.app.certificate_verification_dns_record)[0], ".")
+  type    = "CNAME"
+  content = trimsuffix(split(" CNAME ", aws_amplify_domain_association.app.certificate_verification_dns_record)[1], ".")
+  ttl     = 300
+  proxied = false # obligatorio DNS-only — Amplify necesita leer este valor directo para renovar el cert automáticamente
+}
+
+# sub_domain es un set (no list) — no se puede indexar con [0], se extrae con un for.
+locals {
+  app_sub_domain_dns_record = [for sd in aws_amplify_domain_association.app.sub_domain : sd.dns_record if sd.prefix == var.app_subdomain][0]
+}
+
+# sub_domain[*].dns_record es directo el target (ej. "xxxx.cloudfront.net"), no un string
+# "name CNAME value" como el de arriba — confirmado contra la doc oficial de AWS para
+# Cloudflare (to-add-a-custom-domain-managed-by-cloudflare.html).
+resource "cloudflare_dns_record" "app" {
+  zone_id = local.zone_id
+  name    = "${var.app_subdomain}.${var.domain_name}"
+  type    = "CNAME"
+  content = local.app_sub_domain_dns_record
+  ttl     = 300
+  proxied = false # ídem — mantener DNS-only también para el registro final, no solo el de validación (mismo motivo)
+}

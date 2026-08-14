@@ -58,6 +58,7 @@ module "amplify" {
   source              = "../../modules/amplify"
   github_access_token = var.github_access_token
   api_domain          = module.cdn.api_domain
+  domain_name         = local.cdn_domain_name
 }
 
 module "cost_reminders" {
@@ -111,4 +112,9 @@ output "github_actions_role_arn" {
 output "amplify_default_domain" {
   value       = module.amplify.default_domain
   description = "URL de Amplify antes de tener dominio propio (Chunk 5 solo cubrió api.taxopsapp.com, no el frontend)"
+}
+
+output "amplify_custom_domain" {
+  value       = module.amplify.custom_domain
+  description = "Dominio propio del frontend — verificación DNS puede tardar hasta 48h"
 }
