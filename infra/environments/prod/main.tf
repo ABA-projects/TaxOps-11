@@ -19,12 +19,18 @@ module "storage" {
   source = "../../modules/storage"
 }
 
-# String estático (no depende de ningún recurso) — permite pasarlo a module.lambda_api
-# sin crear un ciclo con module.cdn, que sí depende de lambda_api.function_url.
+# Estáticos (no dependen de ningún recurso) — permiten pasarlos a module.lambda_api sin
+# crear un ciclo con module.cdn/module.amplify, que sí dependen de lambda_api (function_url
+# y, transitivamente, api_domain). amplify_default_domain no se puede derivar de
+# module.amplify.default_domain por la misma razón — se hardcodea el ID real ya creado
+# (d2mechz6r82w9f, ver output amplify_default_domain de un apply anterior). Si el app de
+# Amplify se recrea alguna vez, actualizar este valor a mano.
 locals {
-  cdn_domain_name   = "taxopsapp.com"
-  cdn_api_subdomain = "api"
-  api_base_url      = "https://${local.cdn_api_subdomain}.${local.cdn_domain_name}"
+  cdn_domain_name        = "taxopsapp.com"
+  cdn_api_subdomain      = "api"
+  api_base_url           = "https://${local.cdn_api_subdomain}.${local.cdn_domain_name}"
+  amplify_default_domain = "https://main.d2mechz6r82w9f.amplifyapp.com"
+  allowed_origins        = "https://taxops-app.vercel.app,${local.amplify_default_domain},http://localhost:3000"
 }
 
 module "lambda_api" {
@@ -38,6 +44,7 @@ module "lambda_api" {
   jobs_table_name      = module.jobs.table_name
   s3_bucket_renta_docs = module.storage.renta_docs_bucket
   api_base_url         = local.api_base_url
+  allowed_origins      = local.allowed_origins
 }
 
 module "cdn" {
