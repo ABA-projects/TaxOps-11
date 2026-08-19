@@ -21,6 +21,13 @@ from schemas import ExportExogenasRequest
 
 router = APIRouter(prefix="/exogenas", tags=["Exógenas"])
 
+# Extensiones permitidas para certificados de retención.
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".docx", ".doc",
+    ".xlsx", ".xls",
+    ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp",
+}
+
 # Temporary store: job_id → (paths, org_id, tmpdir)
 _pending: dict[str, tuple[list[Path], str, str]] = {}
 

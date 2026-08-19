@@ -34,6 +34,7 @@ from routers import (  # noqa: E402
     nomina,
     renta,
     renta_documentos,
+    uploads,
 )
 
 settings = get_settings()
@@ -93,6 +94,7 @@ app.include_router(nomina.router)
 app.include_router(calendario.router)
 app.include_router(renta.router)
 app.include_router(renta_documentos.router)
+app.include_router(uploads.router)
 
 
 @app.get("/health", tags=["Health"])

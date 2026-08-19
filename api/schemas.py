@@ -199,6 +199,35 @@ class ExportExogenasRequest(BaseModel):
     df_1003: list[dict[str, Any]]
 
 
+# ── Uploads (presigned S3) ────────────────────────────────────────────────────
+
+class PresignFileRequest(BaseModel):
+    filename: str
+    content_type: str
+
+
+class PresignRequest(BaseModel):
+    contexto: str  # "facturas" | "exogenas"
+    archivos: list[PresignFileRequest]
+
+
+class PresignedUpload(BaseModel):
+    filename: str
+    s3_key: str
+    url: str
+    fields: dict[str, str]
+
+
+class PresignRejected(BaseModel):
+    filename: str
+    motivo: str
+
+
+class PresignResponse(BaseModel):
+    uploads: list[PresignedUpload]
+    rechazados: list[PresignRejected]
+
+
 # ── Chatbot ───────────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
