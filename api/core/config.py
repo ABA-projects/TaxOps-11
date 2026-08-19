@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     JOBS_TABLE_NAME: str = "taxops-jobs-prod"
     S3_BUCKET_RENTA_DOCS: str = "taxops-renta-docs-prod"
+    S3_BUCKET_JOB_ARTIFACTS: str = "taxops-job-artifacts-prod"
     SQS_QUEUE_URL: str = ""
 
     @property

@@ -19,6 +19,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "job_artifacts" {
       days = 30 # los .xlsx de exógenas no necesitan vivir para siempre — controla el storage $
     }
   }
+  rule {
+    id     = "expire-temp-uploads"
+    status = "Enabled"
+    filter { prefix = "uploads/" }
+    expiration {
+      days = 3 # uploads temporales pendientes de procesar + resultados derivados — no el documento fuente definitivo
+    }
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "job_artifacts" {
+  bucket = aws_s3_bucket.job_artifacts.id
+
+  cors_rule {
+    allowed_methods = ["POST"] # generate_presigned_post — NO "PUT", el mecanismo de subida es multipart/form-data
+    allowed_origins = ["https://app.taxopsapp.com", "http://localhost:3000"]
+    allowed_headers = ["*"]
+    max_age_seconds = 3000
+  }
 }
 
 resource "aws_s3_bucket_versioning" "renta_docs" {

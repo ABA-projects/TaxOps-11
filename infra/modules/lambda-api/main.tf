@@ -15,6 +15,7 @@ locals {
     API_BASE_URL                = var.api_base_url
     JOBS_TABLE_NAME             = var.jobs_table_name
     S3_BUCKET_RENTA_DOCS        = var.s3_bucket_renta_docs
+    S3_BUCKET_JOB_ARTIFACTS     = var.s3_bucket_job_artifacts
     SQS_QUEUE_URL               = var.sqs_queue_url
   })
 }

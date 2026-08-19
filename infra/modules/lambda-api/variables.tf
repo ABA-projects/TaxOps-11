@@ -41,6 +41,10 @@ variable "s3_bucket_renta_docs" {
   type = string
 }
 
+variable "s3_bucket_job_artifacts" {
+  type = string
+}
+
 variable "allowed_origins" {
   description = "CORS — mismo valor que usa Cloud Run hoy, actualizar en Chunk 6 cuando exista el dominio de Amplify"
   type        = string
