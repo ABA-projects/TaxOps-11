@@ -46,15 +46,15 @@ variable "s3_bucket_job_artifacts" {
 }
 
 variable "allowed_origins" {
-  description = "CORS — mismo valor que usa Cloud Run hoy, actualizar en Chunk 6 cuando exista el dominio de Amplify"
+  description = "CORS — siempre pasado explícitamente desde local.allowed_origins en prod/main.tf; este default solo aplica si el módulo se invoca sin el valor (no ocurre hoy)."
   type        = string
-  default     = "https://taxops-app.vercel.app,http://localhost:3000"
+  default     = "https://app.taxopsapp.com,http://localhost:3000"
 }
 
 variable "frontend_url" {
-  description = "Para redirect post-login de Google OAuth — actualizar en Chunk 5/6 con el dominio real"
+  description = "Para redirect post-login de Google OAuth. No pasado desde prod/main.tf hoy (default sin usar) — actualizar si alguna vez se conecta."
   type        = string
-  default     = "https://taxops-app.vercel.app"
+  default     = "https://app.taxopsapp.com"
 }
 
 variable "api_base_url" {

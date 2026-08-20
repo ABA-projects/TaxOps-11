@@ -30,7 +30,7 @@ locals {
   cdn_api_subdomain = "api"
   api_base_url      = "https://${local.cdn_api_subdomain}.${local.cdn_domain_name}"
   frontend_domain   = "https://app.taxopsapp.com"
-  allowed_origins   = "https://taxops-app.vercel.app,${local.frontend_domain},http://localhost:3000"
+  allowed_origins   = "${local.frontend_domain},http://localhost:3000"
 }
 
 module "lambda_api" {
