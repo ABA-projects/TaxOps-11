@@ -180,3 +180,32 @@ def test_handler_processes_multiple_sqs_records(dynamodb_table, monkeypatch):
     assert calls == ["doc-a1", "doc-b1"]
     assert job_store.get_job("job-a")["status"] == "done"
     assert job_store.get_job("job-b")["status"] == "done"
+
+
+def test_handler_dispatches_renta_by_default(dynamodb_table, monkeypatch):
+    """Un mensaje sin 'tipo' (formato viejo, ya en vuelo) sigue yendo a Renta."""
+    import api.worker_handler as worker_handler
+
+    called = {}
+    monkeypatch.setattr(
+        worker_handler, "_process_renta_batch", lambda body: called.update(renta=body)
+    )
+
+    body = {"job_id": "j1", "contrib_id": "c1", "org_id": "o1", "año": 2026, "documentos": []}
+    worker_handler.handler(_sqs_event(body), context=None)
+
+    assert called["renta"]["job_id"] == "j1"
+
+
+def test_handler_dispatches_exogenas(dynamodb_table, monkeypatch):
+    import api.worker_handler as worker_handler
+
+    called = {}
+    monkeypatch.setattr(
+        worker_handler, "_process_exogenas_batch", lambda body: called.update(exogenas=body)
+    )
+
+    body = {"tipo": "exogenas", "job_id": "j2", "org_id": "o1", "s3_keys": []}
+    worker_handler.handler(_sqs_event(body), context=None)
+
+    assert called["exogenas"]["job_id"] == "j2"

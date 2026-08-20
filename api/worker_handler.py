@@ -31,10 +31,28 @@ def handler(event: dict, context: Any = None) -> None:
     """Lambda entry point — one invocation may carry several SQS records."""
     for record in event["Records"]:
         body = json.loads(record["body"])
-        _process_batch(body)
+        # mensajes viejos (ya en vuelo) no tienen "tipo" — default preserva compatibilidad
+        tipo = body.get("tipo", "renta")
+        if tipo == "renta":
+            _process_renta_batch(body)
+        elif tipo == "exogenas":
+            _process_exogenas_batch(body)
+        else:
+            import logging
+            logging.getLogger("taxops.worker").error("Tipo de mensaje SQS desconocido: %s", tipo)
 
 
-def _process_batch(body: dict) -> None:
+def _process_exogenas_batch(body: dict) -> None:
+    from services.exogenas.job_processor import process_exogenas_job
+
+    process_exogenas_job(
+        job_id=body["job_id"],
+        org_id=body["org_id"],
+        s3_keys=body["s3_keys"],
+    )
+
+
+def _process_renta_batch(body: dict) -> None:
     import logging
 
     from services.renta.job_processor import process_documento_job
