@@ -6,6 +6,7 @@ import {
   BarChart2, TrendingUp, Bot, Send, ChevronDown,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
+import { uploadFiles } from "@/lib/directUpload";
 
 type ProcessResult = {
   total_archivos: number;
@@ -122,32 +123,17 @@ function DataTable({ rows, priority }: { rows: Record<string, unknown>[]; priori
 }
 
 /* ─── página principal ───────────────────────────────────────── */
-// Direct API URL — bypasses Vercel proxy for uploads and polling
-const DIRECT_API = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return sessionStorage.getItem("taxops_token");
-}
-
-function authHeaders(): Record<string, string> {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 export default function ExogenasPage() {
-  const { post } = useApi(); // used for chatbot and export (short requests via proxy)
+  const { get, post } = useApi();
   const fileRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [tab, setTab] = useState<"analytics" | "exogenas" | "detalle">("analytics");
   const [loading, setLoading] = useState(false);
-  const [warmingUp, setWarmingUp] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
-  const [currentFile, setCurrentFile] = useState("");
 
   // Chatbot
   const [chatOpen, setChatOpen] = useState(false);
@@ -163,11 +149,6 @@ export default function ExogenasPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMsgs]);
 
-  // Abort stream on unmount
-  useEffect(() => {
-    return () => { abortRef.current?.abort(); };
-  }, []);
-
   function addFiles(list: FileList | null) {
     if (!list) return;
     const VALID_EXT = /\.(pdf|jpg|jpeg|png|tiff?|bmp|webp|xlsx?|docx?)$/i;
@@ -178,110 +159,57 @@ export default function ExogenasPage() {
     });
   }
 
-  async function startStream(jobId: string) {
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-
-    try {
-      const res = await fetch(`${DIRECT_API}/exogenas/stream/${jobId}`, {
-        headers: { Accept: "text/event-stream", ...authHeaders() },
-        signal: ctrl.signal,
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
-        throw new Error(err.detail || `Error ${res.status}`);
-      }
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        // SSE events are separated by \n\n
-        const parts = buf.split("\n\n");
-        buf = parts.pop() ?? "";
-
-        for (const part of parts) {
-          const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
-          if (!dataLine) continue;
-          try {
-            const data = JSON.parse(dataLine.slice(6));
-            if (data.type === "progress") {
-              if (typeof data.progress === "number") setProgress(data.progress);
-              if (data.current) setCurrentFile(data.current);
-            } else if (data.type === "done") {
-              setResult(data.result as ProcessResult);
-              setTab("analytics");
-              setLoading(false);
-              setProgress(100);
-              return;
-            } else if (data.type === "error") {
-              throw new Error(data.error || "Error en el procesamiento");
-            }
-          } catch (parseErr) {
-            if (parseErr instanceof SyntaxError) continue;
-            throw parseErr;
-          }
+  async function pollJob(job_id: string) {
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const job = await get<{ status: string; progreso: number; result?: ProcessResult; error?: string }>(
+          `/exogenas/jobs/${job_id}`
+        );
+        setProgress(job.progreso);
+        if (job.status === "done" && job.result) {
+          setResult(job.result);
+          setTab("analytics");
+          setLoading(false);
+          return;
         }
+        if (job.status === "error") {
+          setError(job.error || "Error procesando los certificados");
+          setLoading(false);
+          return;
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Error consultando el estado del job");
+        setLoading(false);
+        return;
       }
-    } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : "Error de conexión");
-      setLoading(false);
-    } finally {
-      abortRef.current = null;
     }
+    setError("El procesamiento está tardando más de lo esperado — refresca en unos minutos");
+    setLoading(false);
   }
 
   async function handleProcess() {
     if (!files.length) { setError("Agrega al menos un certificado PDF"); return; }
-    setError(""); setLoading(true); setResult(null); setProgress(0); setCurrentFile("");
+    setError(""); setLoading(true); setResult(null); setProgress(0);
 
-    // Phase 1: wake up Render (free tier sleeps; cold start ~50 s)
-    setWarmingUp(true);
-    try {
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 90_000);
-      const h = await fetch(`${DIRECT_API}/health`, {
-        signal: ctrl.signal,
-        headers: authHeaders(),
-      });
-      clearTimeout(tid);
-      if (!h.ok) throw new Error("health check failed");
-    } catch {
-      setError("No se pudo conectar con el servidor. Espera unos segundos e inténtalo de nuevo.");
-      setWarmingUp(false); setLoading(false); return;
+    const uploaded = await uploadFiles(files, "exogenas", setProgress);
+    const failed = uploaded.filter((u) => u.error);
+    if (failed.length) {
+      setError(`Fallo la subida de: ${failed.map((f) => `${f.filename} (${f.error})`).join(", ")}`);
+      setLoading(false);
+      return;
     }
-    setWarmingUp(false);
 
-    // Phase 2: upload files → server returns job_id immediately
-    const fd = new FormData();
-    files.forEach((f) => fd.append("files", f));
-    let jobId: string;
     try {
-      const res = await fetch(`${DIRECT_API}/exogenas/process`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
+      const { job_id } = await post<{ job_id: string; total: number }>("/exogenas/process", {
+        s3_keys: uploaded.map((u) => u.s3_key),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
-        throw new Error(err.detail || `Error ${res.status}`);
-      }
-      const body = await res.json();
-      jobId = body.job_id;
+      setProgress(0); // reset — la barra pasa de "subiendo" a "procesando"
+      await pollJob(job_id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al enviar archivos");
-      setLoading(false); return;
+      setLoading(false);
     }
-
-    // Phase 3: fetch-based SSE stream — maneja errores HTTP + auth
-    startStream(jobId);
   }
 
   async function handleExport() {
@@ -386,18 +314,10 @@ export default function ExogenasPage() {
 
       <div>
         <button onClick={handleProcess} disabled={loading || !files.length} className="btn-primary px-8">
-          {warmingUp
-            ? "Iniciando servidor..."
-            : loading
-              ? `Procesando... ${progress}%`
-              : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
+          {loading ? `Procesando... ${progress}%` : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
         </button>
 
-        {warmingUp && (
-          <p className="text-xs text-gray-400 mt-2">El servidor puede tardar hasta 1 minuto en iniciar. Por favor espera.</p>
-        )}
-
-        {loading && !warmingUp && (
+        {loading && (
           <div className="mt-3 space-y-1.5">
             <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
               <div
@@ -405,9 +325,6 @@ export default function ExogenasPage() {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            {currentFile && (
-              <p className="text-xs text-gray-400 truncate">Procesando: {currentFile}</p>
-            )}
             <p className="text-xs text-gray-400">Esto puede tomar varios minutos con muchos archivos.</p>
           </div>
         )}

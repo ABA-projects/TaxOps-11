@@ -165,6 +165,11 @@ class IngresosProrateoItem(BaseModel):
     excluidos: float = 0.0
 
 
+class ProcessInvoicesRequest(BaseModel):
+    s3_keys: list[str]
+    ingresos: list[IngresosProrateoItem] = []
+
+
 class ProcessInvoicesResponse(BaseModel):
     total_archivos: int
     procesados: int
@@ -194,9 +199,42 @@ class ProcessExogenasResponse(BaseModel):
     df_1003: list[dict[str, Any]]
 
 
+class ProcessExogenasRequest(BaseModel):
+    s3_keys: list[str]
+
+
 class ExportExogenasRequest(BaseModel):
     df_detalle: list[dict[str, Any]]
     df_1003: list[dict[str, Any]]
+
+
+# ── Uploads (presigned S3) ────────────────────────────────────────────────────
+
+class PresignFileRequest(BaseModel):
+    filename: str
+    content_type: str
+
+
+class PresignRequest(BaseModel):
+    contexto: str  # "facturas" | "exogenas"
+    archivos: list[PresignFileRequest]
+
+
+class PresignedUpload(BaseModel):
+    filename: str
+    s3_key: str
+    url: str
+    fields: dict[str, str]
+
+
+class PresignRejected(BaseModel):
+    filename: str
+    motivo: str
+
+
+class PresignResponse(BaseModel):
+    uploads: list[PresignedUpload]
+    rechazados: list[PresignRejected]
 
 
 # ── Chatbot ───────────────────────────────────────────────────────────────────

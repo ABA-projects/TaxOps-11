@@ -21,30 +21,30 @@ module "storage" {
 
 # Estáticos (no dependen de ningún recurso) — permiten pasarlos a module.lambda_api sin
 # crear un ciclo con module.cdn/module.amplify, que sí dependen de lambda_api (function_url
-# y, transitivamente, api_domain). amplify_default_domain no se puede derivar de
-# module.amplify.default_domain por la misma razón — se hardcodea el ID real ya creado
-# (d2mechz6r82w9f, ver output amplify_default_domain de un apply anterior). Si el app de
-# Amplify se recrea alguna vez, actualizar este valor a mano.
+# y, transitivamente, api_domain). frontend_domain es el dominio propio real del frontend
+# (Chunk 6, aws_amplify_domain_association) — antes de que existiera, allowed_origins
+# usaba el dominio default de Amplify (main.d2mechz6r82w9f.amplifyapp.com), ya no hace falta.
 locals {
-  cdn_domain_name        = "taxopsapp.com"
-  cdn_api_subdomain      = "api"
-  api_base_url           = "https://${local.cdn_api_subdomain}.${local.cdn_domain_name}"
-  amplify_default_domain = "https://main.d2mechz6r82w9f.amplifyapp.com"
-  allowed_origins        = "https://taxops-app.vercel.app,${local.amplify_default_domain},http://localhost:3000"
+  cdn_domain_name   = "taxopsapp.com"
+  cdn_api_subdomain = "api"
+  api_base_url      = "https://${local.cdn_api_subdomain}.${local.cdn_domain_name}"
+  frontend_domain   = "https://app.taxopsapp.com"
+  allowed_origins   = "https://taxops-app.vercel.app,${local.frontend_domain},http://localhost:3000"
 }
 
 module "lambda_api" {
-  source               = "../../modules/lambda-api"
-  ecr_repo_url         = module.ecr.repository_url
-  sqs_queue_arn        = module.jobs.queue_arn
-  dynamodb_table_arn   = module.jobs.table_arn
-  s3_bucket_arns       = [module.storage.renta_docs_bucket_arn, module.storage.job_artifacts_bucket_arn]
-  secrets              = var.secrets
-  sqs_queue_url        = module.jobs.queue_url
-  jobs_table_name      = module.jobs.table_name
-  s3_bucket_renta_docs = module.storage.renta_docs_bucket
-  api_base_url         = local.api_base_url
-  allowed_origins      = local.allowed_origins
+  source                  = "../../modules/lambda-api"
+  ecr_repo_url            = module.ecr.repository_url
+  sqs_queue_arn           = module.jobs.queue_arn
+  dynamodb_table_arn      = module.jobs.table_arn
+  s3_bucket_arns          = [module.storage.renta_docs_bucket_arn, module.storage.job_artifacts_bucket_arn]
+  secrets                 = var.secrets
+  sqs_queue_url           = module.jobs.queue_url
+  jobs_table_name         = module.jobs.table_name
+  s3_bucket_renta_docs    = module.storage.renta_docs_bucket
+  s3_bucket_job_artifacts = module.storage.job_artifacts_bucket
+  api_base_url            = local.api_base_url
+  allowed_origins         = local.allowed_origins
 }
 
 module "cdn" {
