@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Upload, Download, X, AlertCircle, CheckCircle, Plus, Trash2, BarChart2, TrendingUp } from "lucide-react";
 import { useApi } from "@/lib/api";
+import { uploadFiles } from "@/lib/directUpload";
 import { PageChatbot } from "@/components/PageChatbot";
 
 type IngresoRow = { periodo: string; gravados: string; excluidos: string };
@@ -20,7 +21,7 @@ type ProcessResult = {
 const TABS = ["Analítica", "Base Datos", "Validación", "Prorrateo IVA"] as const;
 
 export default function FacturasPage() {
-  const { postForm, post } = useApi();
+  const { post } = useApi();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<File[]>([]);
@@ -30,6 +31,7 @@ export default function FacturasPage() {
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Analítica");
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
 
   function addFiles(newFiles: FileList | null) {
@@ -58,6 +60,7 @@ export default function FacturasPage() {
     }
     setError("");
     setLoading(true);
+    setUploadProgress(0);
     setResult(null);
 
     const validIngresos = ingresos.filter((r) => r.periodo.match(/^\d{4}-\d{2}$/));
@@ -67,12 +70,19 @@ export default function FacturasPage() {
       excluidos: parseFloat(r.excluidos || "0"),
     }));
 
-    const formData = new FormData();
-    files.forEach((f) => formData.append("files", f));
-    formData.append("ingresos_json", JSON.stringify(ingresosPayload));
+    const uploaded = await uploadFiles(files, "facturas", setUploadProgress);
+    const failed = uploaded.filter((u) => u.error);
+    if (failed.length) {
+      setError(`Fallo la subida de: ${failed.map((f) => `${f.filename} (${f.error})`).join(", ")}`);
+      setLoading(false);
+      return;
+    }
 
     try {
-      const data = await postForm<ProcessResult>("/invoices/process", formData);
+      const data = await post<ProcessResult>("/invoices/process", {
+        s3_keys: uploaded.map((u) => u.s3_key),
+        ingresos: ingresosPayload,
+      });
       setResult(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al procesar");
@@ -252,13 +262,27 @@ export default function FacturasPage() {
       )}
 
       {/* Process button */}
-      <button
-        onClick={handleProcess}
-        disabled={loading || !files.length}
-        className="btn-primary px-8"
-      >
-        {loading ? "Procesando..." : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
-      </button>
+      <div className="space-y-2">
+        <button
+          onClick={handleProcess}
+          disabled={loading || !files.length}
+          className="btn-primary px-8"
+        >
+          {loading
+            ? uploadProgress < 100
+              ? `Subiendo... ${uploadProgress}%`
+              : "Procesando..."
+            : `Procesar ${files.length} archivo${files.length !== 1 ? "s" : ""}`}
+        </button>
+        {loading && uploadProgress < 100 && (
+          <div className="w-full max-w-xs bg-gray-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-1.5 bg-brand-orange transition-all"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Results */}
       {result && (
