@@ -199,6 +199,10 @@ class ProcessExogenasResponse(BaseModel):
     df_1003: list[dict[str, Any]]
 
 
+class ProcessExogenasRequest(BaseModel):
+    s3_keys: list[str]
+
+
 class ExportExogenasRequest(BaseModel):
     df_detalle: list[dict[str, Any]]
     df_1003: list[dict[str, Any]]
