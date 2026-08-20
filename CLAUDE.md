@@ -41,19 +41,20 @@ python -m pytest --cov=. --cov-report=term-missing
 
 ## Deployment
 
-**Current production path (verified against the live `.env.local`, not just the docs — see `docs/MIGRACION-AWS-DISCOVERY.md` §0 for the full trail of stale deploy docs in this repo):**
+**Current production path (actualizado 2026-08-20 tras confirmar el cutover — ver `docs/MIGRACION-AWS-DISCOVERY.md` §0 para el trail histórico de docs de deploy que ya NO aplican):**
 
-- **API**: Google Cloud Run (`us-central1`), deployed via `.github/workflows/deploy-cloud-run.yml` (the only workflow with a real automatic trigger, `on: push: branches: [main]`). Builds `api/Dockerfile-api`, pushes to Artifact Registry.
-- **Frontend (Vercel)**: `taxops-web/` deploys to Vercel. `INTERNAL_API_URL` is baked at build time; fallback: `NEXT_PUBLIC_API_URL` → `http://localhost:8000`.
-- **⚠️ Stale/vestigial, do not trust**: `render.yaml` (Render), `.github/workflows/deploy.yml` (Railway trigger), `CLAUDE.md` mentions of Render/Railway in older commits — these are leftovers from an earlier iteration and are **not** the live path. `ci.yml` (lint/test) exists but is `workflow_dispatch`-only, not wired as a gate on the Cloud Run deploy.
+- **API**: AWS Lambda (container image, `api/Dockerfile-lambda`) detrás de CloudFront en `api.taxopsapp.com`, desplegada vía `.github/workflows/deploy-lambda.yml` (`on: push: branches: [main]`) + `terraform-apply.yml` (gate manual, `environment: production`) para cambios de infra. Cloud Run **ya no es producción** — decommissioned junto con esta migración.
+- **Frontend**: AWS Amplify Hosting (`app.taxopsapp.com`), `taxops-web/` con SSR nativo (`platform WEB_COMPUTE`), auto-deploy on push a `main` vía el webhook de Amplify. Confirmado funcionando y al día (build `SUCCEED` en cada push, `curl https://app.taxopsapp.com/` → 200).
+- **Vercel (`taxops-app.vercel.app`)**: en proceso de decommission — dejó de ser la ruta de producción real (Amplify ya la reemplazó), pero el proyecto sigue vivo en el dashboard de Vercel hasta que se pause/borre manualmente ahí (fuera de este repo). No confiar en esa URL para pruebas — usar siempre `app.taxopsapp.com`.
+- **⚠️ Stale/vestigial, do not trust**: `render.yaml` (Render), `.github/workflows/deploy.yml` (Railway trigger), `taxops-web/vercel.json` (config de Vercel, no tocar hasta decommission completo — sigue sirviendo tráfico legacy) — leftovers de iteraciones anteriores, **no** la ruta viva.
 - **Alembic**: migrations run automatically on API startup (`api/main.py` calls `alembic upgrade head`) in a background thread. Manual: `cd api && alembic upgrade head`.
 
-### Migración a AWS — en progreso (no tocar sin leer esto primero)
+### Migración a AWS — Chunks 0-8 completos (S3 presign + Exógenas async, 2026-08-20)
 
-Hay una migración activa de todo el compute/storage/CI-CD de GCP+Vercel a AWS, gestionada 100% con Terraform. **No es código todavía en el repo de la app** (es infraestructura, vive en `infra/`), pero si tocas deploy/CI-CD/`docs/`, lee esto primero:
+Migración de compute/storage/CI-CD de GCP+Vercel a AWS, gestionada 100% con Terraform, vive en `infra/`. Si tocas deploy/CI-CD/`docs/`, lee esto primero:
 
 - **Discovery, plan y guías**: `docs/MIGRACION-AWS-DISCOVERY.md`, `docs/superpowers/plans/2026-08-05-taxops11-aws-migration.md` (plan ejecutable por chunks, con checkboxes), `docs/AWS-ACCOUNT-SETUP-GUIDE.md`, `docs/CI-CD-GITOPS-GUIDE.md`, `docs/DIRENV-AWS-PROFILE.md`, `docs/MIGRACION-AWS-CASE-STUDY.md` (portafolio).
-- **Estado (2026-08-07)**: Chunks 0-2 del plan aplicados y verificados — bootstrap de Terraform (S3 state, locking nativo), ECR + rol OIDC para GitHub Actions, y SQS+DynamoDB para reemplazar el estado de jobs en memoria. Pendiente: Task 2.3 (refactor Python de `api/routers/exogenas.py` y `services/renta/job_processor.py` para usar SQS+DynamoDB en vez de `ThreadPoolExecutor`), luego Chunks 3-8.
+- **Estado (2026-08-20)**: migración completa — API en Lambda, jobs vía SQS+DynamoDB+worker (Renta y Exógenas), uploads directo a S3 con presigned POST (`api/routers/uploads.py`), frontend en Amplify. Pendiente real: decommission manual de Vercel (dashboard, fuera de Terraform) y confirmar en 3-4 días que el lifecycle rule de 3 días borra objetos bajo `uploads/`.
 - **Premisa no negociable: todo gratis, siempre.** Cualquier recurso AWS nuevo se evalúa primero por costo (capa gratuita perpetua > 12 meses > pago). Ver el detalle de decisiones de costo en el case study.
 - **Regla de oro del pipeline**: ningún `terraform apply` manual salvo el bootstrap inicial — todo cambio de `infra/` pasa por PR (`terraform-plan.yml` comenta el plan) → merge a `main` → aprobación manual en GitHub (`terraform-apply.yml`, environment `production`) → apply.
 - **La DB se queda en Neon** en la Fase 1 (no se migra a RDS/Aurora) — evita el costo de un NAT Gateway. Ver justificación completa en el case study.
