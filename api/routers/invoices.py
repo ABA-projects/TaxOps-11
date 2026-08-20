@@ -1,39 +1,41 @@
 """Invoices router — process, list, export."""
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+import boto3
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from core.config import get_settings
 from dependencies import get_current_user
-from schemas import ExportInvoicesRequest, ProcessInvoicesResponse
+from schemas import ExportInvoicesRequest, ProcessInvoicesRequest, ProcessInvoicesResponse
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
 
 @router.post("/process", response_model=ProcessInvoicesResponse)
 async def process_invoices(
-    files: list[UploadFile] = File(...),
-    ingresos_json: str = Form(default="[]"),
+    body: ProcessInvoicesRequest,
     user: dict = Depends(get_current_user),
 ) -> ProcessInvoicesResponse:
-    try:
-        ingresos_list = json.loads(ingresos_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="ingresos_json inválido")
+    ingresos_gravados = {i.periodo: i.gravados for i in body.ingresos}
+    ingresos_excluidos = {i.periodo: i.excluidos for i in body.ingresos}
 
-    ingresos_gravados = {i["periodo"]: float(i.get("gravados", 0)) for i in ingresos_list}
-    ingresos_excluidos = {i["periodo"]: float(i.get("excluidos", 0)) for i in ingresos_list}
+    settings = get_settings()
+    s3 = boto3.client("s3", region_name=settings.AWS_REGION)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
-        for upload in files:
-            safe_name = Path(upload.filename or "archivo").name
-            dest = Path(tmpdir) / safe_name
-            dest.write_bytes(await upload.read())
+        for s3_key in body.s3_keys:
+            filename = Path(s3_key).name
+            dest = Path(tmpdir) / filename
+            try:
+                obj = s3.get_object(Bucket=settings.S3_BUCKET_JOB_ARTIFACTS, Key=s3_key)
+                dest.write_bytes(obj["Body"].read())
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Error descargando {filename} de S3: {exc}")
             tmp_paths.append(dest)
 
         try:

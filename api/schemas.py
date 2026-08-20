@@ -165,6 +165,11 @@ class IngresosProrateoItem(BaseModel):
     excluidos: float = 0.0
 
 
+class ProcessInvoicesRequest(BaseModel):
+    s3_keys: list[str]
+    ingresos: list[IngresosProrateoItem] = []
+
+
 class ProcessInvoicesResponse(BaseModel):
     total_archivos: int
     procesados: int
