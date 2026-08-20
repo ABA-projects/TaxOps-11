@@ -16,7 +16,8 @@ module "jobs" {
 }
 
 module "storage" {
-  source = "../../modules/storage"
+  source          = "../../modules/storage"
+  allowed_origins = split(",", local.allowed_origins)
 }
 
 # Estáticos (no dependen de ningún recurso) — permiten pasarlos a module.lambda_api sin

@@ -34,7 +34,7 @@ resource "aws_s3_bucket_cors_configuration" "job_artifacts" {
 
   cors_rule {
     allowed_methods = ["POST"] # generate_presigned_post — NO "PUT", el mecanismo de subida es multipart/form-data
-    allowed_origins = ["https://app.taxopsapp.com", "http://localhost:3000"]
+    allowed_origins = var.allowed_origins
     allowed_headers = ["*"]
     max_age_seconds = 3000
   }
