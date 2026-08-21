@@ -91,6 +91,15 @@ resource "aws_cloudfront_distribution" "api" {
       http_port              = 80
       https_port             = 443
       origin_ssl_protocols   = ["TLSv1.2"]
+      # Default de CloudFront es 30s — /invoices/process es síncrono (a diferencia de
+      # Renta/Exógenas, que ya son async vía SQS+worker) y con lotes reales de ~40
+      # archivos tarda más de 30s (confirmado: Lambda terminó bien a los 38.4s según
+      # CloudWatch, pero el cliente recibió 504 porque CloudFront ya había cortado la
+      # conexión al origin). 60s = mismo timeout ya configurado en el Lambda — no tiene
+      # sentido que CloudFront corte antes de que el Lambda pueda terminar por su cuenta.
+      # No resuelve el problema de fondo (lotes aún más grandes seguirán topando el
+      # límite) — la migración de Facturas a async queda pendiente como tarea aparte.
+      origin_read_timeout = 60
     }
   }
 
