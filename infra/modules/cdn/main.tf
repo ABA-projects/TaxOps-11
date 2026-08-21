@@ -61,6 +61,16 @@ data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled" # API dinámica — no cachear por defecto
 }
 
+# Managed-CachingDisabled NO reenvía el header Authorization al origin en GET/HEAD (sí lo
+# hacía de rebote en POST/PUT/PATCH/DELETE, por eso /uploads/presign y /exogenas/process
+# funcionaban pero GET /exogenas/jobs/{id} devolvía 401 "Not authenticated" — confirmado
+# reproduciendo el request directo con curl, ver docs/superpowers/plans/2026-08-18-...).
+# Managed-AllViewer reenvía todos los headers/cookies/querystring al origin sin afectar
+# cacheo (eso lo sigue controlando cache_policy_id, arriba).
+data "aws_cloudfront_origin_request_policy" "all_viewer" {
+  name = "Managed-AllViewer"
+}
+
 resource "aws_cloudfront_distribution" "api" {
   enabled     = true
   aliases     = [local.api_fqdn]
@@ -78,11 +88,12 @@ resource "aws_cloudfront_distribution" "api" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "lambda-api"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.disabled.id
+    target_origin_id         = "lambda-api"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
   }
 
   viewer_certificate {
