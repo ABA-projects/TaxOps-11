@@ -65,10 +65,17 @@ data "aws_cloudfront_cache_policy" "disabled" {
 # hacía de rebote en POST/PUT/PATCH/DELETE, por eso /uploads/presign y /exogenas/process
 # funcionaban pero GET /exogenas/jobs/{id} devolvía 401 "Not authenticated" — confirmado
 # reproduciendo el request directo con curl, ver docs/superpowers/plans/2026-08-18-...).
-# Managed-AllViewer reenvía todos los headers/cookies/querystring al origin sin afectar
-# cacheo (eso lo sigue controlando cache_policy_id, arriba).
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
+#
+# NO usar Managed-AllViewer acá: también reenvía el header Host original del viewer
+# ("api.taxopsapp.com") al origin, y el Function URL de Lambda exige que Host coincida
+# con su propio dominio (*.lambda-url.<region>.on.aws) — con Host equivocado, Lambda
+# rechaza TODO con 403 "Message: null" antes de invocar la función (esto pasó de verdad
+# en prod tras aplicar Managed-AllViewer: login y toda la API quedaron caídos, 0 invocaciones
+# en CloudWatch, confirmado con curl directo devolviendo 403 en cualquier método/ruta).
+# Managed-AllViewerExceptHostHeader reenvía todo lo demás (headers, cookies, querystring)
+# pero deja que CloudFront/el origin manejen Host correctamente.
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
 }
 
 resource "aws_cloudfront_distribution" "api" {
@@ -93,7 +100,7 @@ resource "aws_cloudfront_distribution" "api" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods           = ["GET", "HEAD"]
     cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   viewer_certificate {
