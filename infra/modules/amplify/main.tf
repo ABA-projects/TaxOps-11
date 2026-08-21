@@ -1,9 +1,5 @@
-# Amplify Hosting reemplaza Vercel (Chunk 6) — soporte SSR nativo de Next.js 15 (App
-# Router) vía platform WEB_COMPUTE. Cutover confirmado 2026-08-20: app.taxopsapp.com
-# sirve desde Amplify, al día con main (ver CLAUDE.md § Deployment). El proyecto de
-# Vercel se apaga desde su propio dashboard (fuera de este repo) — hasta que eso pase,
-# taxops-app.vercel.app se mantiene en local.allowed_origins de prod/main.tf solo si
-# todavía recibe tráfico real; si ya no, quitarlo de ahí también.
+# Amplify Hosting — soporte SSR nativo de Next.js 15 (App Router) vía platform
+# WEB_COMPUTE. Producción real desde 2026-08-20: app.taxopsapp.com, al día con main.
 
 # IAM es eventualmente consistente entre regiones/servicios — un apply real falló con
 # "The compute role provided cannot be assumed by Amplify" porque Amplify intentó validar

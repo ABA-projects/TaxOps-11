@@ -45,16 +45,15 @@ python -m pytest --cov=. --cov-report=term-missing
 
 - **API**: AWS Lambda (container image, `api/Dockerfile-lambda`) detrás de CloudFront en `api.taxopsapp.com`, desplegada vía `.github/workflows/deploy-lambda.yml` (`on: push: branches: [main]`) + `terraform-apply.yml` (gate manual, `environment: production`) para cambios de infra. Cloud Run **ya no es producción** — decommissioned junto con esta migración.
 - **Frontend**: AWS Amplify Hosting (`app.taxopsapp.com`), `taxops-web/` con SSR nativo (`platform WEB_COMPUTE`), auto-deploy on push a `main` vía el webhook de Amplify. Confirmado funcionando y al día (build `SUCCEED` en cada push, `curl https://app.taxopsapp.com/` → 200).
-- **Vercel (`taxops-app.vercel.app`)**: en proceso de decommission — dejó de ser la ruta de producción real (Amplify ya la reemplazó), pero el proyecto sigue vivo en el dashboard de Vercel hasta que se pause/borre manualmente ahí (fuera de este repo). No confiar en esa URL para pruebas — usar siempre `app.taxopsapp.com`.
-- **⚠️ Stale/vestigial, do not trust**: `render.yaml` (Render), `.github/workflows/deploy.yml` (Railway trigger), `taxops-web/vercel.json` (config de Vercel, no tocar hasta decommission completo — sigue sirviendo tráfico legacy) — leftovers de iteraciones anteriores, **no** la ruta viva.
+- **⚠️ Stale/vestigial, do not trust**: `render.yaml` (Render), `.github/workflows/deploy.yml` (Railway trigger) — leftovers de iteraciones anteriores, **no** la ruta viva. Vercel decommissioned (2026-08-21) — ya no hay proyecto, config, ni referencias en `allowed_origins`.
 - **Alembic**: migrations run automatically on API startup (`api/main.py` calls `alembic upgrade head`) in a background thread. Manual: `cd api && alembic upgrade head`.
 
 ### Migración a AWS — Chunks 0-8 completos (S3 presign + Exógenas async, 2026-08-20)
 
-Migración de compute/storage/CI-CD de GCP+Vercel a AWS, gestionada 100% con Terraform, vive en `infra/`. Si tocas deploy/CI-CD/`docs/`, lee esto primero:
+Migración de compute/storage/CI-CD de GCP+Vercel a AWS (completa), gestionada 100% con Terraform, vive en `infra/`. Si tocas deploy/CI-CD/`docs/`, lee esto primero:
 
 - **Discovery, plan y guías**: `docs/MIGRACION-AWS-DISCOVERY.md`, `docs/superpowers/plans/2026-08-05-taxops11-aws-migration.md` (plan ejecutable por chunks, con checkboxes), `docs/AWS-ACCOUNT-SETUP-GUIDE.md`, `docs/CI-CD-GITOPS-GUIDE.md`, `docs/DIRENV-AWS-PROFILE.md`, `docs/MIGRACION-AWS-CASE-STUDY.md` (portafolio).
-- **Estado (2026-08-20)**: migración completa — API en Lambda, jobs vía SQS+DynamoDB+worker (Renta y Exógenas), uploads directo a S3 con presigned POST (`api/routers/uploads.py`), frontend en Amplify. Pendiente real: decommission manual de Vercel (dashboard, fuera de Terraform) y confirmar en 3-4 días que el lifecycle rule de 3 días borra objetos bajo `uploads/`.
+- **Estado (2026-08-21)**: migración completa — API en Lambda, jobs vía SQS+DynamoDB+worker (Renta y Exógenas), uploads directo a S3 con presigned POST (`api/routers/uploads.py`), frontend en Amplify, Vercel decommissioned. Pendiente real: confirmar en 3-4 días que el lifecycle rule de 3 días borra objetos bajo `uploads/`.
 - **Premisa no negociable: todo gratis, siempre.** Cualquier recurso AWS nuevo se evalúa primero por costo (capa gratuita perpetua > 12 meses > pago). Ver el detalle de decisiones de costo en el case study.
 - **Regla de oro del pipeline**: ningún `terraform apply` manual salvo el bootstrap inicial — todo cambio de `infra/` pasa por PR (`terraform-plan.yml` comenta el plan) → merge a `main` → aprobación manual en GitHub (`terraform-apply.yml`, environment `production`) → apply.
 - **La DB se queda en Neon** en la Fase 1 (no se migra a RDS/Aurora) — evita el costo de un NAT Gateway. Ver justificación completa en el case study.
@@ -74,7 +73,7 @@ FastAPI always requires auth (JWT Bearer). Required env vars for SaaS: see `api/
 TaxOps procesa facturas electrónicas DIAN (PDF/XML) colombianas en un pipeline:
 `pipeline/extractor.py` → `pipeline/validator.py` → `pipeline/prorateo.py` → `pipeline/excel_writer.py` / PostgreSQL
 
-**Stack:** FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · Cloud Run · Vercel
+**Stack:** FastAPI 0.115 · Next.js 15.3 (React 19) · PostgreSQL 16 · SQLAlchemy · Groq/OpenAI/Anthropic/Google · AWS Lambda · AWS Amplify
 
 ### Module responsibilities
 
