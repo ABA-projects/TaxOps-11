@@ -515,7 +515,7 @@ export default function RentaPage() {
       const res = await post<{ content: string }>("/chatbot/contextual", {
         message: text + contextNote,
         provider: "groq",
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         history: chatMsgs.slice(-8),
         system_prompt: `Eres un experto contable colombiano especializado en declaración de renta de personas naturales residentes — Formulario 210 DIAN.
 

@@ -21,17 +21,19 @@ def _get_key(name: str) -> str:
 # ── Catálogos de modelos ──────────────────────────────────────────────────────
 
 GROQ_MODELS_FALLBACK: list[dict] = [
-    {"id": "llama-3.3-70b-versatile", "label": "Llama 3.3 70B · Versatile (recomendado)"},
-    {"id": "llama-3.1-8b-instant", "label": "Llama 3.1 8B · Instant (más rápido)"},
-    {"id": "llama3-70b-8192", "label": "Llama 3 70B · 8k ctx"},
-    {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "label": "Llama 4 Scout 17B · Meta"},
-    {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "label": "Llama 4 Maverick 17B · Meta"},
-    {"id": "deepseek-r1-distill-llama-70b", "label": "DeepSeek R1 70B · Razonamiento"},
-    {"id": "gemma2-9b-it", "label": "Gemma 2 9B · Google"},
-    {"id": "qwen-qwq-32b", "label": "Qwen QwQ 32B · Razonamiento"},
-    {"id": "mistral-saba-24b", "label": "Mistral Saba 24B"},
-    {"id": "compound-beta", "label": "Compound Beta · Con búsqueda web"},
+    {"id": "openai/gpt-oss-120b", "label": "GPT-OSS 120B (recomendado)"},
+    {"id": "openai/gpt-oss-20b", "label": "GPT-OSS 20B (más rápido)"},
+    {"id": "openai/gpt-oss-safeguard-20b", "label": "GPT-OSS Safeguard 20B"},
+    {"id": "qwen/qwen3.6-27b", "label": "Qwen 3.6 27B"},
+    {"id": "groq/compound", "label": "Groq Compound · Con herramientas"},
+    {"id": "groq/compound-mini", "label": "Groq Compound Mini · Con herramientas"},
+    {"id": "allam-2-7b", "label": "Allam 2 7B"},
 ]
+
+# Modelos de Groq que existen pero no sirven para chat de texto (audio, TTS,
+# clasificadores de seguridad) — se excluyen de get_groq_models() para que el
+# usuario no pueda elegirlos como si fueran un modelo conversacional.
+_GROQ_NON_CHAT_PREFIXES = ("whisper", "canopylabs/", "meta-llama/llama-prompt-guard")
 
 OPENAI_MODELS: list[dict] = [
     {"id": "gpt-4o", "label": "GPT-4o · Multimodal (recomendado)"},
@@ -68,7 +70,7 @@ PROVIDERS: dict[str,
                                   "free": True},
                          }
 
-MODEL_DEFAULT = "llama-3.3-70b-versatile"
+MODEL_DEFAULT = "openai/gpt-oss-120b"
 PROVIDER_DEFAULT = "groq"
 
 # ── System prompt ─────────────────────────────────────────────────────────────
@@ -217,7 +219,11 @@ def get_groq_models() -> list[dict]:
         from groq import Groq
         data = Groq(api_key=key).models.list().data
         models = sorted(
-            [{"id": m.id, "label": m.id} for m in data if getattr(m, "active", True)],
+            [
+                {"id": m.id, "label": m.id}
+                for m in data
+                if getattr(m, "active", True) and not m.id.startswith(_GROQ_NON_CHAT_PREFIXES)
+            ],
             key=lambda x: x["id"],
         )
         return models if models else GROQ_MODELS_FALLBACK

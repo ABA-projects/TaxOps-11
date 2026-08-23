@@ -247,7 +247,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     provider: str = "groq"
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     history: list[ChatMessage] = []
     df_context: Optional[list[dict[str, Any]]] = None
     df_type: Optional[str] = None  # "facturas" | "exogenas"
