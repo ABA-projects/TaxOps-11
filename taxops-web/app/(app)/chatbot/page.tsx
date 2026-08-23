@@ -7,8 +7,8 @@ import { useApi } from "@/lib/api";
 type Message = { role: "user" | "assistant"; content: string };
 
 const MODELS = [
-  { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recomendado)", provider: "groq" },
-  { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B · Rápido", provider: "groq" },
+  { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B (recomendado)", provider: "groq" },
+  { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B · Rápido", provider: "groq" },
   { value: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B · Razonamiento", provider: "groq" },
   { value: "gemma2-9b-it", label: "Gemma 2 9B · Google", provider: "groq" },
 ];

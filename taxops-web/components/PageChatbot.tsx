@@ -47,7 +47,7 @@ export function PageChatbot({ moduleName, systemContext, currentData }: PageChat
       const res = await post<{ content: string }>("/chatbot/contextual", {
         message: text,
         provider: "groq",
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         history: messages.map((m) => ({ role: m.role, content: m.content })),
         system_prompt: systemContext + dataCtx,
       });

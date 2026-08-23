@@ -240,7 +240,7 @@ export default function ExogenasPage() {
       const res = await post<{ content: string }>("/chatbot/ask", {
         message: text + contextNote,
         provider: "groq",
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         history: chatMsgs.slice(-8),
         system_prompt: "Eres un experto contable colombiano especializado en exógenas, retención en la fuente, Formato 1003 DIAN y certificados de retención. Responde de forma clara y práctica.",
       });
