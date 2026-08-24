@@ -64,7 +64,17 @@ X leads encontrados en Y sectores.
 | nombre | ciudad | email/web/linkedin | URL |
 
 ## Observaciones
-Notas sobre la calidad de los leads o sectores con más oportunidad."""
+Notas sobre la calidad de los leads o sectores con más oportunidad.
+
+Al final de tu respuesta, agrega un bloque ```json con la lista de leads encontrados en este
+formato exacto (lista vacía si no encontraste ninguno verificable):
+
+```json
+[
+  {{"empresa": "...", "sector": "...", "ciudad": "...", "contacto": "...", "fuente_url": "..."}}
+]
+```
+"""
 
 
 def build_user_prompt(config: dict) -> str:
@@ -83,6 +93,9 @@ def main() -> None:
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"leads-contables-{today}.md", report)
     print(f"Reporte escrito en {output_path}")
+
+    from publish import publish
+    publish(report)
 
 
 if __name__ == "__main__":
