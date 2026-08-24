@@ -19,7 +19,7 @@ from pathlib import Path
 AGENT_DIR = Path(__file__).parent
 sys.path.insert(0, str(AGENT_DIR.parent.parent))  # agents/ — para importar _shared
 
-from _shared.agent_core import load_config, load_env, run_agent, write_report
+from _shared.agent_core import load_config, load_env, run_agent, write_report  # noqa: E402
 
 load_env(AGENT_DIR)
 
@@ -82,6 +82,9 @@ def main() -> None:
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"monitor-niif-{today}.md", report)
     print(f"Reporte escrito en {output_path}")
+
+    from publish import publish
+    publish(report)
 
 
 if __name__ == "__main__":

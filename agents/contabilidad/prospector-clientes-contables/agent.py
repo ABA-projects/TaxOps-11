@@ -19,7 +19,7 @@ from pathlib import Path
 AGENT_DIR = Path(__file__).parent
 sys.path.insert(0, str(AGENT_DIR.parent.parent))  # agents/ — para importar _shared
 
-from _shared.agent_core import load_config, load_env, run_agent, write_report
+from _shared.agent_core import load_config, load_env, run_agent, write_report  # noqa: E402
 
 load_env(AGENT_DIR)
 
