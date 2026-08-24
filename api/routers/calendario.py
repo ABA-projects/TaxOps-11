@@ -4,32 +4,47 @@ GET    /calendario/eventos          → lista de eventos (usuario autenticado)
 PUT    /calendario/eventos          → reemplaza la lista completa (superadmin)
 POST   /calendario/eventos          → agrega un evento (superadmin)
 DELETE /calendario/eventos/{id}     → elimina un evento (superadmin)
+
+Persistencia: S3 (config/calendario_2026.json, fuera del prefijo "uploads/" — no cae en el
+lifecycle de 3 días). Antes usaba un archivo local (api/data/calendario_2026.json) — eso
+funcionaba en Cloud Run (proceso continuo) pero no sobrevive en Lambda: cada execution
+environment arranca desde la imagen del container, así que un PUT se perdía en el siguiente
+cold start.
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
+import boto3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from core.config import get_settings
 from dependencies import get_current_user, require_superadmin
 
 router = APIRouter(prefix="/calendario", tags=["Calendario"])
 
-_DATA_FILE = Path(__file__).parent.parent / "data" / "calendario_2026.json"
+_S3_KEY = "config/calendario_2026.json"
 
 
 def _load() -> list[dict]:
-    if not _DATA_FILE.exists():
+    settings = get_settings()
+    s3 = boto3.client("s3", region_name=settings.AWS_REGION)
+    try:
+        obj = s3.get_object(Bucket=settings.S3_BUCKET_JOB_ARTIFACTS, Key=_S3_KEY)
+        return json.loads(obj["Body"].read())
+    except s3.exceptions.NoSuchKey:
         return []
-    return json.loads(_DATA_FILE.read_text(encoding="utf-8"))
 
 
 def _save(eventos: list[dict]) -> None:
-    _DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _DATA_FILE.write_text(
-        json.dumps(eventos, ensure_ascii=False, indent=2), encoding="utf-8"
+    settings = get_settings()
+    s3 = boto3.client("s3", region_name=settings.AWS_REGION)
+    s3.put_object(
+        Bucket=settings.S3_BUCKET_JOB_ARTIFACTS,
+        Key=_S3_KEY,
+        Body=json.dumps(eventos, ensure_ascii=False, indent=2).encode("utf-8"),
+        ContentType="application/json",
     )
 
 
