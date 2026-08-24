@@ -59,7 +59,29 @@ con el reporte en Markdown con este formato:
 ## 📌 Notas importantes
 Cualquier observación relevante sobre el calendario o cambios recientes.
 
-Si no encuentras fechas concretas, indica la fuente consultada y recomienda verificar directamente."""
+Si no encuentras fechas concretas, indica la fuente consultada y recomienda verificar directamente.
+
+Al final de tu respuesta, agrega un bloque ```json con los vencimientos encontrados en este
+formato exacto (mismo shape que usa el Calendario Tributario DIAN de la plataforma):
+
+```json
+[
+  {{
+    "id": "vencimiento-2026-09-iva-bimestral",
+    "fecha": "2026-09-15",
+    "titulo": "Vencimiento IVA bimestral",
+    "descripcion": "Declaración y pago IVA período jul-ago 2026",
+    "tipo": "iva",
+    "urgencia": "alta",
+    "articulo": null,
+    "link": null,
+    "alertaDias": 5
+  }}
+]
+```
+
+El campo "id" debe ser estable y descriptivo (no un UUID aleatorio) para que corridas futuras
+puedan actualizar el mismo evento en vez de duplicarlo."""
 
 
 def build_user_prompt(config: dict) -> str:
@@ -73,6 +95,9 @@ def main() -> None:
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"vencimientos-{today}.md", report)
     print(f"Reporte escrito en {output_path}")
+
+    from publish import publish
+    publish(report)
 
 
 if __name__ == "__main__":
