@@ -19,6 +19,11 @@ cd api && uvicorn main:app --reload --port 8000
 cd taxops-web && npm install && npm run dev   # http://localhost:3000
 cd taxops-web && npm run build && npm run lint
 
+# Lint/typecheck (mirrors .github/workflows/ci.yml — api-lint, web-lint)
+flake8 api/ pipeline/ services/ --max-line-length=120 --exclude=__pycache__,.mypy_cache
+mypy api/ pipeline/ services/
+cd taxops-web && npx tsc --noEmit
+
 # DB management (requires DATABASE_URL env var)
 python manage.py init-db
 python manage.py create-org --name "Firma ABC" --email admin@firma.com --password secret123
