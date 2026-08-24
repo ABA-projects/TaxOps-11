@@ -32,6 +32,7 @@ from routers import (  # noqa: E402
     exogenas,
     invoices,
     nomina,
+    novedades,
     renta,
     renta_documentos,
     uploads,
@@ -92,6 +93,7 @@ app.include_router(chatbot.router)
 app.include_router(admin.router)
 app.include_router(nomina.router)
 app.include_router(calendario.router)
+app.include_router(novedades.router)
 app.include_router(renta.router)
 app.include_router(renta_documentos.router)
 app.include_router(uploads.router)
