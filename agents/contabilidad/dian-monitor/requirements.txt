@@ -1,0 +1,4 @@
+groq
+ddgs
+pyyaml
+python-dotenv

@@ -1,0 +1,14 @@
+client_name: "Contadores Asociados SAS"
+
+# Opciones: "Grupo 1 (NIIF Plenas)", "Grupo 2 (NIIF para PYMEs)", "Grupo 3 (microempresas)"
+grupo_niif: "Grupo 2 (NIIF para PYMEs)"
+
+normas_a_monitorear:
+  - NIIF para PYMEs (sección 2 - Conceptos y principios)
+  - NIIF para PYMEs (sección 17 - Propiedades, planta y equipo)
+  - NIIF para PYMEs (sección 20 - Arrendamientos)
+  - NIIF para PYMEs (sección 23 - Ingresos de actividades ordinarias)
+  - NIIF para PYMEs (sección 29 - Impuesto a las ganancias)
+  - Conceptos CTCP
+
+output_dir: "output"
