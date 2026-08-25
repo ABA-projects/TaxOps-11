@@ -1,0 +1,66 @@
+name: Agentes contables (cron semanal)
+
+on:
+  schedule:
+    - cron: "0 11 * * 1"  # lunes 6am hora Colombia (UTC-5)
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # para el rol OIDC (escritura a S3)
+  contents: read
+
+jobs:
+  dian-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r agents/contabilidad/dian-monitor/requirements.txt
+      - run: cd agents/contabilidad/dian-monitor && python agent.py
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  monitor-niif:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r agents/contabilidad/monitor-niif/requirements.txt
+      - run: cd agents/contabilidad/monitor-niif && python agent.py
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  vencimientos-tributarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r agents/contabilidad/vencimientos-tributarios/requirements.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+      - run: cd agents/contabilidad/vencimientos-tributarios && python agent.py
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+  prospector-clientes-contables:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r agents/contabilidad/prospector-clientes-contables/requirements.txt
+      - run: cd agents/contabilidad/prospector-clientes-contables && python agent.py
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
