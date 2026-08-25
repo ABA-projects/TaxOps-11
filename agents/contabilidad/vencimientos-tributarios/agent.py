@@ -61,8 +61,12 @@ Cualquier observación relevante sobre el calendario o cambios recientes.
 
 Si no encuentras fechas concretas, indica la fuente consultada y recomienda verificar directamente.
 
-Al final de tu respuesta, agrega un bloque ```json con los vencimientos encontrados en este
-formato exacto (mismo shape que usa el Calendario Tributario DIAN de la plataforma):
+⚠️ OBLIGATORIO — sin excepción, incluso si la búsqueda no dio resultados concretos: tu respuesta
+SIEMPRE termina con un bloque ```json (lista vacía [] si no encontraste vencimientos verificables).
+Sin este bloque el resultado se descarta automáticamente — no lo omitas por brevedad ni lo
+reemplaces solo por la tabla en Markdown de arriba.
+
+Formato exacto del bloque (mismo shape que usa el Calendario Tributario DIAN de la plataforma):
 
 ```json
 [

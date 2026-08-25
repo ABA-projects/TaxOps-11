@@ -1,8 +1,13 @@
 name: Agentes contables (cron semanal)
 
+# Cron deshabilitado (2026-08-25): se está evaluando mover los 4 agentes a invocación on-demand
+# desde el chatbot en vez de cron semanal — ver docs/superpowers/specs/
+# 2026-08-23-agentes-contables-integracion-design.md y la discusión post-PR #33. No se borra el
+# trigger, solo se comenta, para poder reactivarlo agente por agente una vez decidido cuáles se
+# quedan en cron. workflow_dispatch se deja activo para poder seguir probando manualmente.
 on:
-  schedule:
-    - cron: "0 11 * * 1"  # lunes 6am hora Colombia (UTC-5)
+  # schedule:
+  #   - cron: "0 11 * * 1"  # lunes 6am hora Colombia (UTC-5)
   workflow_dispatch: {}
 
 permissions:
@@ -10,6 +15,10 @@ permissions:
   contents: read
 
 jobs:
+  # Los 4 jobs corren encadenados (needs:) en vez de en paralelo — Groq comparte un límite de
+  # 8000 TPM (tokens/minuto) por cuenta entre TODOS los jobs simultáneos. Corriendo los 4 a la
+  # vez, cada uno pisa el presupuesto de TPM de los demás y explotan con 429 RateLimitError casi
+  # de entrada (confirmado en el run manual del 2026-08-25 — los 3 más rápidos fallaron así).
   dian-monitor:
     runs-on: ubuntu-latest
     steps:
@@ -24,6 +33,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
   monitor-niif:
+    needs: dian-monitor
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,6 +47,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
   vencimientos-tributarios:
+    needs: monitor-niif
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -53,6 +64,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
   prospector-clientes-contables:
+    needs: vencimientos-tributarios
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
