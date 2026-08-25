@@ -16,6 +16,8 @@ import {
   Calculator,
   CalendarDays,
   BookOpen,
+  Newspaper,
+  Target,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -34,11 +36,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Nómina", href: "/nomina", icon: <Calculator size={18} /> },
   { label: "Renta", href: "/renta", icon: <BookOpen size={18} /> },
   { label: "Calendario DIAN", href: "/calendario", icon: <CalendarDays size={18} /> },
+  { label: "Novedades", href: "/novedades", icon: <Newspaper size={18} /> },
   { label: "Chatbot", href: "/chatbot", icon: <Bot size={18} /> },
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
   { label: "Administración", href: "/admin", icon: <Users size={18} />, adminOnly: true },
+  { label: "Leads", href: "/admin/leads", icon: <Target size={18} />, adminOnly: true },
 ];
 
 export default function Sidebar() {
