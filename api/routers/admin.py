@@ -19,6 +19,7 @@ from schemas import (
     CreateUserRequest,
     GroupCreate,
     GroupResponse,
+    LeadComercialResponse,
     OrgResponse,
     SuperadminOrgStats,
     UpdateUserRequest,
@@ -1038,3 +1039,51 @@ async def revoke_invitation(invite_id: str, admin: dict = Depends(require_admin)
             text("DELETE FROM invitations WHERE id=:id AND org_id=:o"),
             {"id": invite_id, "o": admin["org_id"]},
         )
+
+
+@router.get("/leads", response_model=list[LeadComercialResponse])
+async def list_leads(
+    ciudad: str | None = None,
+    sector: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    admin: dict = Depends(require_admin),
+) -> list[LeadComercialResponse]:
+    """Lista leads comerciales generados por el agente prospector-clientes-contables."""
+    from db.database import db_available, get_db
+
+    if not db_available():
+        return []
+
+    from sqlalchemy import text
+
+    filters = []
+    params: dict = {"limit": limit, "offset": offset}
+    if ciudad:
+        filters.append("ciudad = :ciudad")
+        params["ciudad"] = ciudad
+    if sector:
+        filters.append("sector = :sector")
+        params["sector"] = sector
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+    try:
+        with get_db() as db:
+            rows = db.execute(
+                text(
+                    f"SELECT id, empresa, sector, ciudad, contacto, fuente_url, fecha_generado "
+                    f"FROM leads_comerciales {where} "
+                    "ORDER BY fecha_generado DESC LIMIT :limit OFFSET :offset"
+                ),
+                params,
+            ).mappings().fetchall()
+    except Exception:
+        return []
+
+    return [
+        LeadComercialResponse(
+            id=str(r["id"]), empresa=r["empresa"], sector=r["sector"], ciudad=r["ciudad"],
+            contacto=r["contacto"], fuente_url=r["fuente_url"], fecha_generado=str(r["fecha_generado"]),
+        )
+        for r in rows
+    ]

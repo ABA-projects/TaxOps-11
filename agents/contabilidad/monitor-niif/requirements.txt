@@ -1,0 +1,5 @@
+groq
+ddgs
+pyyaml
+python-dotenv
+psycopg2-binary>=2.9

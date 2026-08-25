@@ -237,6 +237,26 @@ class PresignResponse(BaseModel):
     rechazados: list[PresignRejected]
 
 
+# ── Novedades ─────────────────────────────────────────────────────────────────
+
+class NovedadResponse(BaseModel):
+    id: str
+    tipo: str
+    titulo: str
+    resumen: str
+    fecha_generado: str
+
+
+class LeadComercialResponse(BaseModel):
+    id: str
+    empresa: str
+    sector: str | None = None
+    ciudad: str | None = None
+    contacto: str | None = None
+    fuente_url: str | None = None
+    fecha_generado: str
+
+
 # ── Chatbot ───────────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):

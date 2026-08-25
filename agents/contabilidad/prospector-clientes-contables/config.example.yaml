@@ -1,0 +1,25 @@
+agencia_nombre: "Contadores Asociados SAS"
+
+ciudades:
+  - Medellín
+  - Envigado
+  - Bello
+  - Itagüí
+
+sectores_objetivo:
+  - restaurantes y food service
+  - consultorios médicos y odontológicos
+  - constructoras pequeñas
+  - agencias de publicidad
+  - empresas de transporte
+  - comercio al por menor
+  - salones de belleza y estética
+
+servicios_ofrecidos:
+  - contabilidad mensual
+  - declaración de renta
+  - nómina
+  - revisoría fiscal
+  - asesoría tributaria
+
+output_dir: "output"

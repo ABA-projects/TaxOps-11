@@ -1,0 +1,15 @@
+client_name: "Contadores Asociados SAS"
+
+# Opciones: "gran contribuyente", "persona jurídica régimen ordinario",
+#           "persona natural declarante", "régimen simple"
+tipo_contribuyente: "persona jurídica régimen ordinario"
+
+obligaciones:
+  - IVA bimestral
+  - Retención en la fuente mensual
+  - Impuesto de renta anual
+  - ICA (Industria y Comercio)
+  - Nómina electrónica
+  - Facturación electrónica
+
+output_dir: "output"
