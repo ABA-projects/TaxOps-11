@@ -149,6 +149,29 @@ def web_search(query: str, agent_dir: Path, max_results: int = 5, retries: int =
 # Loop de tool-calling contra Groq
 # ---------------------------------------------------------------------------
 
+def _groq_chat_with_retry(client, *, retries: int = 3, backoff: float = 15.0, **kwargs):
+    """Wrapper de client.chat.completions.create() con retry+backoff ante 429 RateLimitError.
+
+    Groq comparte un límite de TPM (tokens/minuto) por cuenta entre TODAS las llamadas
+    concurrentes — cuando varios agentes corren a la vez (o uno solo con muchas iteraciones
+    de búsqueda) es fácil pisarlo. Sin este retry, un 429 tumbaba el job entero (visto en
+    producción el 2026-08-25 corriendo los 4 agentes en paralelo)."""
+    from groq import RateLimitError
+
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except RateLimitError as e:
+            last_error = e
+            if attempt < retries:
+                wait = backoff * (attempt + 1)
+                print(f"[groq] rate limit — reintentando en {wait:.0f}s ({e})", file=sys.stderr)
+                time.sleep(wait)
+                continue
+    raise last_error
+
+
 def run_agent(
     system_prompt: str,
     user_prompt: str,
@@ -168,7 +191,8 @@ def run_agent(
     ]
 
     for i in range(max_iterations):
-        response = client.chat.completions.create(
+        response = _groq_chat_with_retry(
+            client,
             model=MODEL,
             messages=messages,
             tools=[WEB_SEARCH_TOOL],
@@ -205,7 +229,8 @@ def run_llm_only(system_prompt: str, user_prompt: str) -> str:
     from groq import Groq
 
     client = Groq()
-    response = client.chat.completions.create(
+    response = _groq_chat_with_retry(
+        client,
         model=MODEL,
         messages=[
             {"role": "system", "content": system_prompt},

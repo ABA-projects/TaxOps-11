@@ -42,8 +42,31 @@ def merge_eventos(existentes: list[dict], nuevos: list[dict]) -> list[dict]:
     return sorted(por_id.values(), key=lambda e: e["fecha"])
 
 
+def _repair_missing_json_block(report: str) -> list[dict]:
+    """Pedido de reparación focalizado (sin volver a buscar en la web) cuando el modelo generó
+    el reporte pero se olvidó de cerrar el bloque ```json``` — visto en producción el
+    2026-08-25. Un llamado corto de "convertí esto a JSON" es mucho más confiable que exigirle
+    compliance perfecta al final de una corrida larga de búsqueda (8+ iteraciones)."""
+    from agents._shared.agent_core import run_llm_only
+
+    fixed = run_llm_only(
+        "Sos un conversor de texto a JSON estricto. Respondés ÚNICAMENTE con el bloque "
+        "```json``` pedido, sin texto antes ni después.",
+        "Convertí los vencimientos tributarios del siguiente reporte a un bloque ```json``` "
+        "con esta forma exacta por cada uno: "
+        '{"id": "...", "fecha": "YYYY-MM-DD", "titulo": "...", "descripcion": "...", '
+        '"tipo": "...", "urgencia": "...", "articulo": null, "link": null, "alertaDias": null}. '
+        "Si el reporte no menciona ningún vencimiento concreto, respondé con una lista vacía []."
+        f"\n\nReporte:\n{report}",
+    )
+    return extract_eventos(fixed)
+
+
 def publish(report: str) -> int:
-    nuevos = extract_eventos(report)
+    try:
+        nuevos = extract_eventos(report)
+    except ValueError:
+        nuevos = _repair_missing_json_block(report)
 
     s3 = boto3.client("s3", region_name="us-east-1")
     try:

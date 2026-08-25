@@ -51,6 +51,21 @@ def test_merge_eventos_updates_by_id_preserves_others():
     assert any(e["id"] == "v2" for e in merged)  # v2 se preservó intacto
 
 
+def test_publish_repairs_report_missing_json_block(monkeypatch):
+    """El modelo a veces genera el reporte completo pero se olvida de cerrar el bloque ```json```
+    (visto en producción el 2026-08-25). publish() debe recuperarse con un llamado de reparación
+    en vez de crashear el job entero."""
+    import agents._shared.agent_core as agent_core
+
+    reparado = '```json\n[{"id": "v1", "fecha": "2026-09-15", "titulo": "t", "descripcion": "d", "tipo": "iva", "urgencia": "alta"}]\n```'  # noqa: E501
+    monkeypatch.setattr(agent_core, "run_llm_only", lambda *a, **k: reparado)
+
+    from publish import _repair_missing_json_block
+    eventos = _repair_missing_json_block("## Vencimientos\n\nIVA bimestral el 15 de septiembre.")
+
+    assert eventos[0]["id"] == "v1"
+
+
 @mock_aws
 def test_publish_end_to_end_writes_merged_to_s3():
     s3 = boto3.client("s3", region_name="us-east-1")
