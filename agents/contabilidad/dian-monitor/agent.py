@@ -71,9 +71,17 @@ def build_user_prompt(config: dict) -> str:
     return "Busca novedades tributarias de los últimos 7 días que impacten a PYMEs colombianas."
 
 
+def run(config: dict, **overrides) -> str:
+    """Corre el agente con un config ya cargado — usado por main() (CLI/cron) y por
+    worker_handler.py (invocación on-demand desde el chatbot). Este agente no usa overrides
+    (solo prospector-clientes-contables los usa) — se aceptan y se ignoran por firma
+    consistente entre los 4 agentes."""
+    return run_agent(build_system_prompt(config), build_user_prompt(config), AGENT_DIR)
+
+
 def main() -> None:
     config = load_config(AGENT_DIR / "config.yaml")
-    report = run_agent(build_system_prompt(config), build_user_prompt(config), AGENT_DIR)
+    report = run(config)
 
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"reporte-dian-{today}.md", report)
