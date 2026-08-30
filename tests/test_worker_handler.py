@@ -209,3 +209,70 @@ def test_handler_dispatches_exogenas(dynamodb_table, monkeypatch):
     worker_handler.handler(_sqs_event(body), context=None)
 
     assert called["exogenas"]["job_id"] == "j2"
+
+
+def test_handler_dispatches_agente_contable(dynamodb_table, monkeypatch):
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    calls = {}
+
+    def _fake_process(body):
+        calls["body"] = body
+
+    monkeypatch.setattr(worker_handler, "_process_agente_contable", _fake_process)
+
+    body = {"tipo": "agente_contable", "job_id": "j3", "agente": "dian-monitor", "overrides": {}}
+    worker_handler.handler(_sqs_event(body), context=None)
+
+    assert calls["body"]["agente"] == "dian-monitor"
+
+
+def test_process_agente_contable_runs_agent_and_marks_job_done(dynamodb_table, monkeypatch):
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    fake_agent_module = type("FakeAgent", (), {
+        "load_config": staticmethod(lambda path: {"keywords": []}),
+        "run": staticmethod(lambda config, **overrides: "reporte fake"),
+    })
+    fake_publish_module = type("FakePublish", (), {
+        "publish": staticmethod(lambda report: None),
+    })
+
+    # OJO: los nombres son "agente_contable_<agente>_agent" y "..._publish" — ambos empiezan
+    # con "agente_contable", así que un "agent" in name matchea los dos (bug real detectado en
+    # autorevisión). Distinguir por el sufijo exacto, no por substring.
+    monkeypatch.setattr(
+        worker_handler, "_load_module",
+        lambda path, name: fake_agent_module if name.endswith("_agent") else fake_publish_module,
+    )
+
+    body = {"job_id": "job-agente-1", "agente": "dian-monitor", "overrides": {}}
+    worker_handler._process_agente_contable(body)
+
+    job = job_store.get_job("job-agente-1")
+    assert job["status"] == "done"
+    assert job["agente"] == "dian-monitor"
+
+
+def test_process_agente_contable_marks_job_error_on_failure(dynamodb_table, monkeypatch):
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    def _raise(*a, **k):
+        raise RuntimeError("groq se cayó")
+
+    fake_agent_module = type("FakeAgent", (), {
+        "load_config": staticmethod(lambda path: {}),
+        "run": staticmethod(_raise),
+    })
+
+    monkeypatch.setattr(worker_handler, "_load_module", lambda path, name: fake_agent_module)
+
+    body = {"job_id": "job-agente-2", "agente": "monitor-niif", "overrides": {}}
+    worker_handler._process_agente_contable(body)
+
+    job = job_store.get_job("job-agente-2")
+    assert job["status"] == "error"
+    assert "groq se cayó" in job["error"]
