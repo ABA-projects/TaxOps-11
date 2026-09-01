@@ -233,6 +233,14 @@ def get_groq_models() -> list[dict]:
 
 # ── Tool implementations ──────────────────────────────────────────────────────
 
+from datetime import date
+
+
+def _es_reciente(fecha_generado: date, dias: int = 7) -> bool:
+    """True si fecha_generado está dentro de los últimos `dias` días desde hoy."""
+    return (date.today() - fecha_generado).days <= dias
+
+
 def _fmt_cop(v: float) -> str:
     return f"${v:,.0f} COP"
 
