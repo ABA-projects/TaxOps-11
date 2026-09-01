@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
+import boto3
 import pandas as pd
 
 
@@ -239,6 +241,70 @@ from datetime import date
 def _es_reciente(fecha_generado: date, dias: int = 7) -> bool:
     """True si fecha_generado está dentro de los últimos `dias` días desde hoy."""
     return (date.today() - fecha_generado).days <= dias
+
+
+def _disparar_agente(agente: str, overrides: dict | None = None) -> str:
+    """Encola una corrida on-demand del agente correspondiente en SQS — mismo mecanismo que ya
+    usan exogenas/renta (ver api/routers/exogenas.py). Lee la config de AWS de env vars directo
+    (no core.config.get_settings()) porque este archivo puede correr fuera del contexto FastAPI
+    (Streamlit legacy), donde 'api/' no está garantizado en sys.path."""
+    job_id = str(uuid.uuid4())
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    queue_url = os.environ.get("SQS_QUEUE_URL", "")
+    sqs = boto3.client("sqs", region_name=region)
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps({
+            "tipo": "agente_contable",
+            "agente": agente,
+            "job_id": job_id,
+            "overrides": overrides or {},
+        }),
+    )
+    return job_id
+
+
+def _ultima_novedad(tipo: str) -> dict | None:
+    """Última fila de `novedades` para ese tipo. None si no hay datos o la DB no está disponible
+    — mismo criterio de degradación que api/routers/novedades.py."""
+    from db.database import db_available, get_db
+
+    if not db_available():
+        return None
+
+    from sqlalchemy import text
+
+    try:
+        with get_db() as db:
+            row = db.execute(
+                text(
+                    "SELECT tipo, titulo, resumen, fecha_generado FROM novedades "
+                    "WHERE tipo = :tipo ORDER BY fecha_generado DESC LIMIT 1"
+                ),
+                {"tipo": tipo},
+            ).mappings().fetchone()
+    except Exception:
+        return None
+    return dict(row) if row else None
+
+
+def _tool_consultar_novedades(tipo: str, nombre_amigable: str, agente: str) -> str:
+    novedad = _ultima_novedad(tipo)
+    if novedad and _es_reciente(novedad["fecha_generado"]):
+        return f"{novedad['titulo']} ({novedad['fecha_generado']}):\n\n{novedad['resumen']}"
+    _disparar_agente(agente)
+    return (
+        f"No tengo novedades {nombre_amigable} recientes (últimos 7 días) — ya arranqué la "
+        f"búsqueda, va a tardar unos minutos. Revisá la página de Novedades en un rato."
+    )
+
+
+def _tool_consultar_novedades_dian() -> str:
+    return _tool_consultar_novedades(tipo="dian", nombre_amigable="DIAN", agente="dian-monitor")
+
+
+def _tool_consultar_novedades_niif() -> str:
+    return _tool_consultar_novedades(tipo="niif", nombre_amigable="NIIF", agente="monitor-niif")
 
 
 def _fmt_cop(v: float) -> str:
