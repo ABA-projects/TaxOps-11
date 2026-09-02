@@ -209,6 +209,58 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_novedades_dian",
+            "description": (
+                "Consulta las últimas novedades tributarias DIAN (resoluciones, circulares, "
+                "decretos). Si no hay datos recientes, dispara una búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_novedades_niif",
+            "description": (
+                "Consulta las últimas novedades NIIF. Si no hay datos recientes, dispara una "
+                "búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_vencimientos_tributarios",
+            "description": (
+                "Consulta los próximos vencimientos tributarios (IVA, renta, retención, etc.) "
+                "en los siguientes 30 días. Si no hay datos, dispara una búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_leads_comerciales",
+            "description": (
+                "Busca empresas de un sector y ciudad que podrían necesitar servicios "
+                "contables. Si no hay leads guardados para esa combinación, dispara una "
+                "búsqueda nueva."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sector": {"type": "string", "description": "Sector económico, ej. 'restaurantes'"},
+                    "ciudad": {"type": "string", "description": "Ciudad colombiana, ej. 'Medellín'"},
+                },
+                "required": ["sector", "ciudad"],
+            },
+        },
+    },
 ]
 
 
@@ -532,6 +584,14 @@ def _ejecutar_herramienta(nombre: str, args: dict, df: pd.DataFrame) -> str:
         return _tool_resumen_exogenas(df)
     if nombre == "top_agentes_retension":
         return _tool_top_agentes_retencion(df, args.get("n", 10))
+    if nombre == "consultar_novedades_dian":
+        return _tool_consultar_novedades_dian()
+    if nombre == "consultar_novedades_niif":
+        return _tool_consultar_novedades_niif()
+    if nombre == "consultar_vencimientos_tributarios":
+        return _tool_consultar_vencimientos_tributarios()
+    if nombre == "buscar_leads_comerciales":
+        return _tool_buscar_leads_comerciales(args.get("sector", ""), args.get("ciudad", ""))
     return f"Herramienta '{nombre}' no reconocida."
 
 

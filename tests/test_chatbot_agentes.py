@@ -155,3 +155,28 @@ def test_tool_buscar_leads_dispara_si_no_existe_esa_combinacion(monkeypatch):
 
     assert disparos == [("prospector-clientes-contables", {"sector": "veterinarias", "ciudad": "Bucaramanga"})]
     assert "arrancó" in resultado.lower() or "arranqué" in resultado.lower()
+
+
+def test_ejecutar_herramienta_despacha_las_4_tools_nuevas(monkeypatch):
+    monkeypatch.setattr(chatbot, "_tool_consultar_novedades_dian", lambda: "dian ok")
+    monkeypatch.setattr(chatbot, "_tool_consultar_novedades_niif", lambda: "niif ok")
+    monkeypatch.setattr(chatbot, "_tool_consultar_vencimientos_tributarios", lambda: "venc ok")
+    monkeypatch.setattr(
+        chatbot, "_tool_buscar_leads_comerciales",
+        lambda sector, ciudad: f"leads {sector} {ciudad} ok",
+    )
+
+    assert chatbot._ejecutar_herramienta("consultar_novedades_dian", {}, None) == "dian ok"
+    assert chatbot._ejecutar_herramienta("consultar_novedades_niif", {}, None) == "niif ok"
+    assert chatbot._ejecutar_herramienta("consultar_vencimientos_tributarios", {}, None) == "venc ok"
+    assert chatbot._ejecutar_herramienta(
+        "buscar_leads_comerciales", {"sector": "salud", "ciudad": "Cali"}, None
+    ) == "leads salud Cali ok"
+
+
+def test_tools_list_incluye_las_4_nuevas():
+    nombres = {t["function"]["name"] for t in chatbot.TOOLS}
+    assert {
+        "consultar_novedades_dian", "consultar_novedades_niif",
+        "consultar_vencimientos_tributarios", "buscar_leads_comerciales",
+    } <= nombres
