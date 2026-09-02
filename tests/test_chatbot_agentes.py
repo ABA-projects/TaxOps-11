@@ -2,8 +2,10 @@
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+import services.chatbot as chatbot  # noqa: E402
 from services.chatbot import _es_reciente  # noqa: E402
 
 
@@ -21,12 +23,6 @@ def test_es_reciente_fuera_del_limite():
 
 def test_es_reciente_limite_configurable():
     assert _es_reciente(date.today() - timedelta(days=10), dias=30) is True
-
-
-from datetime import timedelta
-from unittest.mock import MagicMock
-
-import services.chatbot as chatbot  # noqa: E402
 
 
 def test_disparar_agente_encola_sqs_y_devuelve_job_id(monkeypatch):
