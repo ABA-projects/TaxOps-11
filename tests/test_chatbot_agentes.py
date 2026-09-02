@@ -93,3 +93,40 @@ def test_tool_consultar_novedades_niif_usa_tipo_niif(monkeypatch):
     chatbot._tool_consultar_novedades_niif()
 
     assert consultados == ["niif"]
+
+
+def test_tool_vencimientos_devuelve_cache_si_hay_evento_proximo(monkeypatch):
+    eventos = [
+        {"id": "v1", "fecha": (date.today() + timedelta(days=10)).isoformat(), "titulo": "IVA bimestral"},
+    ]
+    monkeypatch.setattr(chatbot, "_leer_calendario", lambda: eventos)
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda *a, **k: disparos.append(a) or "job-x")
+
+    resultado = chatbot._tool_consultar_vencimientos_tributarios()
+
+    assert "IVA bimestral" in resultado
+    assert disparos == []
+
+
+def test_tool_vencimientos_dispara_si_no_hay_evento_en_30_dias(monkeypatch):
+    eventos = [
+        {"id": "v1", "fecha": (date.today() + timedelta(days=60)).isoformat(), "titulo": "muy lejos"},
+    ]
+    monkeypatch.setattr(chatbot, "_leer_calendario", lambda: eventos)
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda agente, **k: disparos.append(agente) or "job-x")
+
+    chatbot._tool_consultar_vencimientos_tributarios()
+
+    assert disparos == ["vencimientos-tributarios"]
+
+
+def test_tool_vencimientos_dispara_si_calendario_vacio(monkeypatch):
+    monkeypatch.setattr(chatbot, "_leer_calendario", lambda: [])
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda agente, **k: disparos.append(agente) or "job-x")
+
+    chatbot._tool_consultar_vencimientos_tributarios()
+
+    assert disparos == ["vencimientos-tributarios"]
