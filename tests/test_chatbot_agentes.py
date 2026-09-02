@@ -130,3 +130,32 @@ def test_tool_vencimientos_dispara_si_calendario_vacio(monkeypatch):
     chatbot._tool_consultar_vencimientos_tributarios()
 
     assert disparos == ["vencimientos-tributarios"]
+
+
+def test_tool_buscar_leads_devuelve_cache_si_existen(monkeypatch):
+    leads = [
+        {"empresa": "Restaurante A", "sector": "restaurantes", "ciudad": "Medellín",
+         "contacto": "a@a.com", "fuente_url": "https://a.com", "fecha_generado": date.today()},
+    ]
+    monkeypatch.setattr(chatbot, "_leads_existentes", lambda sector, ciudad: leads)
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda *a, **k: disparos.append(a) or "job-x")
+
+    resultado = chatbot._tool_buscar_leads_comerciales("restaurantes", "Medellín")
+
+    assert "Restaurante A" in resultado
+    assert disparos == []
+
+
+def test_tool_buscar_leads_dispara_si_no_existe_esa_combinacion(monkeypatch):
+    monkeypatch.setattr(chatbot, "_leads_existentes", lambda sector, ciudad: [])
+    disparos = []
+    monkeypatch.setattr(
+        chatbot, "_disparar_agente",
+        lambda agente, overrides=None: disparos.append((agente, overrides)) or "job-x",
+    )
+
+    resultado = chatbot._tool_buscar_leads_comerciales("veterinarias", "Bucaramanga")
+
+    assert disparos == [("prospector-clientes-contables", {"sector": "veterinarias", "ciudad": "Bucaramanga"})]
+    assert "arrancó" in resultado.lower() or "arranqué" in resultado.lower()

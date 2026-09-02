@@ -339,6 +339,42 @@ def _tool_consultar_vencimientos_tributarios() -> str:
     )
 
 
+def _leads_existentes(sector: str, ciudad: str) -> list[dict]:
+    """Leads ya guardados para ese sector+ciudad exactos. [] si no hay o la DB no disponible."""
+    from db.database import db_available, get_db
+
+    if not db_available():
+        return []
+
+    from sqlalchemy import text
+
+    try:
+        with get_db() as db:
+            rows = db.execute(
+                text(
+                    "SELECT empresa, sector, ciudad, contacto, fuente_url, fecha_generado "
+                    "FROM leads_comerciales WHERE sector = :sector AND ciudad = :ciudad "
+                    "ORDER BY fecha_generado DESC"
+                ),
+                {"sector": sector, "ciudad": ciudad},
+            ).mappings().fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def _tool_buscar_leads_comerciales(sector: str, ciudad: str) -> str:
+    leads = _leads_existentes(sector, ciudad)
+    if leads:
+        lineas = [f"- {lead['empresa']} ({lead['contacto'] or 'sin contacto'})" for lead in leads]
+        return f"Leads de {sector} en {ciudad}:\n" + "\n".join(lineas)
+    _disparar_agente("prospector-clientes-contables", overrides={"sector": sector, "ciudad": ciudad})
+    return (
+        f"No tengo leads de {sector} en {ciudad} todavía — ya arranqué la búsqueda, va a tardar "
+        f"unos minutos. Revisá la página de Leads en un rato."
+    )
+
+
 def _fmt_cop(v: float) -> str:
     return f"${v:,.0f} COP"
 
