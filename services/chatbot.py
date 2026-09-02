@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import date
+
 import boto3
 import pandas as pd
 
@@ -235,8 +237,6 @@ def get_groq_models() -> list[dict]:
 
 # ── Tool implementations ──────────────────────────────────────────────────────
 
-from datetime import date
-
 
 def _es_reciente(fecha_generado: date, dias: int = 7) -> bool:
     """True si fecha_generado está dentro de los últimos `dias` días desde hoy."""
@@ -305,38 +305,6 @@ def _tool_consultar_novedades_dian() -> str:
 
 def _tool_consultar_novedades_niif() -> str:
     return _tool_consultar_novedades(tipo="niif", nombre_amigable="NIIF", agente="monitor-niif")
-
-
-def _leer_calendario() -> list[dict]:
-    """Lee el Calendario Tributario DIAN desde S3 — mismo bucket/key que
-    api/routers/calendario.py. [] si no hay datos o S3 no está disponible. Usa el `boto3` ya
-    importado a nivel de módulo (agregado en Task 7 para _disparar_agente)."""
-    bucket = os.environ.get("S3_BUCKET_JOB_ARTIFACTS", "taxops-job-artifacts-prod")
-    region = os.environ.get("AWS_REGION", "us-east-1")
-    s3 = boto3.client("s3", region_name=region)
-    try:
-        obj = s3.get_object(Bucket=bucket, Key="config/calendario_2026.json")
-        return json.loads(obj["Body"].read())
-    except Exception:
-        return []
-
-
-def _tool_consultar_vencimientos_tributarios() -> str:
-    hoy = date.today()
-    eventos = _leer_calendario()
-    proximos = [
-        e for e in eventos
-        if 0 <= (date.fromisoformat(e["fecha"]) - hoy).days <= 30
-    ]
-    if proximos:
-        proximos.sort(key=lambda e: e["fecha"])
-        lineas = [f"- {e['fecha']}: {e['titulo']}" for e in proximos]
-        return "Vencimientos tributarios en los próximos 30 días:\n" + "\n".join(lineas)
-    _disparar_agente("vencimientos-tributarios")
-    return (
-        "No tengo vencimientos cargados para los próximos 30 días — ya arranqué la búsqueda, "
-        "va a tardar unos minutos. Revisá el Calendario DIAN en un rato."
-    )
 
 
 def _leer_calendario() -> list[dict]:
