@@ -75,9 +75,14 @@ def build_user_prompt(config: dict) -> str:
     return "Busca actualizaciones NIIF/IFRS recientes (últimos 30 días) aplicables en Colombia."
 
 
+def run(config: dict, **overrides) -> str:
+    """Ver dian-monitor/agent.py::run() — mismo contrato, no usa overrides."""
+    return run_agent(build_system_prompt(config), build_user_prompt(config), AGENT_DIR)
+
+
 def main() -> None:
     config = load_config(AGENT_DIR / "config.yaml")
-    report = run_agent(build_system_prompt(config), build_user_prompt(config), AGENT_DIR)
+    report = run(config)
 
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"monitor-niif-{today}.md", report)

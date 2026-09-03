@@ -24,10 +24,10 @@ from _shared.agent_core import load_config, load_env, run_agent, write_report  #
 load_env(AGENT_DIR)
 
 
-def build_system_prompt(config: dict) -> str:
+def build_system_prompt(config: dict, sector: str | None = None, ciudad: str | None = None) -> str:
     agencia = config.get("agencia_nombre", "la firma contable")
-    sectores = ", ".join(config.get("sectores_objetivo", []))
-    ciudades = ", ".join(config.get("ciudades", []))
+    sectores = sector if sector else ", ".join(config.get("sectores_objetivo", []))
+    ciudades = ciudad if ciudad else ", ".join(config.get("ciudades", []))
     servicios = ", ".join(config.get("servicios_ofrecidos", []))
 
     return f"""Eres un agente de prospección comercial para una firma contable colombiana.
@@ -77,18 +77,30 @@ formato exacto (lista vacía si no encontraste ninguno verificable):
 """
 
 
-def build_user_prompt(config: dict) -> str:
-    sectores = config.get("sectores_objetivo", [])
-    ciudades = config.get("ciudades", ["Medellín", "Bogotá"])
+def build_user_prompt(config: dict, sector: str | None = None, ciudad: str | None = None) -> str:
+    sectores = [sector] if sector else config.get("sectores_objetivo", [])
+    ciudades = [ciudad] if ciudad else config.get("ciudades", ["Medellín", "Bogotá"])
     return (
         f"Busca empresas en los sectores {sectores} ubicadas en {ciudades}, Colombia, "
         "que podrían necesitar servicios contables externos."
     )
 
 
+def run(config: dict, **overrides) -> str:
+    """A diferencia de los otros 3 agentes, sí usa overrides — sector/ciudad puntuales pedidos
+    on-demand desde el chatbot reemplazan (no se mezclan con) config.yaml."""
+    sector = overrides.get("sector")
+    ciudad = overrides.get("ciudad")
+    return run_agent(
+        build_system_prompt(config, sector=sector, ciudad=ciudad),
+        build_user_prompt(config, sector=sector, ciudad=ciudad),
+        AGENT_DIR,
+    )
+
+
 def main() -> None:
     config = load_config(AGENT_DIR / "config.yaml")
-    report = run_agent(build_system_prompt(config), build_user_prompt(config), AGENT_DIR)
+    report = run(config)
 
     today = date.today().isoformat()
     output_path = write_report(AGENT_DIR, config.get("output_dir", "output"), f"leads-contables-{today}.md", report)

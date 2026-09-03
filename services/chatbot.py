@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
+from datetime import date
+
+import boto3
 import pandas as pd
 
 
@@ -205,6 +209,58 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_novedades_dian",
+            "description": (
+                "Consulta las últimas novedades tributarias DIAN (resoluciones, circulares, "
+                "decretos). Si no hay datos recientes, dispara una búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_novedades_niif",
+            "description": (
+                "Consulta las últimas novedades NIIF. Si no hay datos recientes, dispara una "
+                "búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_vencimientos_tributarios",
+            "description": (
+                "Consulta los próximos vencimientos tributarios (IVA, renta, retención, etc.) "
+                "en los siguientes 30 días. Si no hay datos, dispara una búsqueda nueva."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_leads_comerciales",
+            "description": (
+                "Busca empresas de un sector y ciudad que podrían necesitar servicios "
+                "contables. Si no hay leads guardados para esa combinación, dispara una "
+                "búsqueda nueva."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sector": {"type": "string", "description": "Sector económico, ej. 'restaurantes'"},
+                    "ciudad": {"type": "string", "description": "Ciudad colombiana, ej. 'Medellín'"},
+                },
+                "required": ["sector", "ciudad"],
+            },
+        },
+    },
 ]
 
 
@@ -232,6 +288,144 @@ def get_groq_models() -> list[dict]:
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
+
+
+def _es_reciente(fecha_generado: date, dias: int = 7) -> bool:
+    """True si fecha_generado está dentro de los últimos `dias` días desde hoy."""
+    return (date.today() - fecha_generado).days <= dias
+
+
+def _disparar_agente(agente: str, overrides: dict | None = None) -> str:
+    """Encola una corrida on-demand del agente correspondiente en SQS — mismo mecanismo que ya
+    usan exogenas/renta (ver api/routers/exogenas.py). Lee la config de AWS de env vars directo
+    (no core.config.get_settings()) porque este archivo puede correr fuera del contexto FastAPI
+    (Streamlit legacy), donde 'api/' no está garantizado en sys.path."""
+    job_id = str(uuid.uuid4())
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    queue_url = os.environ.get("SQS_QUEUE_URL", "")
+    sqs = boto3.client("sqs", region_name=region)
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps({
+            "tipo": "agente_contable",
+            "agente": agente,
+            "job_id": job_id,
+            "overrides": overrides or {},
+        }),
+    )
+    return job_id
+
+
+def _ultima_novedad(tipo: str) -> dict | None:
+    """Última fila de `novedades` para ese tipo. None si no hay datos o la DB no está disponible
+    — mismo criterio de degradación que api/routers/novedades.py."""
+    from db.database import db_available, get_db
+
+    if not db_available():
+        return None
+
+    from sqlalchemy import text
+
+    try:
+        with get_db() as db:
+            row = db.execute(
+                text(
+                    "SELECT tipo, titulo, resumen, fecha_generado FROM novedades "
+                    "WHERE tipo = :tipo ORDER BY fecha_generado DESC LIMIT 1"
+                ),
+                {"tipo": tipo},
+            ).mappings().fetchone()
+    except Exception:
+        return None
+    return dict(row) if row else None
+
+
+def _tool_consultar_novedades(tipo: str, nombre_amigable: str, agente: str) -> str:
+    novedad = _ultima_novedad(tipo)
+    if novedad and _es_reciente(novedad["fecha_generado"]):
+        return f"{novedad['titulo']} ({novedad['fecha_generado']}):\n\n{novedad['resumen']}"
+    _disparar_agente(agente)
+    return (
+        f"No tengo novedades {nombre_amigable} recientes (últimos 7 días) — ya arranqué la "
+        f"búsqueda, va a tardar unos minutos. Revisá la página de Novedades en un rato."
+    )
+
+
+def _tool_consultar_novedades_dian() -> str:
+    return _tool_consultar_novedades(tipo="dian", nombre_amigable="DIAN", agente="dian-monitor")
+
+
+def _tool_consultar_novedades_niif() -> str:
+    return _tool_consultar_novedades(tipo="niif", nombre_amigable="NIIF", agente="monitor-niif")
+
+
+def _leer_calendario() -> list[dict]:
+    """Lee el Calendario Tributario DIAN desde S3 — mismo bucket/key que
+    api/routers/calendario.py. [] si no hay datos o S3 no está disponible. Usa el `boto3` ya
+    importado a nivel de módulo (agregado en Task 7 para _disparar_agente)."""
+    bucket = os.environ.get("S3_BUCKET_JOB_ARTIFACTS", "taxops-job-artifacts-prod")
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    s3 = boto3.client("s3", region_name=region)
+    try:
+        obj = s3.get_object(Bucket=bucket, Key="config/calendario_2026.json")
+        return json.loads(obj["Body"].read())
+    except Exception:
+        return []
+
+
+def _tool_consultar_vencimientos_tributarios() -> str:
+    hoy = date.today()
+    eventos = _leer_calendario()
+    proximos = [
+        e for e in eventos
+        if 0 <= (date.fromisoformat(e["fecha"]) - hoy).days <= 30
+    ]
+    if proximos:
+        proximos.sort(key=lambda e: e["fecha"])
+        lineas = [f"- {e['fecha']}: {e['titulo']}" for e in proximos]
+        return "Vencimientos tributarios en los próximos 30 días:\n" + "\n".join(lineas)
+    _disparar_agente("vencimientos-tributarios")
+    return (
+        "No tengo vencimientos cargados para los próximos 30 días — ya arranqué la búsqueda, "
+        "va a tardar unos minutos. Revisá el Calendario DIAN en un rato."
+    )
+
+
+def _leads_existentes(sector: str, ciudad: str) -> list[dict]:
+    """Leads ya guardados para ese sector+ciudad exactos. [] si no hay o la DB no disponible."""
+    from db.database import db_available, get_db
+
+    if not db_available():
+        return []
+
+    from sqlalchemy import text
+
+    try:
+        with get_db() as db:
+            rows = db.execute(
+                text(
+                    "SELECT empresa, sector, ciudad, contacto, fuente_url, fecha_generado "
+                    "FROM leads_comerciales WHERE sector = :sector AND ciudad = :ciudad "
+                    "ORDER BY fecha_generado DESC"
+                ),
+                {"sector": sector, "ciudad": ciudad},
+            ).mappings().fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def _tool_buscar_leads_comerciales(sector: str, ciudad: str) -> str:
+    leads = _leads_existentes(sector, ciudad)
+    if leads:
+        lineas = [f"- {lead['empresa']} ({lead['contacto'] or 'sin contacto'})" for lead in leads]
+        return f"Leads de {sector} en {ciudad}:\n" + "\n".join(lineas)
+    _disparar_agente("prospector-clientes-contables", overrides={"sector": sector, "ciudad": ciudad})
+    return (
+        f"No tengo leads de {sector} en {ciudad} todavía — ya arranqué la búsqueda, va a tardar "
+        f"unos minutos. Revisá la página de Leads en un rato."
+    )
+
 
 def _fmt_cop(v: float) -> str:
     return f"${v:,.0f} COP"
@@ -390,6 +584,14 @@ def _ejecutar_herramienta(nombre: str, args: dict, df: pd.DataFrame) -> str:
         return _tool_resumen_exogenas(df)
     if nombre == "top_agentes_retension":
         return _tool_top_agentes_retencion(df, args.get("n", 10))
+    if nombre == "consultar_novedades_dian":
+        return _tool_consultar_novedades_dian()
+    if nombre == "consultar_novedades_niif":
+        return _tool_consultar_novedades_niif()
+    if nombre == "consultar_vencimientos_tributarios":
+        return _tool_consultar_vencimientos_tributarios()
+    if nombre == "buscar_leads_comerciales":
+        return _tool_buscar_leads_comerciales(args.get("sector", ""), args.get("ciudad", ""))
     return f"Herramienta '{nombre}' no reconocida."
 
 

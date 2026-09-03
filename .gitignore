@@ -78,6 +78,7 @@ service-account*.json
 # ── Local dev tooling ─────────────────────────────────────────────────────────
 .envrc
 .superpowers/
+.worktrees/
 
 # ── Terraform ─────────────────────────────────────────────────────────────────
 **/.terraform/
