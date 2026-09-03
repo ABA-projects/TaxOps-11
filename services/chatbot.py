@@ -135,7 +135,13 @@ Si no sabes algo con certeza, indícalo — nunca inventes normas ni cifras."""
 
 # ── Tool definitions (formato OpenAI-compatible) ──────────────────────────────
 
-TOOLS: list[dict] = [
+# TOOLS_DF: requieren el DataFrame cargado en sesión (facturas/exógenas) — sin datos
+# no tiene sentido ofrecérselas al LLM.
+# TOOLS_AGENTES: los 4 agentes on-demand — leen Postgres/S3 directo, no dependen de
+# ningún DataFrame cargado en sesión, así que deben ofrecerse siempre (ver C4 en el
+# fix wave: el frontend nunca manda df_context, por lo que `df` siempre es None en
+# producción y estas 4 tools eran inalcanzables si solo se ofrecían con TOOLS).
+TOOLS_DF: list[dict] = [
     {
         "type": "function",
         "function": {
@@ -209,6 +215,9 @@ TOOLS: list[dict] = [
             },
         },
     },
+]
+
+TOOLS_AGENTES: list[dict] = [
     {
         "type": "function",
         "function": {
@@ -262,6 +271,10 @@ TOOLS: list[dict] = [
         },
     },
 ]
+
+# Se mantiene TOOLS = TOOLS_AGENTES + TOOLS_DF para no romper imports existentes de
+# `chatbot.TOOLS` (incluye un test que lo asserta directo).
+TOOLS: list[dict] = TOOLS_AGENTES + TOOLS_DF
 
 
 # ── Groq: fetch live models ───────────────────────────────────────────────────
@@ -373,12 +386,25 @@ def _leer_calendario() -> list[dict]:
         return []
 
 
+def _dias_hasta(evento: dict, hoy: date) -> int | None:
+    """Días entre hoy y la fecha del evento, o None si `fecha` falta o no es parseable.
+
+    Los eventos vienen de S3 y son generados por el LLM del agente
+    `vencimientos-tributarios`; su publicador solo valida que exista la clave `fecha`,
+    nunca que su valor sea una fecha ISO válida — una fecha malformada no debe tumbar
+    todo el turno de chat."""
+    try:
+        return (date.fromisoformat(evento["fecha"]) - hoy).days
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 def _tool_consultar_vencimientos_tributarios() -> str:
     hoy = date.today()
     eventos = _leer_calendario()
     proximos = [
         e for e in eventos
-        if 0 <= (date.fromisoformat(e["fecha"]) - hoy).days <= 30
+        if (dias := _dias_hasta(e, hoy)) is not None and 0 <= dias <= 30
     ]
     if proximos:
         proximos.sort(key=lambda e: e["fecha"])
@@ -610,8 +636,8 @@ def _responder_groq(prompt: str, df, historial: list[dict], model: str) -> str:
         while True:
             resp = client.chat.completions.create(
                 model=model, messages=messages,
-                tools=TOOLS if df is not None else [],
-                tool_choice="auto" if df is not None else "none",
+                tools=TOOLS if df is not None else TOOLS_AGENTES,
+                tool_choice="auto",
                 max_tokens=1024,
             )
             msg = resp.choices[0].message
@@ -641,8 +667,8 @@ def _responder_openai(prompt: str, df, historial: list[dict], model: str) -> str
         while True:
             resp = client.chat.completions.create(
                 model=model, messages=messages,
-                tools=TOOLS if df is not None else None,
-                tool_choice="auto" if df is not None else None,
+                tools=TOOLS if df is not None else TOOLS_AGENTES,
+                tool_choice="auto",
                 max_tokens=1024,
             )
             msg = resp.choices[0].message

@@ -180,3 +180,95 @@ def test_tools_list_incluye_las_4_nuevas():
         "consultar_novedades_dian", "consultar_novedades_niif",
         "consultar_vencimientos_tributarios", "buscar_leads_comerciales",
     } <= nombres
+
+
+def test_tools_agentes_no_dependen_del_dataframe():
+    """C4: las 4 tools nuevas leen Postgres/S3 directo — deben ofrecerse aunque no
+    haya DataFrame cargado en sesión (el frontend nunca manda df_context, así que en
+    producción df siempre es None)."""
+    nombres = {t["function"]["name"] for t in chatbot.TOOLS_AGENTES}
+    assert nombres == {
+        "consultar_novedades_dian", "consultar_novedades_niif",
+        "consultar_vencimientos_tributarios", "buscar_leads_comerciales",
+    }
+
+
+def test_tools_df_no_incluye_las_4_agentes():
+    nombres = {t["function"]["name"] for t in chatbot.TOOLS_DF}
+    assert nombres.isdisjoint({
+        "consultar_novedades_dian", "consultar_novedades_niif",
+        "consultar_vencimientos_tributarios", "buscar_leads_comerciales",
+    })
+
+
+def test_tools_es_la_union_de_agentes_y_df():
+    assert chatbot.TOOLS == chatbot.TOOLS_AGENTES + chatbot.TOOLS_DF
+
+
+def test_responder_groq_ofrece_tools_agentes_cuando_no_hay_df(monkeypatch):
+    """C4: sin df (caso real de producción, el frontend nunca manda df_context) las
+    tools df-independientes deben seguir ofreciéndose al LLM."""
+    captured = {}
+
+    class _FakeMessage:
+        content = "ok"
+        tool_calls = None
+
+    class _FakeChoice:
+        message = _FakeMessage()
+        finish_reason = "stop"
+
+    class _FakeResponse:
+        choices = [_FakeChoice()]
+
+    class _FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return _FakeResponse()
+
+    class _FakeChat:
+        completions = _FakeCompletions()
+
+    class _FakeGroqClient:
+        chat = _FakeChat()
+
+    monkeypatch.setattr(chatbot, "_get_key", lambda name: "fake-key")
+    monkeypatch.setattr("groq.Groq", lambda api_key: _FakeGroqClient())
+
+    resultado = chatbot._responder_groq("hola", None, [], chatbot.MODEL_DEFAULT)
+
+    assert resultado == "ok"
+    assert captured["tools"] == chatbot.TOOLS_AGENTES
+
+
+def test_tool_vencimientos_ignora_evento_con_fecha_malformada(monkeypatch):
+    """S1: un evento con `fecha` no parseable (dato LLM-generado, el publicador solo
+    valida que la clave exista) no debe tumbar el turno de chat — se descarta y se
+    siguen evaluando los demás."""
+    eventos = [
+        {"id": "v1", "fecha": "no-es-una-fecha", "titulo": "evento roto"},
+        {"id": "v2", "fecha": (date.today() + timedelta(days=5)).isoformat(), "titulo": "IVA bimestral"},
+    ]
+    monkeypatch.setattr(chatbot, "_leer_calendario", lambda: eventos)
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda *a, **k: disparos.append(a) or "job-x")
+
+    resultado = chatbot._tool_consultar_vencimientos_tributarios()
+
+    assert "IVA bimestral" in resultado
+    assert "evento roto" not in resultado
+    assert disparos == []
+
+
+def test_tool_vencimientos_dispara_si_todos_los_eventos_tienen_fecha_malformada(monkeypatch):
+    eventos = [
+        {"id": "v1", "fecha": "no-es-una-fecha", "titulo": "evento roto"},
+        {"id": "v2", "titulo": "sin fecha del todo"},
+    ]
+    monkeypatch.setattr(chatbot, "_leer_calendario", lambda: eventos)
+    disparos = []
+    monkeypatch.setattr(chatbot, "_disparar_agente", lambda agente, **k: disparos.append(agente) or "job-x")
+
+    chatbot._tool_consultar_vencimientos_tributarios()
+
+    assert disparos == ["vencimientos-tributarios"]

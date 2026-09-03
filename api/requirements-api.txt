@@ -4,6 +4,7 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
 fastapi>=0.115
 uvicorn[standard]>=0.30
+PyYAML>=6.0          # worker_handler lee los config.yaml de los agentes; hasta ahora solo llegaba transitivo por uvicorn[standard]
 python-multipart>=0.0.9
 
 # ── Validación y settings ─────────────────────────────────────────────────────
