@@ -276,3 +276,73 @@ def test_process_agente_contable_marks_job_error_on_failure(dynamodb_table, monk
     job = job_store.get_job("job-agente-2")
     assert job["status"] == "error"
     assert "groq se cayó" in job["error"]
+
+
+def test_process_agente_contable_marks_job_error_when_module_fails_to_load(dynamodb_table, monkeypatch, caplog):
+    """C2: si `_load_module` explota (agent.py falta, o rompe al import-time), el fallo
+    debe quedar registrado en el job_store como "error" en vez de propagar y matar la
+    invocación del Lambda entero."""
+    import logging
+
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    def _raise_load(path, name):
+        raise ModuleNotFoundError("No module named 'agent' — agent.py no existe en la imagen")
+
+    monkeypatch.setattr(worker_handler, "_load_module", _raise_load)
+
+    with caplog.at_level(logging.ERROR, logger="taxops.worker"):
+        worker_handler._process_agente_contable(
+            {"job_id": "job-agente-3", "agente": "dian-monitor", "overrides": {}}
+        )
+
+    job = job_store.get_job("job-agente-3")
+    assert job["status"] == "error"
+    assert "agent.py no existe" in job["error"]
+    # I1: el traceback debe quedar en el log, no solo en DynamoDB.
+    assert any(r.exc_info for r in caplog.records)
+
+
+def test_process_agente_contable_marks_job_error_when_config_missing(dynamodb_table, monkeypatch):
+    """C3: config.yaml ausente debe producir una excepción normal capturable por
+    `except Exception` — no un `sys.exit()` (SystemExit/BaseException) que matara el
+    proceso del worker."""
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    body = {"job_id": "job-agente-4", "agente": "agente-inexistente", "overrides": {}}
+
+    # No debe propagar SystemExit ni ninguna otra excepción.
+    worker_handler._process_agente_contable(body)
+
+    job = job_store.get_job("job-agente-4")
+    assert job["status"] == "error"
+    assert "config.yaml" in job["error"]
+
+
+def test_handler_continues_to_next_record_when_one_dispatch_raises(dynamodb_table, monkeypatch):
+    """I2: un record roto no debe abortar el procesamiento de los demás records
+    batcheados en la misma invocación de SQS."""
+    import api.worker_handler as worker_handler
+
+    def _boom(body):
+        raise RuntimeError("record corrupto")
+
+    processed = []
+    monkeypatch.setattr(worker_handler, "_process_renta_batch", _boom)
+    monkeypatch.setattr(
+        worker_handler, "_process_exogenas_batch", lambda body: processed.append(body["job_id"])
+    )
+
+    event = {
+        "Records": [
+            {"body": json.dumps({"tipo": "renta", "job_id": "bad-1"})},
+            {"body": json.dumps({"tipo": "exogenas", "job_id": "good-1", "org_id": "o1", "s3_keys": []})},
+        ]
+    }
+
+    # No debe propagar la excepción del primer record.
+    worker_handler.handler(event, context=None)
+
+    assert processed == ["good-1"]

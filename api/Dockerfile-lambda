@@ -84,6 +84,7 @@ COPY services/ ./services/
 COPY db/ ./db/
 COPY exogenas/ ./exogenas/
 COPY api/ ./api/
+COPY agents/ ./agents/
 
 # El código mezcla dos estilos de import ya establecidos en el resto del proyecto:
 # - api/main.py, api/routers/*.py: `from core...`, `from routers...` (relativos a api/,

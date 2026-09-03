@@ -17,15 +17,20 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from api.core import job_store  # noqa: E402
+
+log = logging.getLogger("taxops.worker")
 
 
 def handler(event: dict, context: Any = None) -> None:
@@ -34,15 +39,19 @@ def handler(event: dict, context: Any = None) -> None:
         body = json.loads(record["body"])
         # mensajes viejos (ya en vuelo) no tienen "tipo" — default preserva compatibilidad
         tipo = body.get("tipo", "renta")
-        if tipo == "renta":
-            _process_renta_batch(body)
-        elif tipo == "exogenas":
-            _process_exogenas_batch(body)
-        elif tipo == "agente_contable":
-            _process_agente_contable(body)
-        else:
-            import logging
-            logging.getLogger("taxops.worker").error("Tipo de mensaje SQS desconocido: %s", tipo)
+        try:
+            if tipo == "renta":
+                _process_renta_batch(body)
+            elif tipo == "exogenas":
+                _process_exogenas_batch(body)
+            elif tipo == "agente_contable":
+                _process_agente_contable(body)
+            else:
+                log.error("Tipo de mensaje SQS desconocido: %s", tipo)
+        except Exception:
+            # Un record fallando no debe abortar el resto del batch ni forzar el
+            # reintento de records ya procesados exitosamente en esta misma invocación.
+            log.error("worker_handler: fallo procesando record (tipo=%s): %s", tipo, body, exc_info=True)
 
 
 def _process_exogenas_batch(body: dict) -> None:
@@ -121,13 +130,26 @@ def _process_agente_contable(body: dict) -> None:
     overrides = body.get("overrides", {})
 
     agent_dir = _ROOT / "agents" / "contabilidad" / agente
-    agent_module = _load_module(agent_dir / "agent.py", f"agente_contable_{agente}_agent")
 
     try:
-        config = agent_module.load_config(agent_dir / "config.yaml")
+        # No se usa agent_module.load_config: esa función hace sys.exit() si falta el
+        # archivo (pensada para un CLI, no para un worker de larga vida) — SystemExit
+        # es BaseException, así que un `except Exception` no la captura y mataría el
+        # proceso del Lambda en vez de dejar el job en "error". Se carga el YAML acá
+        # directo para que cualquier fallo sea una excepción normal.
+        config_path = agent_dir / "config.yaml"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Falta {config_path}")
+        config = yaml.safe_load(config_path.read_text())
+
+        agent_module = _load_module(agent_dir / "agent.py", f"agente_contable_{agente}_agent")
         report = agent_module.run(config, **overrides)
         publish_module = _load_module(agent_dir / "publish.py", f"agente_contable_{agente}_publish")
         publish_module.publish(report)
         job_store.put_job(job_id, "done", {"agente": agente})
     except Exception as exc:
+        log.error(
+            "worker_handler: _process_agente_contable falló para agente %s (job %s): %s",
+            agente, job_id, exc, exc_info=True,
+        )
         job_store.put_job(job_id, "error", {"agente": agente, "error": str(exc)})
