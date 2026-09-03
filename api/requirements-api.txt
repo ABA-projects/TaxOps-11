@@ -36,6 +36,7 @@ python-dotenv>=1.0
 
 # ── AI providers ─────────────────────────────────────────────────────────────
 groq>=0.11
+ddgs>=9.15           # búsqueda web de los agentes contables (agents/_shared/agent_core.py::web_search) — el worker los ejecuta in-process
 # openai>=1.0          # descomenta si usas OpenAI
 # anthropic>=0.30      # descomenta si usas Anthropic
 # google-generativeai  # descomenta si usas Google Gemini
