@@ -18,6 +18,7 @@ fallida, y memoria entre corridas de qué (fuente, query) no vale la pena reinte
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -26,7 +27,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 import yaml
 
-MODEL = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile fue deprecado por Groq
+# Modelo por defecto: el gratuito de Groq (llama-3.3-70b-versatile fue deprecado por Groq).
+# Configurable por entorno para poder pasar a un modelo de pago sin tocar código: basta con
+# setear AGENTS_MODEL en las env vars de la Lambda (infra/modules/lambda-api, var.secrets) o en
+# el .env local. Si el modelo nuevo NO es de Groq (p. ej. Claude), además hay que cambiar el
+# cliente en run_agent()/run_llm_only() — hoy ambos instancian Groq() directo.
+MODEL = os.environ.get("AGENTS_MODEL", "openai/gpt-oss-120b")
 MEMORY_TTL_DAYS = 7  # cuánto tiempo se recuerda que una query no dio resultados
 
 WEB_SEARCH_TOOL = {
@@ -112,6 +118,38 @@ def remember_dead_end(agent_dir: Path, query: str) -> None:
 # Búsqueda web con retry + backoff — el fix real para el rate-limit de DuckDuckGo
 # ---------------------------------------------------------------------------
 
+# El tier gratuito de Groq permite 8000 tokens por minuto, y una request sola no puede pasarlo.
+# run_agent() acumula CADA resultado de búsqueda en `messages` sin podar nunca, así que la
+# conversación crecía de forma monotónica hasta que una request pesaba más que el tope y Groq
+# respondía 413 "Request too large" (visto en producción el 2026-09-03: 8097 tokens vs 8000).
+# A diferencia del 429 que arregló el PR #34, reintentar no ayuda: la request siempre sería igual
+# de grande. Se ataca por los dos lados: snippets más cortos y ventana deslizante de resultados.
+# Ambos son tunables por entorno: cuando se pase a un tier/modelo con más tokens, subirlos por
+# env var recupera contexto (y calidad del reporte) sin tocar código.
+_MAX_SNIPPET_CHARS = int(os.environ.get("AGENTS_MAX_SNIPPET_CHARS", "250"))
+_MAX_TOOL_RESULTS_EN_CONTEXTO = int(os.environ.get("AGENTS_MAX_TOOL_RESULTS", "6"))
+
+
+def _podar_historial(messages: list[dict]) -> list[dict]:
+    """Deja el system+user intactos y conserva solo los últimos N resultados de búsqueda.
+
+    Los mensajes de rol "tool" son los que pesan (JSON con varios snippets cada uno). Los más
+    viejos se reemplazan por un marcador corto en vez de borrarse, porque cada tool_call del
+    asistente necesita su respuesta correspondiente: si se elimina, la API rechaza el historial
+    por inconsistente.
+    """
+    indices_tool = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
+    if len(indices_tool) <= _MAX_TOOL_RESULTS_EN_CONTEXTO:
+        return messages
+
+    a_podar = set(indices_tool[:-_MAX_TOOL_RESULTS_EN_CONTEXTO])
+    return [
+        {**m, "content": '[resultado antiguo omitido para no exceder el límite de tokens]'}
+        if i in a_podar else m
+        for i, m in enumerate(messages)
+    ]
+
+
 def web_search(query: str, agent_dir: Path, max_results: int = 5, retries: int = 2, backoff: float = 2.0) -> list[dict]:
     """Busca en DuckDuckGo (gratis, sin API key). Reintenta con backoff antes de rendirse —
     DDG rate-limita el scraping no oficial bajo uso repetido en poco tiempo, que es la causa
@@ -130,7 +168,11 @@ def web_search(query: str, agent_dir: Path, max_results: int = 5, retries: int =
                 results = list(ddgs.text(query, max_results=max_results))
             if results:
                 return [
-                    {"title": r.get("title"), "url": r.get("href"), "snippet": r.get("body")}
+                    {
+                        "title": r.get("title"),
+                        "url": r.get("href"),
+                        "snippet": (r.get("body") or "")[:_MAX_SNIPPET_CHARS],
+                    }
                     for r in results
                 ]
             remember_dead_end(agent_dir, query)
@@ -194,7 +236,7 @@ def run_agent(
         response = _groq_chat_with_retry(
             client,
             model=MODEL,
-            messages=messages,
+            messages=_podar_historial(messages),
             tools=[WEB_SEARCH_TOOL],
         )
         choice = response.choices[0]
