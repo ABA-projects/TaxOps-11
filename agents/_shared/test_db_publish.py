@@ -12,8 +12,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _shared.db_publish import insert_lead, insert_novedad  # noqa: E402
 
+# No alcanza con que DATABASE_URL exista: db_publish.py usa psycopg2, que solo habla Postgres.
+# CI define DATABASE_URL=sqlite:///./test.db para el resto de la suite, y con esa el test no se
+# saltaba y psycopg2 reventaba con "invalid dsn".
+_DSN = os.environ.get("DATABASE_URL", "")
 pytestmark = pytest.mark.skipif(
-    "DATABASE_URL" not in os.environ, reason="requiere DATABASE_URL de una DB de test"
+    not _DSN.startswith(("postgresql://", "postgres://")),
+    reason="requiere una DB Postgres real (db_publish usa psycopg2); con SQLite no aplica",
 )
 
 
