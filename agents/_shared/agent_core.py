@@ -88,6 +88,18 @@ def load_env(agent_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _memory_path(agent_dir: Path) -> Path:
+    """Dónde guardar la memoria de queries muertas.
+
+    En Lambda el código vive en /var/task, que está montado de SOLO LECTURA: el único lugar
+    escribible es /tmp. Escribir junto al agente funcionaba en CLI/cron pero reventaba en el
+    worker con "[Errno 30] Read-only file system" (visto en producción el 2026-09-04).
+
+    En /tmp la memoria es efímera: sobrevive entre invocaciones del mismo contenedor tibio y se
+    pierde en el siguiente cold start. Es aceptable porque esto es una optimización (evitar
+    repetir queries que no dieron resultados), no un dato de negocio.
+    """
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return Path("/tmp") / f"{agent_dir.name}-memory.json"
     return agent_dir / "memory.json"
 
 
@@ -97,7 +109,12 @@ def load_dead_end_queries(agent_dir: Path) -> set[str]:
     if not path.exists():
         return set()
 
-    entries = json.loads(path.read_text())
+    try:
+        entries = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        # Un archivo corrupto o ilegible no puede tumbar la corrida: es solo una optimización.
+        print(f"[memoria] ignorando {path}: {e}", file=sys.stderr)
+        return set()
     cutoff = datetime.now(timezone.utc) - timedelta(days=MEMORY_TTL_DAYS)
     return {
         e["query"]
@@ -107,11 +124,16 @@ def load_dead_end_queries(agent_dir: Path) -> set[str]:
 
 
 def remember_dead_end(agent_dir: Path, query: str) -> None:
+    """Registra una query sin resultados. Nunca propaga errores: no poder persistir una
+    optimización no justifica abortar la corrida entera del agente."""
     path = _memory_path(agent_dir)
-    entries = json.loads(path.read_text()) if path.exists() else []
-    entries.append({"query": query, "at": datetime.now(timezone.utc).isoformat()})
-    # Recorta a las últimas 200 para que el archivo no crezca indefinidamente
-    path.write_text(json.dumps(entries[-200:], indent=2))
+    try:
+        entries = json.loads(path.read_text()) if path.exists() else []
+        entries.append({"query": query, "at": datetime.now(timezone.utc).isoformat()})
+        # Recorta a las últimas 200 para que el archivo no crezca indefinidamente
+        path.write_text(json.dumps(entries[-200:], indent=2))
+    except (OSError, ValueError) as e:
+        print(f"[memoria] no se pudo guardar {path}: {e}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

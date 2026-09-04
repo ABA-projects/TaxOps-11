@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import agent  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parents[2]))  # agents/ — para importar _shared
+from _shared.testing import cargar_modulo_agente  # noqa: E402
+
+agent = cargar_modulo_agente(Path(__file__).parent, "agent")
 
 
 def test_run_without_overrides_uses_config(monkeypatch):
