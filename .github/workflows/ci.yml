@@ -77,7 +77,8 @@ jobs:
         run: pip install -r api/requirements-api.txt pytest pytest-asyncio httpx aiosqlite "moto[dynamodb,s3,sqs]"
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
+        # agents/ se incluye desde 2026-09-04: sus ~19 tests nunca se habían ejecutado en CI
+        run: pytest tests/ agents/ -v --tb=short --ignore=tests/test_e2e.py
         # test_e2e.py requiere Postgres real — se corre en staging, no en CI
 
   # ────────────────────────────────────────────────────────────

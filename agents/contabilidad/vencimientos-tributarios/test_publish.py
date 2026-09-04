@@ -5,8 +5,15 @@ import boto3
 import pytest
 from moto import mock_aws
 
-sys.path.insert(0, str(Path(__file__).parent))
-from publish import _BUCKET, _KEY, extract_eventos, merge_eventos, publish  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parents[2]))  # agents/
+from _shared.testing import cargar_modulo_agente  # noqa: E402
+
+publish_mod = cargar_modulo_agente(Path(__file__).parent, "publish")
+_BUCKET = publish_mod._BUCKET
+_KEY = publish_mod._KEY
+extract_eventos = publish_mod.extract_eventos
+merge_eventos = publish_mod.merge_eventos
+publish = publish_mod.publish
 
 _VALID_REPORT = """
 ## Vencimientos
@@ -60,8 +67,7 @@ def test_publish_repairs_report_missing_json_block(monkeypatch):
     reparado = '```json\n[{"id": "v1", "fecha": "2026-09-15", "titulo": "t", "descripcion": "d", "tipo": "iva", "urgencia": "alta"}]\n```'  # noqa: E501
     monkeypatch.setattr(agent_core, "run_llm_only", lambda *a, **k: reparado)
 
-    from publish import _repair_missing_json_block
-    eventos = _repair_missing_json_block("## Vencimientos\n\nIVA bimestral el 15 de septiembre.")
+    eventos = publish_mod._repair_missing_json_block("## Vencimientos\n\nIVA bimestral el 15 de septiembre.")
 
     assert eventos[0]["id"] == "v1"
 
