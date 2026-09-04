@@ -24,6 +24,11 @@ on:
       - "exogenas/**"
       - "services/**"
       - "db/**"
+      # agents/ entra en la imagen desde el PR #36 (COPY agents/ en api/Dockerfile-lambda), así
+      # que un cambio ahí SÍ tiene que redesplegar. Sin esta línea el fix del PR #38 se mergeó a
+      # main y nunca llegó a producción: el workflow no se disparó y la Lambda siguió corriendo
+      # la imagen vieja.
+      - "agents/**"
       - ".github/workflows/deploy-lambda.yml"
   workflow_dispatch: {} # permite re-desplegar manualmente sin necesidad de un commit nuevo
 
