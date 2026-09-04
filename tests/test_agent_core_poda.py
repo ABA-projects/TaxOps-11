@@ -81,3 +81,40 @@ def test_web_search_trunca_snippets_largos(monkeypatch):
 
     res = web_search("q", Path("/tmp"))
     assert len(res[0]["snippet"]) == core._MAX_SNIPPET_CHARS
+
+
+# --- memoria de queries muertas en Lambda (/var/task es read-only) ---------------------------
+
+def test_memoria_va_a_tmp_en_lambda(monkeypatch):
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "taxops-worker-prod")
+    path = core._memory_path(Path("/var/task/agents/contabilidad/dian-monitor"))
+    assert str(path).startswith("/tmp/"), "en Lambda solo /tmp es escribible"
+    assert "dian-monitor" in path.name, "el nombre debe distinguir un agente de otro"
+
+
+def test_memoria_va_junto_al_agente_fuera_de_lambda(monkeypatch):
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    agent_dir = Path("/repo/agents/contabilidad/dian-monitor")
+    assert core._memory_path(agent_dir) == agent_dir / "memory.json"
+
+
+def test_remember_dead_end_no_revienta_si_el_fs_es_read_only(monkeypatch, tmp_path):
+    """El caso real de producción: [Errno 30] Read-only file system.
+
+    Se apunta la memoria a un directorio sin permiso de escritura en vez de parchear
+    Path.write_text global, que rompería a pytest y a cualquier otra cosa que escriba.
+    """
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    solo_lectura = tmp_path / "ro"
+    solo_lectura.mkdir()
+    solo_lectura.chmod(0o500)   # r-x: no se puede crear nada adentro
+    try:
+        core.remember_dead_end(solo_lectura, "una query cualquiera")   # no debe lanzar
+    finally:
+        solo_lectura.chmod(0o700)   # restaurar para que tmp_path se pueda limpiar
+
+
+def test_load_dead_end_queries_ignora_archivo_corrupto(monkeypatch, tmp_path):
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    (tmp_path / "memory.json").write_text("{no es json valido")
+    assert core.load_dead_end_queries(tmp_path) == set()
