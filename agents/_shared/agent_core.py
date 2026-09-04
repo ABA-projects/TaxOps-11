@@ -33,6 +33,15 @@ import yaml
 # el .env local. Si el modelo nuevo NO es de Groq (p. ej. Claude), además hay que cambiar el
 # cliente en run_agent()/run_llm_only() — hoy ambos instancian Groq() directo.
 MODEL = os.environ.get("AGENTS_MODEL", "openai/gpt-oss-120b")
+
+# Texto que devuelve run_agent() cuando ni forzando el cierre se obtuvo un reporte. Es una
+# constante y no un literal suelto para que los publish.py puedan reconocerlo y NO persistirlo
+# como si fuera contenido real (pasó el 2026-09-04: se guardó en `novedades` como una novedad).
+SIN_REPORTE = (
+    "No se pudo completar la búsqueda en el límite de iteraciones disponible. "
+    "Esto normalmente significa que las fuentes configuradas no tienen resultados indexados "
+    "para los criterios pedidos — revisar manualmente antes de asumir que el agente falló."
+)
 MEMORY_TTL_DAYS = 7  # cuánto tiempo se recuerda que una query no dio resultados
 
 WEB_SEARCH_TOOL = {
@@ -255,11 +264,29 @@ def run_agent(
     ]
 
     for i in range(max_iterations):
+        # En la última iteración se le prohíbe seguir buscando y se le exige el reporte. Sin
+        # esto el modelo explora hasta agotar el presupuesto y no entrega nada: la corrida real
+        # del 2026-09-04 gastó las 15 iteraciones buscando en 15 fuentes distintas (todas con
+        # resultados, sin un solo error) y terminó devolviendo el texto de fallback, que además
+        # se publicó como si fuera una novedad de verdad.
+        ultima = i == max_iterations - 1
+        if ultima:
+            messages.append({
+                "role": "user",
+                "content": (
+                    "Se agotó el presupuesto de búsquedas. NO busques más: escribe ahora el "
+                    "reporte final en el formato pedido, usando únicamente lo que ya "
+                    "encontraste. Si no encontraste novedades relevantes, dilo explícitamente "
+                    "en el formato del reporte."
+                ),
+            })
+
         response = _groq_chat_with_retry(
             client,
             model=MODEL,
             messages=_podar_historial(messages),
             tools=[WEB_SEARCH_TOOL],
+            tool_choice="none" if ultima else "auto",
         )
         choice = response.choices[0]
         messages.append(choice.message.model_dump(exclude_none=True))
@@ -280,11 +307,7 @@ def run_agent(
                 {"role": "tool", "tool_call_id": call.id, "content": json.dumps(results)}
             )
 
-    return (
-        "No se pudo completar la búsqueda en el límite de iteraciones disponible. "
-        "Esto normalmente significa que las fuentes configuradas no tienen resultados indexados "
-        "para los criterios pedidos — revisar manualmente antes de asumir que el agente falló."
-    )
+    return SIN_REPORTE
 
 
 def run_llm_only(system_prompt: str, user_prompt: str) -> str:

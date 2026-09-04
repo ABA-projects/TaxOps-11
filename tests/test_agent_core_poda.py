@@ -118,3 +118,67 @@ def test_load_dead_end_queries_ignora_archivo_corrupto(monkeypatch, tmp_path):
     monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
     (tmp_path / "memory.json").write_text("{no es json valido")
     assert core.load_dead_end_queries(tmp_path) == set()
+
+
+# --- terminación del loop (corrida real 2026-09-04: 15 iteraciones sin entregar reporte) -----
+
+class _FakeChoice:
+    def __init__(self, message):
+        self.message = message
+
+
+class _FakeMessage:
+    def __init__(self, content=None, tool_calls=None):
+        self.content = content
+        self.tool_calls = tool_calls or []
+
+    def model_dump(self, exclude_none=False):
+        return {"role": "assistant", "content": self.content}
+
+
+class _FakeCall:
+    def __init__(self, i):
+        self.id = f"c{i}"
+        self.function = type("F", (), {"arguments": '{"query": "q"}'})()
+
+
+def test_ultima_iteracion_prohibe_buscar_y_exige_reporte(monkeypatch):
+    """Sin esto el modelo explora hasta agotar el presupuesto y no entrega nada."""
+    llamadas = []
+
+    def _fake_chat(client, **kwargs):
+        llamadas.append(kwargs)
+        # siempre pide otra búsqueda, salvo que se lo prohíban
+        if kwargs.get("tool_choice") == "none":
+            return type("R", (), {"choices": [_FakeChoice(_FakeMessage(content="REPORTE FINAL"))]})()
+        return type("R", (), {"choices": [_FakeChoice(_FakeMessage(tool_calls=[_FakeCall(0)]))]})()
+
+    # run_agent hace `from groq import Groq` adentro, así que el cliente se construye de verdad:
+    # basta una key ficticia porque _groq_chat_with_retry está mockeado y nunca sale a la red.
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_no_se_usa")
+    monkeypatch.setattr(core, "_groq_chat_with_retry", _fake_chat)
+    monkeypatch.setattr(core, "web_search", lambda q, d: [{"info": "x"}])
+    monkeypatch.setattr(core, "MODEL", "fake-model")
+
+    resultado = core.run_agent("sys", "usr", Path("/tmp"), max_iterations=4, debug=False)
+
+    assert resultado == "REPORTE FINAL", "debe cerrar con un reporte, no con el fallback"
+    assert llamadas[-1]["tool_choice"] == "none", "la última iteración no puede permitir búsquedas"
+    assert all(c.get("tool_choice") == "auto" for c in llamadas[:-1]), "las previas sí buscan"
+    # y se le dice explícitamente que escriba el reporte
+    assert any("NO busques más" in (m.get("content") or "") for m in llamadas[-1]["messages"])
+
+
+def test_publish_novedades_rechaza_el_texto_de_fallback():
+    """No persistir SIN_REPORTE como si fuera una novedad real (pasó en producción)."""
+    import importlib.util
+
+    ruta = _ROOT / "agents" / "contabilidad" / "dian-monitor" / "publish.py"
+    spec = importlib.util.spec_from_file_location("publish_dian_para_test", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["publish_dian_para_test"] = mod
+    spec.loader.exec_module(mod)
+
+    import pytest
+    with pytest.raises(ValueError, match="fallback"):
+        mod.publish(core.SIN_REPORTE)
