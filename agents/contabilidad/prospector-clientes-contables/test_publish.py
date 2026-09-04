@@ -3,8 +3,11 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent))
-from publish import extract_leads  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parents[2]))  # agents/
+from _shared.testing import cargar_modulo_agente  # noqa: E402
+
+publish_mod = cargar_modulo_agente(Path(__file__).parent, "publish")
+extract_leads = publish_mod.extract_leads
 
 _VALID_REPORT = """
 ## Leads encontrados
