@@ -124,6 +124,21 @@ def _load_module(path: Path, unique_name: str):
     return module
 
 
+def _campos_a_preservar(job_id: str, agente: str) -> dict:
+    """Campos del registro que el productor escribió y no deben perderse al cerrar el job.
+
+    services/chatbot.py marca el job como "processing" al encolarlo, con `encolado_en`, para que
+    se pueda distinguir "está corriendo" de "se murió". job_store.put_job hace un put_item
+    COMPLETO, así que sin este merge ese dato se borraría al terminar y no se podría saber cuánto
+    tardó realmente. Mismo patrón que _process_renta_batch, que ya lee antes de escribir.
+    """
+    previo = job_store.get_job(job_id) or {}
+    campos = {"agente": agente}
+    if "encolado_en" in previo:
+        campos["encolado_en"] = previo["encolado_en"]
+    return campos
+
+
 def _process_agente_contable(body: dict) -> None:
     agente = body["agente"]
     job_id = body["job_id"]
@@ -146,10 +161,12 @@ def _process_agente_contable(body: dict) -> None:
         report = agent_module.run(config, **overrides)
         publish_module = _load_module(agent_dir / "publish.py", f"agente_contable_{agente}_publish")
         publish_module.publish(report)
-        job_store.put_job(job_id, "done", {"agente": agente})
+        job_store.put_job(job_id, "done", _campos_a_preservar(job_id, agente))
     except Exception as exc:
         log.error(
             "worker_handler: _process_agente_contable falló para agente %s (job %s): %s",
             agente, job_id, exc, exc_info=True,
         )
-        job_store.put_job(job_id, "error", {"agente": agente, "error": str(exc)})
+        job_store.put_job(
+            job_id, "error", {**_campos_a_preservar(job_id, agente), "error": str(exc)}
+        )

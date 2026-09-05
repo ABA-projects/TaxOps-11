@@ -272,3 +272,46 @@ def test_tool_vencimientos_dispara_si_todos_los_eventos_tienen_fecha_malformada(
     chatbot._tool_consultar_vencimientos_tributarios()
 
     assert disparos == ["vencimientos-tributarios"]
+
+
+# --- visibilidad del job mientras corre (probado en producción: 7 min sin rastro) ------------
+
+def test_disparar_agente_deja_el_job_como_processing(monkeypatch):
+    """Sin esto el item recién aparecía al TERMINAR: no se distinguía 'corriendo' de 'muerto'."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/1/q")
+    monkeypatch.setenv("JOBS_TABLE_NAME", "taxops-jobs-prod")
+
+    tabla = MagicMock()
+    recurso = MagicMock()
+    recurso.Table.return_value = tabla
+
+    def _cliente(servicio, **kw):
+        return MagicMock()
+
+    monkeypatch.setattr(chatbot.boto3, "client", _cliente)
+    monkeypatch.setattr(chatbot.boto3, "resource", lambda *a, **k: recurso)
+
+    job_id = chatbot._disparar_agente("dian-monitor")
+
+    item = tabla.put_item.call_args.kwargs["Item"]
+    assert item["job_id"] == job_id
+    assert item["status"] == "processing"
+    assert item["agente"] == "dian-monitor"
+    assert isinstance(item["encolado_en"], int)
+
+
+def test_fallo_al_marcar_el_job_no_rompe_el_encolado(monkeypatch):
+    """El trabajo ya se encoló: perder el registro es observabilidad, no motivo para fallar."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/1/q")
+    monkeypatch.setattr(chatbot.boto3, "client", lambda *a, **k: MagicMock())
+
+    def _dynamo_caido(*a, **k):
+        raise RuntimeError("DynamoDB no disponible")
+
+    monkeypatch.setattr(chatbot.boto3, "resource", _dynamo_caido)
+
+    assert chatbot._disparar_agente("dian-monitor")   # devuelve job_id igual, sin lanzar
