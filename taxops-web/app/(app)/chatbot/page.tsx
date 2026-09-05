@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
 import { useApi } from "@/lib/api";
+import ChatMarkdown from "@/components/ChatMarkdown";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -101,13 +102,17 @@ export default function ChatbotPage() {
               {msg.role === "assistant" ? <Bot size={16} /> : <User size={16} />}
             </div>
             <div
-              className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${
+              className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                 msg.role === "assistant"
                   ? "bg-gray-100 text-gray-800"
                   : "bg-brand-orange text-white"
               }`}
             >
-              {msg.content}
+              {msg.role === "assistant" ? (
+                <ChatMarkdown content={msg.content} />
+              ) : (
+                <span className="whitespace-pre-wrap">{msg.content}</span>
+              )}
             </div>
           </div>
         ))}
