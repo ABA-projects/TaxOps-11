@@ -326,7 +326,36 @@ def _disparar_agente(agente: str, overrides: dict | None = None) -> str:
             "overrides": overrides or {},
         }),
     )
+    _marcar_job_encolado(job_id, agente)
     return job_id
+
+
+def _marcar_job_encolado(job_id: str, agente: str) -> None:
+    """Deja constancia en DynamoDB de que el job existe y está corriendo.
+
+    Sin esto el item recién aparecía cuando el worker TERMINABA, hasta 7 minutos después: mientras
+    tanto no había forma de distinguir "está trabajando" de "se murió sin dejar rastro". Se
+    escribe DESPUÉS del send_message a propósito — si encolar falla, no queda un job fantasma
+    marcado como en curso que nadie va a procesar.
+
+    Igual que el resto de este archivo, habla con AWS por env vars y no por core.config, porque
+    services/chatbot.py puede correr fuera del contexto FastAPI. Un fallo acá no se propaga: es
+    observabilidad, y ya se encoló el trabajo de verdad.
+    """
+    import time
+
+    tabla = os.environ.get("JOBS_TABLE_NAME", "taxops-jobs-prod")
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    try:
+        boto3.resource("dynamodb", region_name=region).Table(tabla).put_item(Item={
+            "job_id": job_id,
+            "status": "processing",
+            "agente": agente,
+            "encolado_en": int(time.time()),
+            "expires_at": int(time.time()) + 48 * 3600,   # mismo TTL que api/core/job_store.py
+        })
+    except Exception:
+        pass
 
 
 def _ultima_novedad(tipo: str) -> dict | None:

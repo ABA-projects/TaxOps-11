@@ -346,3 +346,29 @@ def test_handler_continues_to_next_record_when_one_dispatch_raises(dynamodb_tabl
     worker_handler.handler(event, context=None)
 
     assert processed == ["good-1"]
+
+
+def test_agente_contable_preserva_encolado_en_al_terminar(dynamodb_table, monkeypatch):
+    """job_store.put_job hace un put_item completo: sin merge se borraría el dato del productor."""
+    from api.core import job_store
+    import api.worker_handler as worker_handler
+
+    job_store.put_job("job-merge", "processing", {"agente": "dian-monitor", "encolado_en": 1788000000})
+
+    fake_agent = type("FakeAgent", (), {
+        "load_config": staticmethod(lambda p: {}),
+        "run": staticmethod(lambda config, **o: "reporte"),
+    })
+    fake_publish = type("FakePublish", (), {"publish": staticmethod(lambda r: None)})
+    monkeypatch.setattr(
+        worker_handler, "_load_module",
+        lambda path, name: fake_agent if name.endswith("_agent") else fake_publish,
+    )
+
+    worker_handler._process_agente_contable(
+        {"job_id": "job-merge", "agente": "dian-monitor", "overrides": {}}
+    )
+
+    job = job_store.get_job("job-merge")
+    assert job["status"] == "done"
+    assert job["encolado_en"] == 1788000000, "se perdió cuándo se encoló"
