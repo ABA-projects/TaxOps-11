@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { X, Send, Loader2, Bot, Trash2 } from "lucide-react";
 import { useApi } from "@/lib/api";
+import ChatMarkdown from "./ChatMarkdown";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -146,13 +147,17 @@ export function PageChatbot({ moduleName, systemContext, currentData }: PageChat
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
                     m.role === "user"
                       ? "bg-brand-orange text-white rounded-br-sm"
                       : "bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-gray-100 rounded-bl-sm"
                   }`}
                 >
-                  {m.content}
+                  {m.role === "user" ? (
+                    <span className="whitespace-pre-wrap">{m.content}</span>
+                  ) : (
+                    <ChatMarkdown content={m.content} compact />
+                  )}
                 </div>
               </div>
             ))}
