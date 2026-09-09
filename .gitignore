@@ -80,6 +80,9 @@ service-account*.json
 .superpowers/
 .worktrees/
 
+# ── Coexistencia Claude + Kiro (marcador local de último sync, por máquina) ───
+context/.last-sync
+
 # ── Terraform ─────────────────────────────────────────────────────────────────
 **/.terraform/
 .terraformrc
