@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   FileText, ClipboardList, Calculator, Bot, Zap, Shield,
-  WifiOff, Bell, Calendar, ChevronRight, Check, Menu, X,
-  Mail, Phone, MapPin, Star, TrendingUp, Download,
+  Bell, Calendar, ChevronRight, Check, Menu, X,
+  Mail, Phone, MapPin, TrendingUp, Download,
 } from "lucide-react";
 
 const NAV = [
@@ -38,13 +38,13 @@ const FEATURES = [
     icon: <Bot size={24} className="text-violet-400" />,
     title: "Asistente IA Contable",
     desc: "Chatbot especializado en normativa DIAN, ET colombiano, IVA, retención, nómina y exógenas. Responde sobre tus propios documentos.",
-    tag: "🌐 Requiere internet",
+    tag: "✅ Disponible",
   },
   {
-    icon: <WifiOff size={24} className="text-emerald-400" />,
-    title: "Funciona Sin Internet",
-    desc: "Procesamiento de facturas, cálculos de nómina y exógenas funcionan 100% offline. Tus datos nunca salen de tu servidor.",
-    tag: "🔒 Privacidad total",
+    icon: <Shield size={24} className="text-emerald-400" />,
+    title: "Deduplicación por CUFE",
+    desc: "Cada factura se identifica por su CUFE único. Si vuelves a cargar la misma, no se duplica: el sistema la reconoce y la omite automáticamente.",
+    tag: "✅ Disponible",
   },
   {
     icon: <Bell size={24} className="text-red-400" />,
@@ -135,7 +135,6 @@ const PLANS = [
       "Integraciones ERP (SIIGO, Helisa)",
       "Onboarding personalizado",
       "Soporte prioritario 4h",
-      "SLA 99.9% uptime",
       "Facturación electrónica DIAN",
     ],
     noFeatures: [],
@@ -160,12 +159,6 @@ const TYPE_COLORS: Record<string, string> = {
   exogenas: "bg-violet-500",
   renta: "bg-red-500",
 };
-
-const TESTIMONIALS = [
-  { name: "Sandra M.", role: "Contadora pública · Medellín", text: "Antes me tomaba 3 horas procesar las facturas del mes. Con TaxOps son 20 minutos y el Excel ya está listo para el cliente." },
-  { name: "Carlos R.", role: "Revisor fiscal · Bogotá", text: "El módulo de exógenas detectó 4 conceptos distintos en un mismo certificado. Antes los perdía." },
-  { name: "Andrea T.", role: "Firma contable · Cali", text: "La calculadora de nómina con parafiscales nos ahorra 1 hora diaria. Y el chatbot resuelve dudas que antes tardábamos en buscar." },
-];
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -231,7 +224,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-xs font-medium text-white/80 mb-6">
             <Zap size={12} className="text-brand-orange" />
-            Funciona sin internet · Privacidad total · Hecho para Colombia
+            Basado en la norma DIAN · Estatuto Tributario 2026 · Hecho para Colombia
           </div>
 
           <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight mb-6">
@@ -257,8 +250,8 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-12 flex flex-wrap justify-center gap-8 text-sm text-slate-400">
-            <span><strong className="text-white">+500</strong> facturas procesadas</span>
-            <span><strong className="text-white">100%</strong> datos en tu servidor</span>
+            <span><strong className="text-white">3.286</strong> autorretenedores DIAN</span>
+            <span><strong className="text-white">Art. 490</strong> prorrateo de IVA</span>
             <span><strong className="text-white">CST 2026</strong> actualizado</span>
             <span><strong className="text-white">0 instalación</strong> web app</span>
           </div>
@@ -313,18 +306,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── OFFLINE BADGE ─────────────────────────────────────────────── */}
+      {/* ── WEB APP BADGE ─────────────────────────────────────────────── */}
       <section className="py-12 bg-brand-navy text-white">
         <div className="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-white/10 rounded-xl">
-              <WifiOff size={28} className="text-brand-orange" />
+              <Zap size={28} className="text-brand-orange" />
             </div>
             <div>
-              <h3 className="font-black text-xl mb-1">Funciona sin internet</h3>
+              <h3 className="font-black text-xl mb-1">Sin instalar nada</h3>
               <p className="text-slate-300 text-sm">
-                El procesamiento de facturas, cálculos de nómina y generación de exógenas son 100% locales.
-                El chatbot IA y sincronización de calendario requieren conexión.
+                TaxOps es una aplicación web: entras desde el navegador, sin instalar programas ni
+                configurar servidores. Subes tus documentos y descargas los reportes en Excel.
               </p>
             </div>
           </div>
@@ -371,23 +364,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ──────────────────────────────────────────────── */}
+      {/* ── CAPACIDADES VERIFICABLES ──────────────────────────────────── */}
       <section className="py-20 bg-white">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-brand-navy mb-3">Lo que dicen los contadores</h2>
+            <h2 className="text-3xl font-black text-brand-navy mb-3">Construido sobre la norma colombiana</h2>
+            <p className="text-gray-500 max-w-2xl mx-auto">
+              Cada cálculo se apoya en la reglamentación vigente de la DIAN y el Estatuto Tributario.
+            </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-                <div className="flex gap-0.5 mb-3">
-                  {[1,2,3,4,5].map((s) => <Star key={s} size={14} className="text-brand-orange fill-brand-orange" />)}
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed mb-4">&ldquo;{t.text}&rdquo;</p>
-                <div>
-                  <p className="font-bold text-gray-900 text-sm">{t.name}</p>
-                  <p className="text-xs text-gray-400">{t.role}</p>
-                </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { stat: "3.286", label: "NITs de autorretenedores DIAN cargados para clasificación automática" },
+              { stat: "31", label: "fechas del calendario tributario DIAN 2026 con alertas" },
+              { stat: "Art. 490", label: "prorrateo de IVA descontable del Estatuto Tributario" },
+              { stat: "CUFE 96", label: "validación de dígitos y cuadre subtotal + IVA ≈ total (±$1 COP)" },
+            ].map((c) => (
+              <div key={c.label} className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                <p className="text-3xl font-black text-brand-orange mb-2">{c.stat}</p>
+                <p className="text-sm text-gray-600 leading-relaxed">{c.label}</p>
               </div>
             ))}
           </div>
