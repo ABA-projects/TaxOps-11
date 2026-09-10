@@ -3,7 +3,7 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-10 · **Por:** Claude Code (.dockerignore + corrección de estado)
+**Última actualización:** 2026-09-10 · **Por:** Claude Code (handoff a Kiro; PR #47 mergeado)
 
 ---
 
@@ -11,10 +11,9 @@
 
 **Ninguna tarea de código a medias.** Nada sin commitear.
 
-⚠️ **PR #47 ABIERTO, sin mergear** — https://github.com/ABA-projects/TaxOps-11/pull/47
-(rama `chore/dockerignore`). Trae el `.dockerignore` y esta misma corrección del handoff.
-Si Kiro lo necesita mergeado para seguir, que lo pida a Jaime: la política del repo es que
-ningún agente mergea sin instrucción explícita.
+**PR #47 MERGEADO** (`92d660d`). Ya está en `main` el `.dockerignore`, la corrección de
+este handoff y el puntero de `CLAUDE.md` al protocolo de arranque compartido. Nada pendiente
+de mergear.
 
 ### Corrección al handoff anterior
 La versión previa de este archivo decía que los cambios de la landing estaban *"sin commitear,
