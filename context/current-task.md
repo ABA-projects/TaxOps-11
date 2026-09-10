@@ -3,38 +3,50 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-09 · **Por:** Kiro CLI (claims falsos de la landing corregidos)
+**Última actualización:** 2026-09-10 · **Por:** Claude Code (.dockerignore + corrección de estado)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** Los claims falsos de la landing quedaron corregidos y
-enviados en **PR #45** (`fix/landing-claims-honestos`, https://github.com/ABA-projects/TaxOps-11/pull/45).
-Verificado con `tsc --noEmit`, `next lint` y `next build` en verde.
+**Ninguna tarea de código a medias.** Working tree limpio salvo `context/`.
+
+### Corrección al handoff anterior
+La versión previa de este archivo decía que los cambios de la landing estaban *"sin commitear,
+esperando decisión de Jaime"*. Eso ya no aplica: **el PR #45 se mergeó** (`b846d08`). Verificado
+hoy — los 7 claims falsos ya no existen en `taxops-web/app/page.tsx` (grep = 0).
 
 ### Hecho en esta sesión
-- Eliminados los testimonios inventados (array `TESTIMONIALS` + su sección de render).
-- Quitado "SLA 99.9% uptime" del plan Empresarial.
-- Reemplazada la feature "Funciona Sin Internet" → "Deduplicación por CUFE" (real).
-- Corregidas las cifras del hero: "+500 facturas / 100% datos en tu servidor" → "3.286 autorretenedores / Art. 490 prorrateo IVA".
-- Corregido el badge del hero y reemplazada la sección "OFFLINE BADGE" por "Sin instalar nada" (web app).
-- Nueva sección "Construido sobre la norma colombiana" con 4 datos verificables (reemplaza a testimonios).
-- Limpiados imports huérfanos (`WifiOff`, `Star`) y tag del chatbot.
+- **`.dockerignore` creado** en la raíz. Existía el riesgo de que el `COPY agents/` (agregado en
+  el #36) arrastrara caches, `.venv` y reportes generados en un build LOCAL desde una copia sucia;
+  en CI no se veía porque el checkout está limpio.
+- Verificado **construyendo la imagen de verdad**, no solo por lectura:
+  - `docker build -f api/Dockerfile-lambda .` → exitoso.
+  - Dentro de la imagen: presentes `autorretenedores.txt`, `calendario_2026.json`, `init.sql`,
+    los `config.yaml` de los agentes, `agent.py`/`publish.py` y `worker_handler.py`.
+  - Ausentes: `tests/`, `taxops-web/`, `infra/`, `.git/`. Cero `__pycache__`.
+  - `import worker_handler` dentro del contenedor → OK, con `_process_agente_contable` presente.
+- **NO se excluyó `*.yaml`** aunque sería tentador: `worker_handler` lee
+  `agents/contabilidad/*/config.yaml` con `yaml.safe_load` en cada corrida. Excluirlo rompería
+  todos los agentes en producción, en silencio. Queda advertido en el propio `.dockerignore`.
 
-## Pendiente relacionado (decisión de producto, NO bloqueante)
+## Pendiente
 
-- **Rediseño visual dirección C ("Herramienta")** — oscuro, IBM Plex Mono + Inter, log de proceso central.
-  Aprobado por Jaime. **BLOQUEADO desde este entorno (verificado 2026-09-09):**
-  - El canvas de Claude (`https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b`) requiere sesión autenticada de Claude — el fetch anónimo no devuelve contenido.
-  - `seed-canvas.mjs` no existe en el sistema.
-  - `/tmp/taxops-landing/` fue limpiado (confirmado, no existe).
-  → **Para desbloquear:** Jaime debe recuperar los fuentes desde su sesión de Claude (abrir el canvas y copiar los archivos) y dejarlos en el repo o en un directorio accesible. Kiro no puede reconstruir un diseño de producto aprobado sin sus fuentes (sería adivinar).
-- **Deuda menor:** crear `.dockerignore` (evitar que `COPY agents/` arrastre basura en builds locales).
+- **Rediseño visual dirección C ("Herramienta")** — oscuro, IBM Plex Mono + Inter, log de proceso
+  central. Aprobado por Jaime, ya desarrollado completo con copia honesta.
+  Canvas: https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b
+  **Nota para Kiro:** los fuentes se perdieron con la limpieza de `/tmp`, pero el canvas se
+  publicó desde una sesión de Claude Code, así que **Claude sí puede recuperarlos** (WebFetch al
+  artifact + `seed-canvas.mjs --extract`). No es un bloqueo permanente: es trabajo que le toca a
+  Claude, no a Kiro. Falta portar ese diseño a `taxops-web/app/page.tsx` (566 líneas).
+- **Discovery DIAN/XML** — la DIAN habría dejado de exigir la descarga del PDF; se podría leer el
+  XML directo. Toca facturas, exógenas, renta e infra. Sin research todavía.
+- **Lambda Node.js 20.x EOL** — aviso de AWS. No es de nuestro Terraform (nuestras Lambdas son
+  imágenes Python); casi seguro el SSR de Amplify. Deadline duro: 03/03/2027.
 
 ## Notas de handoff
 
-- Cambios sin commitear en `taxops-web/app/page.tsx`. No se ha hecho commit (esperar decisión de Jaime).
 - Al iniciar sesión: correr `scripts/context-sync.sh`.
 - Antes de cambios en `infra/`: regla de oro (PR → plan → merge → aprobación manual → apply).
 - Secretos viven en `.envrc` / `infra/**/terraform.tfvars.secret` (gitignored). Nunca copiarlos aquí.
+- Los commits van firmados solo por Jaime — sin `Co-Authored-By`.

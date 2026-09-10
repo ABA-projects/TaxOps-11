@@ -1,0 +1,51 @@
+# Contexto de build para api/Dockerfile-lambda (imagen compartida por la API y el worker).
+#
+# Existe sobre todo por el `COPY agents/` que se agregó en el PR #36: antes de eso el contexto
+# no incluía nada bajo agents/, y ahora un build LOCAL desde una copia de trabajo sucia podía
+# arrastrar caches, entornos virtuales y reportes generados a la imagen. En CI no se notaba
+# porque el checkout está limpio.
+#
+# OJO al editar: SÍ se necesitan en runtime y no deben excluirse —
+#   agents/contabilidad/*/config.yaml   (worker_handler los lee con yaml.safe_load)
+#   pipeline/autorretenedores.txt       (3.286 NITs, cargados al importar el extractor)
+#   api/data/calendario_2026.json       (calendario DIAN)
+#   db/init.sql                         (manage.py init-db)
+
+# ── Python ────────────────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ── Control de versiones y workspaces de agentes ──────────────────────────────
+.git/
+.github/
+.worktrees/
+.superpowers/
+.claude/
+
+# ── Frontend: no va en la imagen de la API ────────────────────────────────────
+taxops-web/
+
+# ── Infra y secretos (nunca deben entrar a una imagen) ────────────────────────
+infra/
+.envrc
+**/*.tfvars.secret
+**/.env
+
+# ── Tests y documentación ─────────────────────────────────────────────────────
+tests/
+**/*.md
+docs/
+
+# ── Artefactos generados en runtime, no fuente ────────────────────────────────
+logs/
+outputs/
+facturas/
+dist/
+build/
+agents/**/output/
+agents/**/memory.json
