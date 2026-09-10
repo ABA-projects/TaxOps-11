@@ -12,6 +12,17 @@ Formato por entrada:
 
 ---
 
+## 2026-09-10 — Kiro CLI — Migración a Node 22 por EOL de Node 20 → PRs #48/#49
+- **Qué cambió:** capa app (`taxops-web/.nvmrc`=22, `engines.node>=22`) en PR #48; capa infra (`build_spec` de Amplify con `nvm use 22`) en PR #49.
+- **Por qué:** Node 20 EOL 2026-04-30; Amplify corta deploys con Node 20 el 2027-03-03 y no migra solo.
+- **Diagnóstico verificado:** el aviso NO es de nuestras Lambdas (`package_type = Image`, Python; no hay `runtime =` en `infra/`), sino del compute SSR de Amplify (`WEB_COMPUTE` + `Next.js - SSR`). Confirmado con grep en infra + web_search (EOL, comportamiento de Amplify).
+- **Decisiones:** Node 22 (LTS, compatible Next 15.3, soportado por Amplify). Separado en 2 PRs porque infra va por el flujo Terraform (plan→aprobación→apply) y la app por PR normal.
+- **Verificación:** app → `next lint`+`next build` en verde con Node v22.18.0; infra → `terraform fmt` limpio (validate/plan los corre el workflow del PR).
+- **Estado:** PRs #48 y #49 abiertos, pendientes de merge (#49 con gate manual de Terraform).
+- **Próximos pasos:** mergear #48/#49; el próximo pendiente grande es el discovery DIAN/XML.
+
+---
+
 ## 2026-09-09 — PRs #45 y #46 MERGED en main (`c0be2cf`)
 - **#45** (`fix/landing-claims-honestos`, `b846d08`) — claims falsos de la landing eliminados.
 - **#46** (`chore/claude-kiro-coexistence`, `c0be2cf`) — sistema de coexistencia Claude+Kiro versionado.

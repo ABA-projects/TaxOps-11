@@ -3,50 +3,31 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-10 · **Por:** Claude Code (handoff a Kiro; PR #47 mergeado)
+**Última actualización:** 2026-09-10 · **Por:** Kiro CLI (EOL Node 20 → PRs #48/#49)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** Nada sin commitear.
+**Ninguna tarea de código a medias.** El aviso de Lambda Node.js 20.x EOL quedó abordado en dos PRs
+(pendientes de merge):
 
-**PR #47 MERGEADO** (`92d660d`). Ya está en `main` el `.dockerignore`, la corrección de
-este handoff y el puntero de `CLAUDE.md` al protocolo de arranque compartido. Nada pendiente
-de mergear.
+- **PR #48** (`chore/frontend-node22`) — capa de app: `taxops-web/.nvmrc` = 22 + `engines.node>=22`. Verificado con lint+build en Node 22.
+- **PR #49** (`chore/amplify-ssr-node22`) — capa de infra: `build_spec` con `nvm use 22` para el compute SSR. **Va por el flujo Terraform** (plan en el PR → aprobación manual → apply). `terraform fmt` limpio.
 
-### Corrección al handoff anterior
-La versión previa de este archivo decía que los cambios de la landing estaban *"sin commitear,
-esperando decisión de Jaime"*. Eso ya no aplica: **el PR #45 se mergeó** (`b846d08`). Verificado
-hoy — los 7 claims falsos ya no existen en `taxops-web/app/page.tsx` (grep = 0).
-
-### Hecho en esta sesión
-- **`.dockerignore` creado** en la raíz. Existía el riesgo de que el `COPY agents/` (agregado en
-  el #36) arrastrara caches, `.venv` y reportes generados en un build LOCAL desde una copia sucia;
-  en CI no se veía porque el checkout está limpio.
-- Verificado **construyendo la imagen de verdad**, no solo por lectura:
-  - `docker build -f api/Dockerfile-lambda .` → exitoso.
-  - Dentro de la imagen: presentes `autorretenedores.txt`, `calendario_2026.json`, `init.sql`,
-    los `config.yaml` de los agentes, `agent.py`/`publish.py` y `worker_handler.py`.
-  - Ausentes: `tests/`, `taxops-web/`, `infra/`, `.git/`. Cero `__pycache__`.
-  - `import worker_handler` dentro del contenedor → OK, con `_process_agente_contable` presente.
-- **NO se excluyó `*.yaml`** aunque sería tentador: `worker_handler` lee
-  `agents/contabilidad/*/config.yaml` con `yaml.safe_load` en cada corrida. Excluirlo rompería
-  todos los agentes en producción, en silencio. Queda advertido en el propio `.dockerignore`.
+### Diagnóstico del EOL (verificado, no asumido)
+- Nuestras Lambdas son `package_type = "Image"` (Python) → **no afectadas** (no hay `runtime =` en todo `infra/`).
+- El aviso es del **compute SSR de Amplify** (`WEB_COMPUTE` + `Next.js - SSR`), runtime Node gestionado por AWS.
+- Node 20 EOL: 2026-04-30 · Amplify corta deploys con Node 20 el **2027-03-03** · Amplify NO migra solo (repost.aws). Soporta 20/22/24 → se eligió 22 (LTS, compatible Next 15.3).
 
 ## Pendiente
 
-- **Rediseño visual dirección C ("Herramienta")** — oscuro, IBM Plex Mono + Inter, log de proceso
-  central. Aprobado por Jaime, ya desarrollado completo con copia honesta.
-  Canvas: https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b
-  **Nota para Kiro:** los fuentes se perdieron con la limpieza de `/tmp`, pero el canvas se
-  publicó desde una sesión de Claude Code, así que **Claude sí puede recuperarlos** (WebFetch al
-  artifact + `seed-canvas.mjs --extract`). No es un bloqueo permanente: es trabajo que le toca a
-  Claude, no a Kiro. Falta portar ese diseño a `taxops-web/app/page.tsx` (566 líneas).
+- **Rediseño visual dirección C ("Herramienta")** — es trabajo de **Claude** (los fuentes se recuperan
+  desde su canvas). Kiro no lo toca. Canvas: https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b
 - **Discovery DIAN/XML** — la DIAN habría dejado de exigir la descarga del PDF; se podría leer el
-  XML directo. Toca facturas, exógenas, renta e infra. Sin research todavía.
-- **Lambda Node.js 20.x EOL** — aviso de AWS. No es de nuestro Terraform (nuestras Lambdas son
-  imágenes Python); casi seguro el SSR de Amplify. Deadline duro: 03/03/2027.
+  XML directo. Toca facturas, exógenas, renta e infra. **Sin research todavía** — es el próximo
+  candidato grande para Kiro (requiere spike de viabilidad antes de tocar código).
+- **EOL Node 20** → abordado en PRs #48/#49 (ver arriba). Cerrar cuando se mergeen.
 
 ## Notas de handoff
 
