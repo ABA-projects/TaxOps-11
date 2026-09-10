@@ -24,9 +24,13 @@
 
 - **Rediseño visual dirección C ("Herramienta")** — es trabajo de **Claude** (los fuentes se recuperan
   desde su canvas). Kiro no lo toca. Canvas: https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b
-- **Discovery DIAN/XML** — la DIAN habría dejado de exigir la descarga del PDF; se podría leer el
-  XML directo. Toca facturas, exógenas, renta e infra. **Sin research todavía** — es el próximo
-  candidato grande para Kiro (requiere spike de viabilidad antes de tocar código).
+- **Discovery DIAN/XML — CERRADO (2026-09-10).** Veredicto: tratar el XML como fuente primaria está
+  bien fundado legalmente (Res. 000165/2023 Art. 66: el XML tiene valor legal, el PDF es opcional).
+  **Gap real:** `extract_xml` parsea UBL plano pero NO desenvuelve el `AttachedDocument` (contenedor
+  con la factura en CDATA) que la DIAN entrega predominantemente. Síntesis + recomendación:
+  `context/memory/discovery-dian-xml.md`; research crudo con fuentes: `docs/research/dian-xml/FINDINGS.md`.
+  **Siguiente paso (si se aprueba):** plan de Fase 1 — soportar AttachedDocument en facturas + capturar
+  CUDE/estado de validación, con 2–3 XML reales como fixtures. Exógenas/renta en XML = Fase 2, diferida.
 - **EOL Node 20** → abordado en PRs #48/#49 (ver arriba). Cerrar cuando se mergeen.
 
 ## Notas de handoff

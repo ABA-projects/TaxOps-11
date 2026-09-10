@@ -12,6 +12,14 @@ Formato por entrada:
 
 ---
 
+## 2026-09-10 — Kiro CLI — Discovery DIAN/XML (spike, con subagente de research)
+- **Qué:** spike de viabilidad para tratar el XML como fuente primaria. Research normativo por subagente `kirocrew-research` + auditoría de código por Kiro. Cero código tocado.
+- **Veredicto:** bien fundado legalmente (Res. 000165/2023 Art. 66 — XML tiene valor legal, PDF opcional). Gap real: `pipeline/extractor.py::extract_xml` lee UBL plano pero no desenvuelve el `AttachedDocument` (factura en CDATA) que la DIAN entrega. Exógenas/renta son solo PDF/imagen.
+- **Archivos:** `context/memory/discovery-dian-xml.md` (síntesis), `docs/research/dian-xml/FINDINGS.md` (research crudo con fuentes, generado por el subagente).
+- **Decisión:** recomendar Fase 1 acotada (AttachedDocument en facturas + CUDE/estado validación, con fixtures reales); diferir exógenas/renta en XML.
+- **Estado:** discovery cerrado; pendiente decisión de Jaime para el plan de implementación.
+- **Próximos pasos:** si se aprueba, spec + tests de Fase 1.
+
 ## 2026-09-10 — Kiro CLI — Migración a Node 22 por EOL de Node 20 → PRs #48/#49
 - **Qué cambió:** capa app (`taxops-web/.nvmrc`=22, `engines.node>=22`) en PR #48; capa infra (`build_spec` de Amplify con `nvm use 22`) en PR #49.
 - **Por qué:** Node 20 EOL 2026-04-30; Amplify corta deploys con Node 20 el 2027-03-03 y no migra solo.

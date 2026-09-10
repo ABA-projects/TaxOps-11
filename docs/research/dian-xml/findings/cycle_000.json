@@ -1,0 +1,16 @@
+{
+  "cycle": 0,
+  "sub_question": "All 4: formato de entrega XML plano vs AttachedDocument; estructura AttachedDocument; PDF vs XML validez legal; campos clave solo en AttachedDocument",
+  "summary": "Resolución 000165/2023 (Art. 11.7, Art. 33, Art. 35.1, Art. 66 par.) confirma que la FE se entrega en 'formato electrónico de generación (XML)' JUNTO con el 'documento electrónico de validación' con valor 'Documento validado por la Dian', ambos dentro de un 'contenedor electrónico'. El XML es el formato con valor legal; la representación gráfica (PDF) es diseñable y opcional en su forma. Muestras reales (RamaJudicial, misfacturas, Odoo l10n_co_dian) confirman que ese contenedor se materializa como un AttachedDocument UBL 2.1 (DocumentType 'Contenedor de Factura Electrónica') con la factura UBL embebida como CDATA en cbc:Description y el ApplicationResponse/CUDE de validación DIAN.",
+  "sources_checked": [
+    "https://cijuf.org.co/normatividad/resolucion/2023/resolucion-000165.html",
+    "https://www.ramajudicial.gov.co/documents/36159272/140240001/007RecursoReposicion.pdf",
+    "https://apps.odoo.com/apps/modules/18.0/l10n_co_dian_vendor_bill_import",
+    "https://soporte.misfacturas.com.co/hc/es-419/articles/34958912310292",
+    "https://felcowiki.thefactoryhka.com.co/index.php/Tablas_de_codigos_de_propiedades"
+  ],
+  "sources_empty": [],
+  "new_findings_count": 4,
+  "evidence_strength": "strong",
+  "key_insight": "El 'contenedor electrónico' que exige la Resolución 000165 (XML de generación + documento de validación 'Documento validado por la Dian') se entrega en la práctica como un AttachedDocument UBL 2.1 con la factura como CDATA en cbc:Description; el XML tiene valor legal, el PDF es opcional."
+}
