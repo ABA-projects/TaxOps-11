@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Protocolo de arranque (correr ANTES de tocar código)
+
+Este repo se trabaja desde **dos agentes**: Claude Code y Kiro CLI. Kiro puede haber avanzado
+desde la última sesión de Claude, así que el estado en la cabeza de Claude nunca se asume:
+
+1. Leer `context/current-task.md` — tarea activa, PRs abiertos y handoff del último que trabajó.
+2. Correr `scripts/context-sync.sh` — muestra los commits y archivos cambiados desde el último
+   sync, más el working tree sin commitear.
+3. Leer **solo lo que cambió**. Para detalle técnico ir a la sección puntual de este archivo, no
+   al archivo entero.
+
+Al terminar, si hubo cambios relevantes: actualizar `context/current-task.md` y agregar una
+entrada a `context/changelog.md`. Opcionalmente `scripts/context-sync.sh --mark` para fijar el
+punto de sincronización.
+
+El contrato completo (quién es dueño de qué archivo, política de memoria, seguridad) está en
+`context/README.md`. La regla de fondo: **cada dato tiene un único hogar** — si algo ya está en
+este archivo o en `README.md`, se referencia desde `context/`, no se copia.
+
 ## Commands
 
 ```bash

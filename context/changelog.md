@@ -12,6 +12,11 @@ Formato por entrada:
 
 ---
 
+## 2026-09-09 — PRs #45 y #46 MERGED en main (`c0be2cf`)
+- **#45** (`fix/landing-claims-honestos`, `b846d08`) — claims falsos de la landing eliminados.
+- **#46** (`chore/claude-kiro-coexistence`, `c0be2cf`) — sistema de coexistencia Claude+Kiro versionado.
+- `main` local actualizado por fast-forward. `CLAUDE.md` y `.claude/` intactos.
+
 ## 2026-09-09 — Kiro CLI — Corregidos los claims falsos de la landing → PR #45
 - **PR:** https://github.com/ABA-projects/TaxOps-11/pull/45 (rama `fix/landing-claims-honestos`, commit `46d0bad`).
 - **Qué cambió:** `taxops-web/app/page.tsx` — eliminados testimonios inventados (array + render), quitado "SLA 99.9%", reemplazada feature "Funciona Sin Internet" por "Deduplicación por CUFE", corregidas cifras del hero (+500/100% → 3.286 autorretenedores/Art. 490), badge del hero y sección OFFLINE→"Sin instalar nada", nueva sección "Construido sobre la norma colombiana" con datos verificables. Limpiados imports huérfanos.
