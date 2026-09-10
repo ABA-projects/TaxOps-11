@@ -9,7 +9,12 @@
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** Working tree limpio salvo `context/`.
+**Ninguna tarea de código a medias.** Nada sin commitear.
+
+⚠️ **PR #47 ABIERTO, sin mergear** — https://github.com/ABA-projects/TaxOps-11/pull/47
+(rama `chore/dockerignore`). Trae el `.dockerignore` y esta misma corrección del handoff.
+Si Kiro lo necesita mergeado para seguir, que lo pida a Jaime: la política del repo es que
+ningún agente mergea sin instrucción explícita.
 
 ### Corrección al handoff anterior
 La versión previa de este archivo decía que los cambios de la landing estaban *"sin commitear,
