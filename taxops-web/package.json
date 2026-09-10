@@ -2,6 +2,9 @@
   "name": "taxops-web",
   "version": "2.0.2",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
