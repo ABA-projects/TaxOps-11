@@ -1,4 +1,4 @@
-## 2026-09-13 — Fase 1 DIAN/XML: soporte de AttachedDocument (Claude Code)
+## 2026-09-13 — Fase 1 DIAN/XML: soporte de AttachedDocument (Claude Code) — PR #50 MERGEADO (`ac3ec14`)
 
 - `pipeline/extractor.py`: `extract_xml` desenvuelve el contenedor `AttachedDocument` de la DIAN
   (factura embebida como CDATA) y captura `cude` / `estado_dian` / `fecha_validacion_dian` del

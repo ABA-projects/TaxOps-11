@@ -9,8 +9,8 @@
 
 ## Tarea activa
 
-**PR abierto: Fase 1 del discovery DIAN/XML — soporte de `AttachedDocument`.**
-Rama `feat/xml-attacheddocument`. Sin mergear.
+**Ninguna tarea de código a medias.** La Fase 1 del discovery DIAN/XML quedó **mergeada**
+en el **PR #50** (`ac3ec14`).
 
 `extract_xml` ya desenvuelve el contenedor de la DIAN: detecta la raíz, extrae el CDATA de la
 factura embebida, la re-parsea y sigue el flujo existente. De paso captura `cude`,
