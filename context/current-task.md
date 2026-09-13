@@ -47,8 +47,9 @@ Verificación: 49 tests en `test_extractor.py` (43 previos + 6 nuevos), suite co
   **Gap real:** `extract_xml` parsea UBL plano pero NO desenvuelve el `AttachedDocument` (contenedor
   con la factura en CDATA) que la DIAN entrega predominantemente. Síntesis + recomendación:
   `context/memory/discovery-dian-xml.md`; research crudo con fuentes: `docs/research/dian-xml/FINDINGS.md`.
-  **Siguiente paso (si se aprueba):** plan de Fase 1 — soportar AttachedDocument en facturas + capturar
-  CUDE/estado de validación, con 2–3 XML reales como fixtures. Exógenas/renta en XML = Fase 2, diferida.
+  **Fase 1 HECHA y mergeada** (PR #50, `ac3ec14`). Queda la deuda de validarla contra 2-3
+  AttachedDocument REALES — Jaime los consigue el lunes 2026-09-15. Exógenas/renta en XML = Fase 2,
+  sigue diferida (el research la marca como dudosa: esos documentos llegan en PDF).
 
 ## Notas de handoff
 
