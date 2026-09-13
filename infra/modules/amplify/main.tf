@@ -33,7 +33,11 @@ resource "aws_amplify_app" "web" {
         frontend:
           phases:
             preBuild:
-              commands: ["npm ci"]
+              # nvm use 22 fija el runtime de Node del compute SSR a Node 22 (LTS).
+              # Node 20 llegó a EOL el 2026-04-30 y Amplify deja de permitir deploys
+              # con Node 20 el 2027-03-03; Amplify NO migra el runtime solo. Amplify
+              # soporta 20/22/24. Coherente con taxops-web/.nvmrc y engines.node>=22.
+              commands: ["nvm use 22", "npm ci"]
             build:
               commands: ["npm run build"]
           artifacts:
