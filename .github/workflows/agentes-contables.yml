@@ -1,13 +1,21 @@
 name: Agentes contables (cron semanal)
 
-# Cron deshabilitado (2026-08-25): se está evaluando mover los 4 agentes a invocación on-demand
-# desde el chatbot en vez de cron semanal — ver docs/superpowers/specs/
-# 2026-08-23-agentes-contables-integracion-design.md y la discusión post-PR #33. No se borra el
-# trigger, solo se comenta, para poder reactivarlo agente por agente una vez decidido cuáles se
-# quedan en cron. workflow_dispatch se deja activo para poder seguir probando manualmente.
+# El cron se deshabilitó el 2026-08-25 mientras se evaluaba si estos agentes debían correr solos
+# o solo on-demand desde el chatbot. Resuelto el 2026-09-13: DEPENDE DEL AGENTE.
+#
+#   - dian-monitor y monitor-niif SÍ van por cron. Son feeds: su valor está en estar frescos
+#     cuando el contador entra a ver Novedades. Dejarlos solo on-demand significaba que si nadie
+#     le preguntaba al chatbot en dos semanas, no había novedades.
+#
+#   - vencimientos-tributarios y prospector-clientes-contables NO. El calendario DIAN es
+#     semi-estático (se publica una vez al año) y el prospector necesita sector/ciudad concretos
+#     que solo el usuario aporta. Correrlos semanalmente gasta cuota de Groq sin agregar nada.
+#
+# Esos dos siguen disponibles vía workflow_dispatch y, sobre todo, desde el chatbot (PR #50 y
+# anteriores). En el cron se saltan con un `if` explícito, no por omisión.
 on:
-  # schedule:
-  #   - cron: "0 11 * * 1"  # lunes 6am hora Colombia (UTC-5)
+  schedule:
+    - cron: "0 11 * * 1"  # lunes 6am hora Colombia (UTC-5)
   workflow_dispatch: {}
 
 permissions:
@@ -48,6 +56,8 @@ jobs:
 
   vencimientos-tributarios:
     needs: monitor-niif
+    # Solo on-demand: en el cron semanal no aporta (ver cabecera del archivo).
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -65,6 +75,8 @@ jobs:
 
   prospector-clientes-contables:
     needs: vencimientos-tributarios
+    # Solo on-demand: en el cron semanal no aporta (ver cabecera del archivo).
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
