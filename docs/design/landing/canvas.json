@@ -1,0 +1,48 @@
+{
+  "artboards": [
+    {
+      "file": "Herramienta.dc.html",
+      "title": "C · Landing completa — copia honesta",
+      "x": 0,
+      "y": 0,
+      "w": 980,
+      "h": 1720
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "A · descartada (referencia)",
+      "x": 1050,
+      "y": 0,
+      "w": 900,
+      "h": 1080
+    },
+    {
+      "file": "Editorial.dc.html",
+      "title": "B · descartada (referencia)",
+      "x": 2000,
+      "y": 0,
+      "w": 900,
+      "h": 1000
+    }
+  ],
+  "annotations": [
+    {
+      "id": "claims",
+      "x": 0,
+      "y": 1760,
+      "w": 980,
+      "text": "CLAIMS QUE SE ELIMINARON POR SER FALSOS (verificados contra producción)\n\n· \"Funciona sin internet\" / \"100% offline\" — la app corre en AWS Lambda, la base es Neon en la nube y los archivos van a S3. Falso.\n· \"100% datos en tu servidor\" / \"tus datos nunca salen\" — están en la nube de AWS. Falso.\n· \"+500 facturas procesadas\" — la base tiene 53. Falso.\n· Testimonios de Sandra M., Carlos R. y Andrea T. — con 8 organizaciones registradas, casi seguro inventados. Atribuir frases a contadores que no las dijeron es un riesgo legal y reputacional, no solo humo. Eliminados.\n· \"SLA 99.9% uptime\" en el plan Empresarial — no hay SLA firmado ni medición. Eliminado.\n\nQUÉ REEMPLAZÓ A ESO (todo verificable en el código)\n· 3.286 NITs de autorretenedores DIAN cargados (pipeline/autorretenedores.txt)\n· 31 fechas del calendario DIAN 2026 (api/data/calendario_2026.json)\n· Validación subtotal + IVA ≈ total con tolerancia de $1 COP (pipeline/validator.py)\n· CUFE de 96 hexadecimales y deduplicación por CUFE\n· Prorrateo Art. 490 ET; Renta Art. 241 con tabla UVT\n· El precio Empresarial quedó como [POR DEFINIR] en vez de inventar una cifra\n· El módulo de alertas aparece como \"en curso\", no como disponible"
+    },
+    {
+      "id": "ref",
+      "x": 1050,
+      "y": 1120,
+      "w": 900,
+      "text": "A y B quedan como referencia de las direcciones descartadas. Si querés, las borro del canvas."
+    }
+  ],
+  "launch": {
+    "view": "focused",
+    "file": "Herramienta.dc.html"
+  }
+}

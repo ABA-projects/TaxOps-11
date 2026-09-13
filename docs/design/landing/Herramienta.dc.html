@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Inter, "Segoe UI", sans-serif; }
+    a { color: #E05519; } a:hover { color: #ff7a45; }
+  </style>
+</helmet>
+
+<div style="width: 980px; background: #0b1220; color: #e2e8f0">
+
+  <!-- nav -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; border-bottom: 1px solid #1e293b">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <span style="width: 9px; height: 9px; background: #E05519; border-radius: 2px; display: inline-block"></span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; letter-spacing: -0.02em">taxops</span>
+    </div>
+    <div style="display: flex; gap: 22px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #64748b">
+      <span>módulos</span><span>precios</span><span>calendario</span><span>entrar</span>
+      <span style="background: #E05519; color: #0b1220; padding: 7px 14px; border-radius: 5px; font-weight: 600">empezar gratis</span>
+    </div>
+  </div>
+
+  <!-- hero -->
+  <div style="padding: 52px 40px 30px">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E05519; margin-bottom: 16px">
+      $ taxops procesar ./facturas --mes 2026-09
+    </div>
+    <h1 style="font-size: 44px; line-height: 1.08; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 16px; max-width: 660px; text-wrap: pretty">
+      El cierre mensual,<br>hecho por una máquina<br>que sabe el Estatuto.
+    </h1>
+    <p style="font-size: 15px; color: #94a3b8; line-height: 1.6; margin: 0 0 26px; max-width: 560px">
+      Subís los XML o PDF de tus facturas DIAN y sale un Excel con CUFE, bases, IVA y retención — con las inconsistencias ya marcadas. Lo mismo para exógenas, nómina y renta.
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center">
+      <span style="background: #E05519; color: #0b1220; padding: 12px 22px; border-radius: 7px; font-weight: 700; font-size: 14px">Empezar gratis</span>
+      <span style="border: 1px solid #334155; padding: 12px 22px; border-radius: 7px; font-size: 14px; color: #cbd5e1">Ver qué valida</span>
+      <span style="font-size: 12px; color: #64748b; margin-left: 6px">Sin tarjeta · 50 facturas al mes en el plan gratuito</span>
+    </div>
+  </div>
+
+  <!-- log de proceso -->
+  <div style="padding: 0 40px 36px">
+    <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 18px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.85">
+      <sc-for list="{{log}}" as="l" hint-placeholder-count="6">
+        <div style="display: flex; gap: 12px">
+          <span style="color: #475569; width: 54px">{{l.t}}</span>
+          <span style="color: {{l.c}}; width: 82px">{{l.tag}}</span>
+          <span style="color: #cbd5e1">{{l.m}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size: 12px; color: #64748b; margin-top: 10px; font-family: 'IBM Plex Mono', monospace">
+      // ejemplo de una corrida — cada paso queda registrado y es reproducible
+    </div>
+  </div>
+
+  <!-- lo que valida: el diferencial real -->
+  <div style="border-top: 1px solid #1e293b; padding: 36px 40px">
+    <h2 style="font-size: 22px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em">Lo que revisa antes de darte el Excel</h2>
+    <p style="font-size: 14px; color: #94a3b8; margin: 0 0 22px">Los errores que un ojo humano deja pasar a las once de la noche del día 17.</p>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{valida}}" as="v" hint-placeholder-count="6">
+        <div style="display: flex; gap: 12px; padding: 13px 15px; background: #0f172a; border-radius: 8px; border: 1px solid #16233a">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #E05519; padding-top: 2px">{{v.k}}</span>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 3px">{{v.t}}</div>
+            <div style="font-size: 12px; color: #64748b; line-height: 1.5">{{v.d}}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- modulos -->
+  <div style="border-top: 1px solid #1e293b; padding: 36px 40px">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #475569; margin-bottom: 18px">// módulos</div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{mods}}" as="m" hint-placeholder-count="6">
+        <div style="padding: 15px; background: #0f172a; border-radius: 9px; border: 1px solid #16233a">
+          <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px">
+            <span style="font-size: 13px; font-weight: 700">{{m.t}}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: {{m.ec}}">{{m.e}}</span>
+          </div>
+          <div style="font-size: 12px; color: #64748b; line-height: 1.5">{{m.d}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- calendario -->
+  <div style="border-top: 1px solid #1e293b; padding: 36px 40px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px">
+      <h2 style="font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em">Calendario DIAN 2026</h2>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #64748b">31 fechas cargadas</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{fechas}}" as="f" hint-placeholder-count="4">
+        <div style="background: #0f172a; border: 1px solid #16233a; border-radius: 8px; padding: 13px 15px">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #E05519; margin-bottom: 5px">{{f.fecha}}</div>
+          <div style="font-size: 12px; font-weight: 600; line-height: 1.35">{{f.t}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- precios -->
+  <div style="border-top: 1px solid #1e293b; padding: 36px 40px">
+    <h2 style="font-size: 20px; font-weight: 700; margin: 0 0 18px; letter-spacing: -0.02em">Precios</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{planes}}" as="p" hint-placeholder-count="3">
+        <div style="background: #0f172a; border: 1px solid {{p.borde}}; border-radius: 10px; padding: 18px">
+          <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px">{{p.n}}</div>
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; margin-bottom: 3px">{{p.precio}}</div>
+          <div style="font-size: 11px; color: #64748b; margin-bottom: 14px">{{p.para}}</div>
+          <sc-for list="{{p.items}}" as="i" hint-placeholder-count="4">
+            <div style="font-size: 12px; color: #94a3b8; padding: 3px 0">· {{i}}</div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- cierre honesto -->
+  <div style="border-top: 1px solid #1e293b; padding: 36px 40px">
+    <div style="background: #0f172a; border: 1px solid #16233a; border-radius: 10px; padding: 22px 24px">
+      <div style="font-size: 15px; font-weight: 700; margin-bottom: 8px">TaxOps es un producto joven</div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0 0 14px; max-width: 640px">
+        No vamos a inventarte cifras de uso ni testimonios. Los módulos de facturas, exógenas, nómina, renta y calendario están funcionando hoy; podés probarlos gratis y juzgar vos. Si algo no sirve para tu caso, escribinos y lo hablamos.
+      </p>
+      <div style="display: flex; gap: 10px; align-items: center">
+        <span style="background: #E05519; color: #0b1220; padding: 11px 20px; border-radius: 7px; font-weight: 700; font-size: 13px">Crear cuenta gratis</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #64748b">hola@taxops.co · Medellín</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-top: 1px solid #1e293b; padding: 20px 40px; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #475569">
+    <span>taxops · automatización contable para Colombia</span>
+    <span>© 2026</span>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":980,"height":1720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      log: [
+        { t: "00:00", tag: "leer",      c: "#64748b", m: "312 archivos (287 XML · 25 PDF)" },
+        { t: "00:04", tag: "extraer",   c: "#64748b", m: "CUFE, emisor, bases, IVA, retención" },
+        { t: "00:11", tag: "validar",   c: "#64748b", m: "subtotal + IVA ≈ total · tolerancia $1" },
+        { t: "00:14", tag: "alerta",    c: "#f59e0b", m: "4 facturas con inconsistencia — marcadas en rojo" },
+        { t: "00:16", tag: "prorrateo", c: "#64748b", m: "Art. 490 ET aplicado a 2 períodos" },
+        { t: "00:18", tag: "listo",     c: "#22c55e", m: "BASE_DATOS.xlsx · VALIDACION · PRORRATEO_IVA" },
+      ],
+      valida: [
+        { k: "cufe", t: "Formato de CUFE y CUDE", d: "96 caracteres hexadecimales. Si no cuadra, no pasa." },
+        { k: "dup",  t: "Duplicados por CUFE", d: "La misma factura cargada dos veces no se cuenta dos veces." },
+        { k: "suma", t: "Subtotal + IVA ≈ total", d: "Tolerancia de $1 COP. Detecta el descuadre de centavos." },
+        { k: "490",  t: "Prorrateo Art. 490 ET", d: "Mandatos siempre a no deducible; notas crédito restan del mes." },
+        { k: "auto", t: "3.286 autorretenedores", d: "Listado DIAN cargado: reconoce al emisor automáticamente." },
+        { k: "doc",  t: "Tipos de documento", d: "Notas crédito y débito, doc. equivalente POS y SPD, mandato, peaje." },
+      ],
+      mods: [
+        { t: "Facturas DIAN", e: "activo", ec: "#22c55e", d: "XML y PDF. Excel de 3 hojas: datos, validación y prorrateo." },
+        { t: "Exógenas 1003", e: "activo", ec: "#22c55e", d: "Detecta varios conceptos en un mismo certificado." },
+        { t: "Nómina", e: "activo", ec: "#22c55e", d: "Parafiscales y ARL por clase de riesgo, CST 2026." },
+        { t: "Renta", e: "activo", ec: "#22c55e", d: "Art. 241 ET con tabla progresiva UVT, personas naturales." },
+        { t: "Asistente IA", e: "activo", ec: "#22c55e", d: "Consulta normativa y tus propios documentos cargados." },
+        { t: "Alertas por correo", e: "en curso", ec: "#f59e0b", d: "Aviso antes de cada vencimiento. Todavía no está." },
+      ],
+      fechas: [
+        { fecha: "22 SEP", t: "IVA bimestral jul-ago" },
+        { fecha: "22 SEP", t: "Retención agosto" },
+        { fecha: "22 SEP", t: "Patrimonio cuota 2" },
+        { fecha: "26 ENE", t: "IVA cuatrimestral" },
+      ],
+      planes: [
+        { n: "Gratuito", precio: "$0", para: "Para probarlo con tus propias facturas", borde: "#16233a",
+          items: ["50 facturas al mes", "10 certificados de exógenas", "2 liquidaciones de nómina", "Exportación a Excel", "1 usuario"] },
+        { n: "Profesional", precio: "$79.900", para: "Para contadores y firmas pequeñas", borde: "#E05519",
+          items: ["Facturas, exógenas y nómina sin tope", "Asistente IA contable", "Calendario DIAN", "Hasta 5 usuarios", "Soporte por correo"] },
+        { n: "Empresarial", precio: "[POR DEFINIR]", para: "Para firmas medianas — hablemos", borde: "#16233a",
+          items: ["Todo lo del plan Profesional", "Usuarios sin tope", "Acceso a la API", "Onboarding acompañado"] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

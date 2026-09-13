@@ -40,8 +40,12 @@ Verificación: 49 tests en `test_extractor.py` (43 previos + 6 nuevos), suite co
 
 ## Pendiente
 
-- **Rediseño visual dirección C ("Herramienta")** — es trabajo de **Claude** (los fuentes se recuperan
-  desde su canvas). Kiro no lo toca. Canvas: https://claude.ai/code/artifact/66cbf36f-054d-478a-a17c-3bb8bfbd4d4b
+- **Rediseño visual dirección C — HECHO**, en PR (ver Tarea activa). Los fuentes del canvas ya no
+  dependen de una sesión de Claude: están versionados en `docs/design/landing/`.
+  **DEUDA nueva:** las fechas del bloque "Calendario DIAN" de la landing están hardcodeadas en
+  `page.tsx`. Las anteriores (May-Ago) ya estaban VENCIDAS y se mostraban como próximas; se
+  reemplazaron por las reales de `api/data/calendario_2026.json`, pero se van a volver a poner
+  viejas solas. Lo correcto es leerlas del JSON en build time.
 - **Discovery DIAN/XML — CERRADO (2026-09-10).** Veredicto: tratar el XML como fuente primaria está
   bien fundado legalmente (Res. 000165/2023 Art. 66: el XML tiene valor legal, el PDF es opcional).
   **Gap real:** `extract_xml` parsea UBL plano pero NO desenvuelve el `AttachedDocument` (contenedor
