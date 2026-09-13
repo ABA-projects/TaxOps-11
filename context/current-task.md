@@ -3,22 +3,19 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-10 · **Por:** Kiro CLI (EOL Node 20 → PRs #48/#49)
+**Última actualización:** 2026-09-13 · **Por:** Kiro CLI (EOL Node 20 CERRADO; #48/#49 mergeados)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** El aviso de Lambda Node.js 20.x EOL quedó abordado en dos PRs
-(pendientes de merge):
+**Ninguna tarea de código a medias.** El EOL de Node 20 quedó **cerrado end-to-end**:
+- **PR #48** (app: `.nvmrc`=22 + `engines.node>=22`) — MERGED (`1726294`).
+- **PR #49** (infra: `build_spec` Amplify con `nvm use 22`) — MERGED (`206b35c`); **Terraform Apply completó con success** → Node 22 aplicado en el compute SSR de producción.
 
-- **PR #48** (`chore/frontend-node22`) — capa de app: `taxops-web/.nvmrc` = 22 + `engines.node>=22`. Verificado con lint+build en Node 22.
-- **PR #49** (`chore/amplify-ssr-node22`) — capa de infra: `build_spec` con `nvm use 22` para el compute SSR. **Va por el flujo Terraform** (plan en el PR → aprobación manual → apply). `terraform fmt` limpio.
-
-### Diagnóstico del EOL (verificado, no asumido)
-- Nuestras Lambdas son `package_type = "Image"` (Python) → **no afectadas** (no hay `runtime =` en todo `infra/`).
-- El aviso es del **compute SSR de Amplify** (`WEB_COMPUTE` + `Next.js - SSR`), runtime Node gestionado por AWS.
-- Node 20 EOL: 2026-04-30 · Amplify corta deploys con Node 20 el **2027-03-03** · Amplify NO migra solo (repost.aws). Soporta 20/22/24 → se eligió 22 (LTS, compatible Next 15.3).
+### Diagnóstico del EOL (verificado, resuelto)
+- Nuestras Lambdas son `package_type = "Image"` (Python) → no afectadas.
+- El aviso era del compute SSR de Amplify (`WEB_COMPUTE` + `Next.js - SSR`). Node 20 EOL 2026-04-30; corte de deploys 2027-03-03. Migrado a Node 22 (LTS, compatible Next 15.3).
 
 ## Pendiente
 
@@ -31,7 +28,6 @@
   `context/memory/discovery-dian-xml.md`; research crudo con fuentes: `docs/research/dian-xml/FINDINGS.md`.
   **Siguiente paso (si se aprueba):** plan de Fase 1 — soportar AttachedDocument en facturas + capturar
   CUDE/estado de validación, con 2–3 XML reales como fixtures. Exógenas/renta en XML = Fase 2, diferida.
-- **EOL Node 20** → abordado en PRs #48/#49 (ver arriba). Cerrar cuando se mergeen.
 
 ## Notas de handoff
 

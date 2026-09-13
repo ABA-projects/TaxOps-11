@@ -12,6 +12,13 @@ Formato por entrada:
 
 ---
 
+## 2026-09-13 — Kiro CLI — EOL Node 20 CERRADO (#48/#49 mergeados + apply OK)
+- **Qué:** PRs #48 (app) y #49 (infra Amplify) mergeados. `Terraform Apply` completó con **success** → Node 22 aplicado en el compute SSR de producción. CI en verde.
+- **Estado:** EOL Node 20 resuelto end-to-end. `main` en `206b35c`.
+- **Próximos pasos:** decidir si arrancar la Fase 1 del discovery DIAN/XML (AttachedDocument).
+
+---
+
 ## 2026-09-10 — Kiro CLI — Discovery DIAN/XML (spike, con subagente de research)
 - **Qué:** spike de viabilidad para tratar el XML como fuente primaria. Research normativo por subagente `kirocrew-research` + auditoría de código por Kiro. Cero código tocado.
 - **Veredicto:** bien fundado legalmente (Res. 000165/2023 Art. 66 — XML tiene valor legal, PDF opcional). Gap real: `pipeline/extractor.py::extract_xml` lee UBL plano pero no desenvuelve el `AttachedDocument` (factura en CDATA) que la DIAN entrega. Exógenas/renta son solo PDF/imagen.
