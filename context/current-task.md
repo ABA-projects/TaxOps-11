@@ -3,44 +3,27 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-13 · **Por:** Claude Code (Fase 1 DIAN/XML — AttachedDocument)
+**Última actualización:** 2026-09-12 · **Por:** Claude Code (cron #51 y landing #52 mergeados)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** La Fase 1 del discovery DIAN/XML quedó **mergeada**
-en el **PR #50** (`ac3ec14`).
+**Ninguna tarea de código a medias.** Todo mergeado, nada en vuelo.
 
-`extract_xml` ya desenvuelve el contenedor de la DIAN: detecta la raíz, extrae el CDATA de la
-factura embebida, la re-parsea y sigue el flujo existente. De paso captura `cude`,
-`estado_dian` y `fecha_validacion_dian` del ApplicationResponse (campos **aditivos y
-opcionales** — el UBL plano y el excel_writer no se ven afectados).
-
-⚠️ **DEUDA ABIERTA — no considerar productivo todavía:** los fixtures son **sintéticos**,
-construidos según `docs/research/dian-xml/FINDINGS.md`. **Falta validar contra 2-3
-AttachedDocument REALES de la DIAN** (con y sin ApplicationResponse) antes de dar la Fase 1 por
-buena. Además el XPath del CDATA no se pudo contrastar contra el Anexo Técnico 1.9 (no está
-disponible localmente): el research dice `cac:Attachment/ext:ExternalReference/cbc:Description`
-pero UBL estándar usa `cac:ExternalReference`, así que la búsqueda quedó tolerante a ambas —
-apostar a una sola reintroduciría el fallo silencioso.
-
-Verificación: 49 tests en `test_extractor.py` (43 previos + 6 nuevos), suite completa
-263 passed / 2 skipped, flake8 limpio.
-
-**Fase 2 (exógenas/renta en XML) sigue diferida** — no se tocó nada de eso.
-
-### Antecedente: EOL de Node 20 (cerrado)
-- **PR #48** (app: `.nvmrc`=22 + `engines.node>=22`) — MERGED (`1726294`).
-- **PR #49** (infra: `build_spec` Amplify con `nvm use 22`) — MERGED (`206b35c`); **Terraform Apply completó con success** → Node 22 aplicado en el compute SSR de producción.
-
-### Diagnóstico del EOL (verificado, resuelto)
-- Nuestras Lambdas son `package_type = "Image"` (Python) → no afectadas.
-- El aviso era del compute SSR de Amplify (`WEB_COMPUTE` + `Next.js - SSR`). Node 20 EOL 2026-04-30; corte de deploys 2027-03-03. Migrado a Node 22 (LTS, compatible Next 15.3).
+Cerrado hoy:
+- **PR #51** — cron semanal reactivado, pero SOLO para `dian-monitor` y `monitor-niif`. Los otros
+  dos (`vencimientos-tributarios`, `prospector-clientes-contables`) se saltan en el cron con un
+  `if` explícito sobre `github.event_name`: el calendario DIAN se publica una vez al año y el
+  prospector necesita sector/ciudad del usuario. Siguen disponibles vía `workflow_dispatch` y
+  desde el chatbot.
+- **PR #52** — landing portada a la dirección C (oscura, IBM Plex Mono, log de proceso). Se
+  preservó el contenido honesto del #45 (verificado: 0 claims falsos reintroducidos) y los
+  fuentes del canvas quedaron versionados en `docs/design/landing/`.
 
 ## Pendiente
 
-- **Rediseño visual dirección C — HECHO**, en PR (ver Tarea activa). Los fuentes del canvas ya no
+- **Rediseño visual dirección C — HECHO y mergeado** (PR #52). Los fuentes del canvas ya no
   dependen de una sesión de Claude: están versionados en `docs/design/landing/`.
   **DEUDA nueva:** las fechas del bloque "Calendario DIAN" de la landing están hardcodeadas en
   `page.tsx`. Las anteriores (May-Ago) ya estaban VENCIDAS y se mostraban como próximas; se
