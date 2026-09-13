@@ -3,13 +3,34 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-13 · **Por:** Kiro CLI (EOL Node 20 CERRADO; #48/#49 mergeados)
+**Última actualización:** 2026-09-13 · **Por:** Claude Code (Fase 1 DIAN/XML — AttachedDocument)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** El EOL de Node 20 quedó **cerrado end-to-end**:
+**PR abierto: Fase 1 del discovery DIAN/XML — soporte de `AttachedDocument`.**
+Rama `feat/xml-attacheddocument`. Sin mergear.
+
+`extract_xml` ya desenvuelve el contenedor de la DIAN: detecta la raíz, extrae el CDATA de la
+factura embebida, la re-parsea y sigue el flujo existente. De paso captura `cude`,
+`estado_dian` y `fecha_validacion_dian` del ApplicationResponse (campos **aditivos y
+opcionales** — el UBL plano y el excel_writer no se ven afectados).
+
+⚠️ **DEUDA ABIERTA — no considerar productivo todavía:** los fixtures son **sintéticos**,
+construidos según `docs/research/dian-xml/FINDINGS.md`. **Falta validar contra 2-3
+AttachedDocument REALES de la DIAN** (con y sin ApplicationResponse) antes de dar la Fase 1 por
+buena. Además el XPath del CDATA no se pudo contrastar contra el Anexo Técnico 1.9 (no está
+disponible localmente): el research dice `cac:Attachment/ext:ExternalReference/cbc:Description`
+pero UBL estándar usa `cac:ExternalReference`, así que la búsqueda quedó tolerante a ambas —
+apostar a una sola reintroduciría el fallo silencioso.
+
+Verificación: 49 tests en `test_extractor.py` (43 previos + 6 nuevos), suite completa
+263 passed / 2 skipped, flake8 limpio.
+
+**Fase 2 (exógenas/renta en XML) sigue diferida** — no se tocó nada de eso.
+
+### Antecedente: EOL de Node 20 (cerrado)
 - **PR #48** (app: `.nvmrc`=22 + `engines.node>=22`) — MERGED (`1726294`).
 - **PR #49** (infra: `build_spec` Amplify con `nvm use 22`) — MERGED (`206b35c`); **Terraform Apply completó con success** → Node 22 aplicado en el compute SSR de producción.
 

@@ -1,3 +1,16 @@
+## 2026-09-13 — Fase 1 DIAN/XML: soporte de AttachedDocument (Claude Code)
+
+- `pipeline/extractor.py`: `extract_xml` desenvuelve el contenedor `AttachedDocument` de la DIAN
+  (factura embebida como CDATA) y captura `cude` / `estado_dian` / `fecha_validacion_dian` del
+  ApplicationResponse. El camino de UBL plano queda intacto.
+- Cierra el gap que identificó el discovery: si llegaba el contenedor real, `extract_xml`
+  devolvía una fila vacía **en silencio**.
+- TDD: 6 tests nuevos en `tests/test_extractor.py` (4 en rojo antes del fix, 2 de regresión).
+  49 passed en el archivo; 263 passed / 2 skipped en la suite; flake8 limpio.
+- **Deuda:** fixtures sintéticos. Validar contra XML reales de la DIAN antes de considerarlo
+  productivo. XPath del CDATA tolerante a `ext:`/`cac:ExternalReference` por no poder verificar
+  contra el Anexo Técnico 1.9.
+
 # Changelog de contexto — TaxOps-11
 
 > Registro **incremental** de cambios relevantes por sesión (Claude o Kiro).

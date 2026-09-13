@@ -205,6 +205,76 @@ def _xml_text(root: ET.Element, path: str) -> str:
     return el.text.strip() if el is not None and el.text else ""
 
 
+def _parse_cdata_embebido(texto: str):
+    """Parsea un UBL que viene embebido como CDATA. None si no es XML válido."""
+    if not texto or not texto.strip():
+        return None
+    try:
+        return ET.fromstring(texto.strip())
+    except ET.ParseError:
+        return None
+
+
+def _desenvolver_attached_document(root: ET.Element):
+    """Si `root` es un AttachedDocument de la DIAN, devuelve (ubl_embebido, metadatos_dian).
+
+    La DIAN entrega predominantemente un contenedor `<AttachedDocument>` UBL 2.1 con la factura
+    `<Invoice>`/`<CreditNote>` embebida como CDATA, no el UBL plano. Sin desenvolverlo,
+    extract_xml no matchea ningún XPath y devuelve una fila vacía EN SILENCIO — que es lo que
+    pasaba antes de este cambio. Ver docs/research/dian-xml/FINDINGS.md.
+
+    Para documentos que no son AttachedDocument devuelve (root, {}) — el camino de UBL plano
+    queda intacto.
+
+    Sobre el XPath: el research documenta la factura en
+    `cac:Attachment/ext:ExternalReference/cbc:Description`, pero UBL estándar usa
+    `cac:ExternalReference` y no se pudo verificar contra el Anexo Técnico 1.9 (no está
+    disponible localmente). Se busca de forma tolerante bajo `cac:Attachment` para aceptar ambas
+    variantes en vez de apostar a una: un XPath equivocado acá reintroduce el fallo silencioso.
+    """
+    if "attacheddocument" not in root.tag.lower():
+        return root, {}
+
+    embebido = None
+    meta: dict = {}
+
+    for desc in root.findall(".//cac:Attachment//cbc:Description", NS):
+        doc = _parse_cdata_embebido(desc.text or "")
+        if doc is None:
+            continue
+        tag = doc.tag.lower()
+        if embebido is None and ("invoice" in tag or "creditnote" in tag):
+            embebido = doc
+        elif "applicationresponse" in tag:
+            meta = _leer_application_response(doc)
+
+    if embebido is None:
+        logger.warning(
+            "AttachedDocument sin factura embebida legible: %s", root.findtext("cbc:ID", "")
+        )
+        return root, meta
+
+    return embebido, meta
+
+
+def _leer_application_response(doc: ET.Element) -> dict:
+    """CUDE, estado y fecha de validación de la DIAN.
+
+    El CUDE identifica la VALIDACIÓN de la DIAN y es distinto del CUFE, que identifica la
+    factura. Estos datos solo existen en el contenedor: el UBL plano no los trae.
+    """
+    estado = ""
+    for d in doc.findall(".//cac:Response/cbc:Description", NS):
+        if d.text and d.text.strip():
+            estado = d.text.strip()
+            break
+    return {
+        "cude": _xml_text(doc, "cbc:UUID"),
+        "estado_dian": estado,
+        "fecha_validacion_dian": _xml_text(doc, "cbc:IssueDate"),
+    }
+
+
 def extract_xml(path: Path) -> dict:
     """Extrae campos de un XML DIAN (UBL 2.1)."""
     try:
@@ -213,6 +283,8 @@ def extract_xml(path: Path) -> dict:
     except ET.ParseError as e:
         logger.error("XML inválido %s: %s", path.name, e)
         return _empty_row(path.name, "XML inválido")
+
+    root, meta_dian = _desenvolver_attached_document(root)
 
     tag = root.tag.lower()
     if "creditnote" in tag:
@@ -292,6 +364,9 @@ def extract_xml(path: Path) -> dict:
         "total": round(sign * total, 2),
         "retencion_fuente": _calc_retencion(abs(subtotal_signed), nit_emisor, base19, base5),
         "fuente": "XML",
+        # Solo presentes cuando el XML venía en un AttachedDocument con ApplicationResponse.
+        # Son aditivos: el excel_writer y el resto del pipeline no los requieren.
+        **meta_dian,
     }
 
 
