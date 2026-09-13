@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: Inter, "Segoe UI", sans-serif; }
+    a { color: #E05519; } a:hover { color: #b8430f; }
+  </style>
+</helmet>
+
+<div style="width: 900px; background: #faf7f2; color: #1A3A5C">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 44px; border-bottom: 1px solid #e4ddd2">
+    <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 24px; letter-spacing: -0.01em">TaxOps</div>
+    <div style="display: flex; gap: 26px; align-items: center; font-size: 13px; color: #5b6b7d">
+      <span>Funcionalidades</span><span>Precios</span><span>Calendario</span>
+      <span style="border: 1.5px solid #1A3A5C; padding: 7px 15px; border-radius: 2px; font-weight: 600; color: #1A3A5C">Empezar gratis</span>
+    </div>
+  </div>
+
+  <div style="padding: 60px 44px 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; align-items: start">
+    <div style="grid-column: span 2">
+      <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #94836d; margin-bottom: 18px; font-weight: 600">
+        Bogotá · Medellín · Cali — desde 2026
+      </div>
+      <h1 style="font-family: 'Instrument Serif', Georgia, serif; font-size: 60px; line-height: 1.02; margin: 0 0 20px; letter-spacing: -0.015em; text-wrap: pretty">
+        La normativa cambia.<br>Tu cierre mensual<br><em style="color: #E05519">no debería</em>.
+      </h1>
+      <p style="font-size: 16px; line-height: 1.6; color: #4a5b6d; margin: 0 0 26px; max-width: 460px">
+        Facturas DIAN, exógenas Formato 1003, nómina con parafiscales y calendario tributario. Una herramienta que sigue el Estatuto, no al revés.
+      </p>
+      <div style="display: flex; gap: 20px; align-items: center">
+        <span style="background: #1A3A5C; color: #faf7f2; padding: 13px 26px; border-radius: 2px; font-weight: 600; font-size: 14px">Empezar gratis</span>
+        <span style="font-size: 14px; color: #5b6b7d; border-bottom: 1px solid #c9bfae; padding-bottom: 2px">Ver el calendario 2026</span>
+      </div>
+    </div>
+
+    <div style="border-left: 1px solid #e4ddd2; padding-left: 28px">
+      <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #94836d; margin-bottom: 16px; font-weight: 600">Próximos vencimientos</div>
+      <sc-for list="{{fechas}}" as="v" hint-placeholder-count="4">
+        <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #eee7dc; align-items: baseline">
+          <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; line-height: 1; width: 34px; color: #1A3A5C">{{v.d}}</div>
+          <div>
+            <div style="font-size: 12px; font-weight: 600">{{v.t}}</div>
+            <div style="font-size: 11px; color: #94836d; text-transform: uppercase; letter-spacing: 0.08em">{{v.m}}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="padding: 0 44px 48px">
+    <div style="border-top: 2px solid #1A3A5C; padding-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px">
+      <sc-for list="{{pilares}}" as="p" hint-placeholder-count="3">
+        <div>
+          <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 32px; color: #E05519; line-height: 1; margin-bottom: 8px">{{p.n}}</div>
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px">{{p.t}}</div>
+          <div style="font-size: 13px; color: #5b6b7d; line-height: 1.5">{{p.d}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="background: #1A3A5C; color: #faf7f2; padding: 34px 44px; display: flex; justify-content: space-between; align-items: center">
+    <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; max-width: 480px; line-height: 1.2">
+      “Antes eran tres horas. Ahora son veinte minutos.”
+    </div>
+    <div style="font-size: 12px; color: #a9bdd1; text-align: right">
+      Sandra M.<br>Contadora pública · Medellín
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":900,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      fechas: [
+        { d: "22", m: "Septiembre", t: "IVA bimestral jul-ago" },
+        { d: "22", m: "Septiembre", t: "Retención agosto" },
+        { d: "26", m: "Enero", t: "IVA cuatrimestral" },
+        { d: "30", m: "Junio", t: "Exógenas — cierre" },
+      ],
+      pilares: [
+        { n: "01", t: "Sin salir de tu servidor", d: "Facturas, nómina y exógenas se procesan localmente. Los datos de tus clientes no viajan." },
+        { n: "02", t: "Al día con el ET", d: "Art. 241 con tabla UVT, parafiscales CST 2026, tarifas de retención vigentes." },
+        { n: "03", t: "Un contador lo diseñó", d: "Los casos raros —mandatos, notas crédito, multiconcepto— ya están contemplados." },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

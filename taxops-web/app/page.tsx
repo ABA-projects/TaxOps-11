@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  FileText, ClipboardList, Calculator, Bot, Zap, Shield,
-  Bell, Calendar, ChevronRight, Check, Menu, X,
-  Mail, Phone, MapPin, TrendingUp, Download,
+  Bell, Bot, Calculator, Calendar, Check, ClipboardList, Download, FileText, Mail, MapPin, Menu, Phone, Shield, TrendingUp, X,
 } from "lucide-react";
 
 const NAV = [
@@ -144,21 +142,48 @@ const PLANS = [
   },
 ];
 
+// Tomadas de api/data/calendario_2026.json, que es la fuente de verdad del calendario en la app.
+// Las que había antes (May 20, Jun 16, Jun 30, Jul 20, Ago 18) ya estaban VENCIDAS y se mostraban
+// como próximas: una landing que anuncia fechas pasadas resta credibilidad justo donde más
+// importa. DEUDA: esto se vuelve a poner viejo solo; lo correcto es leerlas del JSON en build
+// time — queda anotado en context/current-task.md.
 const DIAN_PREVIEW = [
-  { mes: "May", dia: 20, titulo: "Retención en la fuente", tipo: "retencion" },
-  { mes: "Jun", dia: 16, titulo: "IVA bimestral mar-abr", tipo: "iva" },
-  { mes: "Jun", dia: 30, titulo: "Exógenas 2025 – cierre", tipo: "exogenas" },
-  { mes: "Jul", dia: 20, titulo: "Retención en la fuente", tipo: "retencion" },
-  { mes: "Ago", dia: 18, titulo: "IVA bimestral may-jun", tipo: "iva" },
-  { mes: "Oct", dia: 15, titulo: "Renta personas naturales", tipo: "renta" },
+  { mes: "Sep", dia: 22, titulo: "Retención — agosto 2026", tipo: "retencion" },
+  { mes: "Sep", dia: 22, titulo: "IVA bimestral — jul-ago", tipo: "iva" },
+  { mes: "Sep", dia: 22, titulo: "Patrimonio — cuota 2", tipo: "patrimonio" },
+  { mes: "Oct", dia: 23, titulo: "Retención — septiembre 2026", tipo: "retencion" },
+  { mes: "Oct", dia: 23, titulo: "Renta personas naturales — cierre", tipo: "renta" },
+  { mes: "Nov", dia: 25, titulo: "IVA bimestral — sep-oct", tipo: "iva" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  retencion: "bg-orange-500",
-  iva: "bg-blue-500",
-  exogenas: "bg-violet-500",
-  renta: "bg-red-500",
+  retencion: "text-brand-orange",
+  iva: "text-sky-400",
+  exogenas: "text-violet-400",
+  renta: "text-rose-400",
+  patrimonio: "text-amber-400",
 };
+
+// Lo que el pipeline revisa antes de entregar el Excel. Todo verificable en el código:
+// pipeline/validator.py, pipeline/prorateo.py y pipeline/autorretenedores.txt.
+const VALIDACIONES = [
+  { k: "cufe", t: "Formato de CUFE y CUDE", d: "96 caracteres hexadecimales. Si no cuadra, no pasa." },
+  { k: "dup", t: "Duplicados por CUFE", d: "La misma factura cargada dos veces no se cuenta dos veces." },
+  { k: "suma", t: "Subtotal + IVA ≈ total", d: "Tolerancia de $1 COP. Detecta el descuadre de centavos." },
+  { k: "490", t: "Prorrateo Art. 490 ET", d: "Mandatos siempre a no deducible; notas crédito restan del mes." },
+  { k: "auto", t: "3.286 autorretenedores", d: "Listado DIAN cargado: reconoce al emisor automáticamente." },
+  { k: "doc", t: "Tipos de documento", d: "Notas crédito y débito, doc. equivalente POS y SPD, mandato, peaje." },
+];
+
+// Ejemplo ilustrativo de una corrida — NO son cifras de uso del producto.
+const LOG_PROCESO = [
+  { t: "00:00", tag: "leer", c: "text-slate-500", m: "312 archivos (287 XML · 25 PDF)" },
+  { t: "00:04", tag: "extraer", c: "text-slate-500", m: "CUFE, emisor, bases, IVA, retención" },
+  { t: "00:11", tag: "validar", c: "text-slate-500", m: "subtotal + IVA ≈ total · tolerancia $1" },
+  { t: "00:14", tag: "alerta", c: "text-amber-400", m: "4 facturas con inconsistencia — marcadas" },
+  { t: "00:16", tag: "prorrateo", c: "text-slate-500", m: "Art. 490 ET aplicado a 2 períodos" },
+  { t: "00:18", tag: "listo", c: "text-emerald-400", m: "BASE_DATOS.xlsx · VALIDACION · PRORRATEO_IVA" },
+];
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -170,135 +195,135 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="bg-white text-gray-900 min-h-screen font-sans">
+    <div className="bg-[#0b1220] text-slate-200 min-h-screen font-sans">
       {/* ── NAVBAR ─────────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100 shadow-sm">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0b1220]/90 backdrop-blur border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="text-2xl font-black tracking-tight">
-            <span className="text-brand-orange">Tax</span>
-            <span className="text-brand-navy">Ops</span>
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 bg-brand-orange rounded-sm" />
+            <span className="font-mono text-base font-semibold tracking-tight text-white">taxops</span>
           </div>
 
-          {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-6">
             {NAV.map((n) => (
               <button key={n.label} onClick={() => scrollTo(n.href.slice(1))}
-                className="text-sm text-gray-600 hover:text-brand-orange transition-colors font-medium">
-                {n.label}
+                className="font-mono text-xs text-slate-400 hover:text-brand-orange transition-colors">
+                {n.label.toLowerCase()}
               </button>
             ))}
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="text-sm font-semibold text-gray-700 hover:text-brand-orange transition-colors px-4 py-2">
+            <Link href="/login" className="text-sm text-slate-300 hover:text-white transition-colors px-3 py-2">
               Iniciar sesión
             </Link>
-            <Link href="/signup" className="bg-brand-orange text-white text-sm font-semibold px-5 py-2 rounded-xl hover:bg-orange-600 transition-colors">
-              Empezar gratis →
+            <Link href="/signup"
+              className="bg-brand-orange text-[#0b1220] text-sm font-bold px-5 py-2 rounded-lg hover:bg-orange-400 transition-colors">
+              Empezar gratis
             </Link>
           </div>
 
-          {/* Mobile menu button */}
-          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-gray-600">
+          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-slate-300" aria-label="Menú">
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
 
         {menuOpen && (
-          <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3">
+          <div className="md:hidden bg-[#0b1220] border-t border-slate-800 px-4 py-4 space-y-3">
             {NAV.map((n) => (
               <button key={n.label} onClick={() => scrollTo(n.href.slice(1))}
-                className="block w-full text-left text-sm text-gray-700 py-2 font-medium">
+                className="block w-full text-left text-sm text-slate-300 py-2">
                 {n.label}
               </button>
             ))}
-            <Link href="/signup" className="block w-full text-center bg-brand-orange text-white text-sm font-semibold px-5 py-2.5 rounded-xl mt-2">
-              Empezar gratis →
+            <Link href="/login" className="block text-sm text-slate-300 py-2">Iniciar sesión</Link>
+            <Link href="/signup"
+              className="block text-center bg-brand-orange text-[#0b1220] font-bold py-2.5 rounded-lg mt-2">
+              Empezar gratis
             </Link>
           </div>
         )}
       </nav>
 
       {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="pt-32 pb-20 bg-gradient-to-br from-slate-950 via-brand-navy to-slate-900 text-white">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-xs font-medium text-white/80 mb-6">
-            <Zap size={12} className="text-brand-orange" />
-            Basado en la norma DIAN · Estatuto Tributario 2026 · Hecho para Colombia
-          </div>
-
-          <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight mb-6">
-            Automatiza tu contabilidad<br />
-            <span className="text-brand-orange">sin complicaciones</span>
+      <section className="pt-32 pb-12">
+        <div className="max-w-6xl mx-auto px-4">
+          <p className="font-mono text-xs text-brand-orange mb-5">$ taxops procesar ./facturas --mes 2026-09</p>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.08] text-white mb-5 max-w-3xl text-pretty">
+            El cierre mensual,<br />hecho por una máquina<br />que sabe el Estatuto.
           </h1>
-
-          <p className="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Procesa facturas electrónicas DIAN, genera exógenas Formato 1003, liquida nómina con todos los parafiscales
-            y consulta el calendario tributario de Colombia — todo en una sola herramienta.
+          <p className="text-base text-slate-400 leading-relaxed mb-7 max-w-2xl">
+            Subís los XML o PDF de tus facturas DIAN y sale un Excel con CUFE, bases, IVA y retención —
+            con las inconsistencias ya marcadas. Lo mismo para exógenas, nómina y renta.
           </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-wrap gap-3 items-center">
             <Link href="/signup"
-              className="bg-brand-orange text-white font-bold px-8 py-4 rounded-2xl text-lg hover:bg-orange-600 transition-all hover:scale-105 shadow-lg shadow-orange-500/30">
+              className="bg-brand-orange text-[#0b1220] font-bold px-6 py-3 rounded-lg hover:bg-orange-400 transition-colors">
               Empezar gratis
-              <ChevronRight className="inline ml-1" size={20} />
             </Link>
             <button onClick={() => scrollTo("features")}
-              className="border border-white/30 text-white font-semibold px-8 py-4 rounded-2xl text-lg hover:bg-white/10 transition-all">
-              Ver funcionalidades
+              className="border border-slate-700 px-6 py-3 rounded-lg text-slate-200 hover:border-slate-500 transition-colors">
+              Ver qué valida
             </button>
-          </div>
-
-          <div className="mt-12 flex flex-wrap justify-center gap-8 text-sm text-slate-400">
-            <span><strong className="text-white">3.286</strong> autorretenedores DIAN</span>
-            <span><strong className="text-white">Art. 490</strong> prorrateo de IVA</span>
-            <span><strong className="text-white">CST 2026</strong> actualizado</span>
-            <span><strong className="text-white">0 instalación</strong> web app</span>
+            <span className="text-xs text-slate-500">Sin tarjeta · 50 facturas al mes en el plan gratuito</span>
           </div>
         </div>
       </section>
 
-      {/* ── CÓMO FUNCIONA ─────────────────────────────────────────────── */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-black text-brand-navy mb-3">Así de simple</h2>
-          <p className="text-gray-500 mb-12">3 pasos y tienes tu reporte listo</p>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { n: "1", title: "Sube tus archivos", desc: "PDF o XML de facturas DIAN, certificados de retención. Arrastra y suelta o selecciona." },
-              { n: "2", title: "TaxOps procesa", desc: "Extrae datos automáticamente: CUFE, IVA, bases, retención, conceptos. En segundos." },
-              { n: "3", title: "Descarga el Excel", desc: "Reporte formateado y listo para presentar. También disponible para nómina y exógenas." },
-            ].map((s) => (
-              <div key={s.n} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-left">
-                <div className="w-10 h-10 bg-brand-orange rounded-xl flex items-center justify-center text-white font-black text-lg mb-4">
-                  {s.n}
+      {/* ── LOG DE PROCESO ─────────────────────────────────────────────── */}
+      <section className="pb-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 font-mono text-xs leading-7 overflow-x-auto">
+            {LOG_PROCESO.map((l) => (
+              <div key={l.tag} className="flex gap-3 whitespace-nowrap">
+                <span className="text-slate-600 w-14 shrink-0">{l.t}</span>
+                <span className={`${l.c} w-20 shrink-0`}>{l.tag}</span>
+                <span className="text-slate-300">{l.m}</span>
+              </div>
+            ))}
+          </div>
+          <p className="font-mono text-xs text-slate-600 mt-3">
+            {/* Honestidad: es un ejemplo de corrida, no una métrica de uso del producto. */}
+            {"// ejemplo de una corrida — cada paso queda registrado y es reproducible"}
+          </p>
+        </div>
+      </section>
+
+      {/* ── QUÉ VALIDA ─────────────────────────────────────────────────── */}
+      <section className="border-t border-slate-800 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Lo que revisa antes de darte el Excel</h2>
+          <p className="text-sm text-slate-400 mb-8">
+            Los errores que un ojo humano deja pasar a las once de la noche del día 17.
+          </p>
+          <div className="grid md:grid-cols-2 gap-2.5">
+            {VALIDACIONES.map((v) => (
+              <div key={v.k} className="flex gap-3 p-4 bg-[#0f172a] rounded-lg border border-slate-800/80">
+                <span className="font-mono text-[11px] text-brand-orange pt-0.5 shrink-0">{v.k}</span>
+                <div>
+                  <p className="text-sm font-semibold text-white mb-1">{v.t}</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{v.d}</p>
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">{s.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{s.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── FEATURES ──────────────────────────────────────────────────── */}
-      <section id="features" className="py-20 bg-white">
+      {/* ── MÓDULOS ────────────────────────────────────────────────────── */}
+      <section id="features" className="border-t border-slate-800 py-16">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl md:text-4xl font-black text-brand-navy mb-3">Todo lo que necesitas</h2>
-            <p className="text-gray-500 text-lg max-w-2xl mx-auto">
-              Una plataforma completa para la gestión tributaria y contable colombiana.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
+          <p className="font-mono text-xs text-slate-600 mb-5">{"// módulos"}</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {FEATURES.map((f) => (
-              <div key={f.title} className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-brand-orange hover:shadow-md transition-all group">
-                <div className="mb-3">{f.icon}</div>
-                <h3 className="font-bold text-gray-900 mb-2 group-hover:text-brand-orange transition-colors">{f.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed mb-3">{f.desc}</p>
-                <span className="inline-block text-xs bg-white border border-gray-200 px-3 py-1 rounded-full text-gray-600 font-medium">
-                  {f.tag}
+              <div key={f.title} className="p-4 bg-[#0f172a] rounded-lg border border-slate-800/80">
+                <div className="flex items-center gap-2.5 mb-2">
+                  {f.icon}
+                  <span className="text-sm font-bold text-white">{f.title}</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">{f.desc}</p>
+                <span className={`font-mono text-[10px] ${f.tag.includes("Próximamente") ? "text-amber-400" : "text-emerald-400"}`}>
+                  {f.tag.includes("Próximamente") ? "en curso" : "activo"}
                 </span>
               </div>
             ))}
@@ -306,231 +331,152 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── WEB APP BADGE ─────────────────────────────────────────────── */}
-      <section className="py-12 bg-brand-navy text-white">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/10 rounded-xl">
-              <Zap size={28} className="text-brand-orange" />
-            </div>
-            <div>
-              <h3 className="font-black text-xl mb-1">Sin instalar nada</h3>
-              <p className="text-slate-300 text-sm">
-                TaxOps es una aplicación web: entras desde el navegador, sin instalar programas ni
-                configurar servidores. Subes tus documentos y descargas los reportes en Excel.
-              </p>
-            </div>
+      {/* ── CALENDARIO ─────────────────────────────────────────────────── */}
+      <section id="calendar" className="border-t border-slate-800 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-6">
+            <h2 className="text-xl font-bold tracking-tight text-white">Calendario DIAN 2026</h2>
+            <span className="font-mono text-xs text-slate-500">31 fechas cargadas</span>
           </div>
-          <div className="shrink-0">
-            <Link href="/signup" className="bg-brand-orange text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-600 transition-colors whitespace-nowrap">
-              Probar ahora →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── CALENDAR PREVIEW ──────────────────────────────────────────── */}
-      <section id="calendar" className="py-20 bg-gray-50">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-brand-navy mb-3">Calendario Tributario DIAN 2026</h2>
-            <p className="text-gray-500 max-w-xl mx-auto">
-              Nunca más pierdas una fecha. Retención, IVA, renta, exógenas y más — con alertas automáticas.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {DIAN_PREVIEW.map((e, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-                <div className={`flex-shrink-0 w-12 h-12 rounded-xl ${TYPE_COLORS[e.tipo]} flex flex-col items-center justify-center text-white`}>
-                  <span className="text-[10px] font-bold uppercase">{e.mes}</span>
-                  <span className="text-lg font-black leading-none">{e.dia}</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{e.titulo}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{e.tipo.replace("_", " ")}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <Link href="/login"
-              className="inline-flex items-center gap-2 bg-brand-navy text-white font-semibold px-6 py-3 rounded-xl hover:bg-brand-navy/80 transition-colors">
-              <Calendar size={16} />
-              Ver calendario completo →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── CAPACIDADES VERIFICABLES ──────────────────────────────────── */}
-      <section className="py-20 bg-white">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-brand-navy mb-3">Construido sobre la norma colombiana</h2>
-            <p className="text-gray-500 max-w-2xl mx-auto">
-              Cada cálculo se apoya en la reglamentación vigente de la DIAN y el Estatuto Tributario.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { stat: "3.286", label: "NITs de autorretenedores DIAN cargados para clasificación automática" },
-              { stat: "31", label: "fechas del calendario tributario DIAN 2026 con alertas" },
-              { stat: "Art. 490", label: "prorrateo de IVA descontable del Estatuto Tributario" },
-              { stat: "CUFE 96", label: "validación de dígitos y cuadre subtotal + IVA ≈ total (±$1 COP)" },
-            ].map((c) => (
-              <div key={c.label} className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-                <p className="text-3xl font-black text-brand-orange mb-2">{c.stat}</p>
-                <p className="text-sm text-gray-600 leading-relaxed">{c.label}</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {DIAN_PREVIEW.map((d) => (
+              <div key={`${d.mes}-${d.dia}-${d.titulo}`} className="bg-[#0f172a] border border-slate-800/80 rounded-lg p-4">
+                <p className={`font-mono text-[11px] mb-1.5 ${TYPE_COLORS[d.tipo] ?? "text-slate-400"}`}>
+                  {d.dia} {d.mes.toUpperCase()}
+                </p>
+                <p className="text-xs font-semibold text-white leading-snug">{d.titulo}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── PRICING ───────────────────────────────────────────────────── */}
-      <section id="pricing" className="py-20 bg-gray-50">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-brand-navy mb-3">Precios transparentes</h2>
-            <p className="text-gray-500 mb-6">Empieza gratis, escala cuando lo necesites.</p>
-
-            {/* Billing toggle */}
-            <div className="inline-flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2">
-              <span className={`text-sm font-medium ${!billingAnnual ? "text-brand-orange" : "text-gray-400"}`}>Mensual</span>
-              <button
-                onClick={() => setBillingAnnual(!billingAnnual)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${billingAnnual ? "bg-brand-orange" : "bg-gray-200"}`}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${billingAnnual ? "translate-x-5" : ""}`} />
-              </button>
-              <span className={`text-sm font-medium ${billingAnnual ? "text-brand-orange" : "text-gray-400"}`}>
-                Anual <span className="text-emerald-600 font-bold">−20%</span>
-              </span>
-            </div>
+      {/* ── PRECIOS ────────────────────────────────────────────────────── */}
+      <section id="pricing" className="border-t border-slate-800 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-3 mb-6">
+            <h2 className="text-xl font-bold tracking-tight text-white">Precios</h2>
+            <button onClick={() => setBillingAnnual(!billingAnnual)}
+              className="font-mono text-xs text-slate-400 hover:text-brand-orange transition-colors">
+              {billingAnnual ? "ver mensual" : "ver anual (−20%)"}
+            </button>
           </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {PLANS.map((p) => {
-              const displayPrice = billingAnnual && p.price !== "$0"
-                ? `$${Math.round(parseInt(p.price.replace(/\D/g, "")) * 0.8).toLocaleString("es-CO")}`
-                : p.price;
-
-              return (
-                <div key={p.name} className={`bg-white rounded-2xl border-2 ${p.color} ${p.primary ? "shadow-xl shadow-orange-100" : "shadow-sm"} p-6 relative`}>
-                  {p.badge && (
-                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${p.primary ? "bg-brand-orange text-white" : "bg-violet-100 text-violet-700"}`}>
-                      {p.badge}
-                    </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {PLANS.map((plan) => (
+              <div key={plan.name}
+                className={`bg-[#0f172a] rounded-xl p-5 border ${plan.primary ? "border-brand-orange" : "border-slate-800"}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-bold text-white">{plan.name}</p>
+                  {plan.badge && (
+                    <span className="font-mono text-[10px] text-slate-500">{plan.badge.toLowerCase()}</span>
                   )}
-
-                  <div className="mb-4">
-                    <h3 className="font-black text-gray-900 text-lg">{p.name}</h3>
-                    <p className="text-xs text-gray-400 mb-3">{p.desc}</p>
-                    <div className="flex items-end gap-1">
-                      <span className="text-3xl font-black text-gray-900">{displayPrice}</span>
-                      <span className="text-gray-400 text-sm mb-1">{p.period}</span>
-                    </div>
-                    {billingAnnual && p.price !== "$0" && (
-                      <p className="text-xs text-emerald-600 mt-1">Facturado anualmente</p>
-                    )}
-                  </div>
-
-                  <Link href={p.href}
-                    className={`block w-full text-center py-2.5 rounded-xl font-semibold text-sm mb-5 transition-all ${
-                      p.primary
-                        ? "bg-brand-orange text-white hover:bg-orange-600"
-                        : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                    }`}>
-                    {p.cta}
-                  </Link>
-
-                  <ul className="space-y-2">
-                    {p.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-gray-700">
-                        <Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                    {p.noFeatures.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-gray-400">
-                        <X size={14} className="mt-0.5 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-              );
-            })}
+                <p className="font-mono text-2xl font-semibold text-white">
+                  {plan.price}
+                  <span className="text-xs text-slate-500 font-normal">{plan.period}</span>
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1 mb-4">{plan.desc}</p>
+                <Link href={plan.href}
+                  className={`block text-center text-sm font-bold py-2.5 rounded-lg mb-4 transition-colors ${
+                    plan.primary
+                      ? "bg-brand-orange text-[#0b1220] hover:bg-orange-400"
+                      : "border border-slate-700 text-slate-200 hover:border-slate-500"
+                  }`}>
+                  {plan.cta}
+                </Link>
+                <ul className="space-y-1.5">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex gap-2 text-xs text-slate-300">
+                      <Check size={13} className="text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                  {plan.noFeatures.map((f) => (
+                    <li key={f} className="flex gap-2 text-xs text-slate-600">
+                      <X size={13} className="shrink-0 mt-0.5" />
+                      <span className="line-through">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA FINAL ─────────────────────────────────────────────────── */}
-      <section className="py-20 bg-gradient-to-br from-brand-navy to-slate-900 text-white text-center">
-        <div className="max-w-3xl mx-auto px-4">
-          <TrendingUp size={40} className="text-brand-orange mx-auto mb-4" />
-          <h2 className="text-3xl md:text-4xl font-black mb-4">
-            Tu despacho merece herramientas del siglo XXI
-          </h2>
-          <p className="text-slate-300 text-lg mb-8">
-            Únete a los contadores que ya automatizan su flujo de trabajo con TaxOps.
-            Empieza gratis — sin tarjeta de crédito.
-          </p>
-          <Link href="/login"
-            className="bg-brand-orange text-white font-bold px-10 py-4 rounded-2xl text-lg hover:bg-orange-600 transition-all hover:scale-105 shadow-lg shadow-orange-500/30 inline-block">
-            Crear cuenta gratis →
-          </Link>
+      {/* ── CIERRE HONESTO ─────────────────────────────────────────────── */}
+      <section className="border-t border-slate-800 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-6">
+            <h2 className="text-base font-bold text-white mb-2">TaxOps es un producto joven</h2>
+            <p className="text-sm text-slate-400 leading-relaxed mb-5 max-w-2xl">
+              No vamos a inventarte cifras de uso ni testimonios. Los módulos de facturas, exógenas, nómina,
+              renta y calendario están funcionando hoy; podés probarlos gratis y juzgar vos. Si algo no sirve
+              para tu caso, escribinos y lo hablamos.
+            </p>
+            <div className="flex flex-wrap gap-3 items-center">
+              <Link href="/signup"
+                className="bg-brand-orange text-[#0b1220] font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-orange-400 transition-colors">
+                Crear cuenta gratis
+              </Link>
+              <span className="font-mono text-xs text-slate-500">hola@taxops.co · Medellín</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ── CONTACT ───────────────────────────────────────────────────── */}
-      <section id="contact" className="py-20 bg-white">
+      {/* ── CONTACTO ───────────────────────────────────────────────────── */}
+      <section id="contact" className="border-t border-slate-800 py-16">
         <div className="max-w-4xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-brand-navy mb-3">¿Tienes preguntas?</h2>
-            <p className="text-gray-500">Escríbenos y respondemos en menos de 24 horas.</p>
-          </div>
+          <h2 className="text-xl font-bold tracking-tight text-white mb-2">¿Tienes preguntas?</h2>
+          <p className="text-sm text-slate-400 mb-8">Escríbenos y respondemos en menos de 24 horas.</p>
 
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-6">
+            <div className="space-y-5">
               {[
-                { icon: <Mail size={20} className="text-brand-orange" />, label: "Email", value: "hola@taxops.co" },
-                { icon: <Phone size={20} className="text-brand-orange" />, label: "WhatsApp", value: "+57 300 000 0000" },
-                { icon: <MapPin size={20} className="text-brand-orange" />, label: "Ciudad", value: "Medellín, Colombia" },
+                { icon: <Mail size={18} className="text-brand-orange" />, label: "Email", value: "hola@taxops.co" },
+                { icon: <Phone size={18} className="text-brand-orange" />, label: "WhatsApp", value: "+57 300 000 0000" },
+                { icon: <MapPin size={18} className="text-brand-orange" />, label: "Ciudad", value: "Medellín, Colombia" },
               ].map((c) => (
-                <div key={c.label} className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">{c.icon}</div>
+                <div key={c.label} className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-[#0f172a] border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
+                    {c.icon}
+                  </div>
                   <div>
-                    <p className="text-xs text-gray-400">{c.label}</p>
-                    <p className="font-semibold text-gray-900">{c.value}</p>
+                    <p className="font-mono text-[10px] text-slate-500">{c.label.toLowerCase()}</p>
+                    <p className="text-sm font-semibold text-white">{c.value}</p>
                   </div>
                 </div>
               ))}
 
-              <div className="pt-4">
-                <p className="text-sm text-gray-500 font-medium mb-3">¿Eres contador o firma contable?</p>
-                <p className="text-sm text-gray-500 leading-relaxed">
+              <div className="pt-2">
+                <p className="text-sm text-slate-300 font-medium mb-2">¿Eres contador o firma contable?</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
                   Pregúntanos sobre onboarding personalizado, migración de datos y planes para grupos de profesionales.
                 </p>
               </div>
             </div>
 
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Nombre</label>
-                <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange" placeholder="Tu nombre" />
+                <label htmlFor="c-nombre" className="block font-mono text-[10px] text-slate-500 mb-1">nombre</label>
+                <input id="c-nombre"
+                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
+                  placeholder="Tu nombre" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Email</label>
-                <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange" placeholder="tu@email.com" />
+                <label htmlFor="c-email" className="block font-mono text-[10px] text-slate-500 mb-1">email</label>
+                <input id="c-email" type="email"
+                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
+                  placeholder="tu@email.com" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Mensaje</label>
-                <textarea rows={4} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange resize-none" placeholder="¿En qué podemos ayudarte?" />
+                <label htmlFor="c-msg" className="block font-mono text-[10px] text-slate-500 mb-1">mensaje</label>
+                <textarea id="c-msg" rows={4}
+                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
+                  placeholder="¿En qué podemos ayudarte?" />
               </div>
-              <button className="w-full bg-brand-orange text-white font-semibold py-2.5 rounded-xl hover:bg-orange-600 transition-colors text-sm">
+              <button className="w-full bg-brand-orange text-[#0b1220] font-bold py-2.5 rounded-lg hover:bg-orange-400 transition-colors text-sm">
                 Enviar mensaje
               </button>
             </form>
@@ -538,24 +484,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── FOOTER ────────────────────────────────────────────────────── */}
-      <footer className="bg-slate-950 text-slate-400 py-10 text-sm">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div>
-            <span className="text-2xl font-black"><span className="text-brand-orange">Tax</span><span className="text-white">Ops</span></span>
-            <p className="mt-1 text-xs">Automatización contable para Colombia · 2026</p>
+      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
+      <footer className="border-t border-slate-800 py-8">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-[11px] text-slate-600">
+          <span>taxops · automatización contable para Colombia</span>
+          <div className="flex flex-wrap gap-5">
+            <button onClick={() => scrollTo("features")} className="hover:text-slate-300 transition-colors">módulos</button>
+            <button onClick={() => scrollTo("pricing")} className="hover:text-slate-300 transition-colors">precios</button>
+            <button onClick={() => scrollTo("calendar")} className="hover:text-slate-300 transition-colors">calendario</button>
+            <button onClick={() => scrollTo("contact")} className="hover:text-slate-300 transition-colors">contacto</button>
+            <Link href="/login" className="hover:text-slate-300 transition-colors">entrar</Link>
           </div>
-          <div className="flex flex-wrap gap-6 text-xs">
-            <button onClick={() => scrollTo("features")} className="hover:text-white transition-colors">Funcionalidades</button>
-            <button onClick={() => scrollTo("pricing")} className="hover:text-white transition-colors">Precios</button>
-            <button onClick={() => scrollTo("calendar")} className="hover:text-white transition-colors">Calendario DIAN</button>
-            <button onClick={() => scrollTo("contact")} className="hover:text-white transition-colors">Contacto</button>
-            <Link href="/login" className="hover:text-white transition-colors">Iniciar sesión</Link>
-          </div>
-          <p className="text-xs">© 2026 TaxOps · Todos los derechos reservados</p>
+          <span>© 2026</span>
         </div>
       </footer>
     </div>
   );
 }
-

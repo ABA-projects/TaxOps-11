@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Inter, "Segoe UI", sans-serif; }
+    a { color: #E05519; } a:hover { color: #b8430f; }
+  </style>
+</helmet>
+
+<div style="width: 900px; background: #ffffff; color: #0f172a">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid #e5e7eb">
+    <div style="font-weight: 800; font-size: 19px; letter-spacing: -0.02em">Tax<span style="color: #E05519">Ops</span></div>
+    <div style="display: flex; gap: 24px; align-items: center; font-size: 13px; color: #475569">
+      <span>Funcionalidades</span><span>Precios</span><span>Calendario DIAN</span>
+      <span style="background: #E05519; color: #fff; padding: 8px 16px; border-radius: 8px; font-weight: 600">Empezar gratis</span>
+    </div>
+  </div>
+
+  <div style="padding: 56px 40px 40px">
+    <div style="display: inline-block; font-size: 12px; font-weight: 600; color: #E05519; background: #fef3ee; padding: 6px 12px; border-radius: 999px; margin-bottom: 20px">
+      Sin instalación · Tus datos en tu servidor
+    </div>
+    <h1 style="font-size: 46px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 800; margin: 0 0 16px; max-width: 620px; text-wrap: pretty">
+      De 300 facturas DIAN<br>a un Excel listo.<br><span style="color: #94a3b8">En 20 minutos.</span>
+    </h1>
+    <p style="font-size: 16px; color: #475569; margin: 0 0 24px; max-width: 500px; line-height: 1.55">
+      Arrastrás los XML o PDF. TaxOps extrae CUFE, IVA, bases y retención, y te devuelve el reporte formateado.
+    </p>
+    <div style="display: flex; gap: 12px; align-items: center">
+      <span style="background: #E05519; color: #fff; padding: 13px 24px; border-radius: 9px; font-weight: 600; font-size: 15px">Procesar mis facturas</span>
+      <span style="color: #475569; font-size: 14px; font-weight: 500">Ver cómo funciona →</span>
+    </div>
+  </div>
+
+  <div style="padding: 0 40px 48px">
+    <div style="border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 40px -18px rgba(15,23,42,.25)">
+      <div style="display: flex; gap: 7px; padding: 11px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0">
+        <span style="width:10px;height:10px;border-radius:50%;background:#e2e8f0;display:inline-block"></span>
+        <span style="width:10px;height:10px;border-radius:50%;background:#e2e8f0;display:inline-block"></span>
+        <span style="width:10px;height:10px;border-radius:50%;background:#e2e8f0;display:inline-block"></span>
+        <span style="font-size: 11px; color: #94a3b8; margin-left: 8px">BASE_DATOS.xlsx</span>
+      </div>
+      <div style="padding: 0">
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); font-size: 11px; background: #1A3A5C; color: #fff; font-weight: 600">
+          <div style="padding: 9px 12px">CUFE</div><div style="padding: 9px 12px">Emisor</div>
+          <div style="padding: 9px 12px">Subtotal</div><div style="padding: 9px 12px">IVA 19%</div><div style="padding: 9px 12px">Validación</div>
+        </div>
+        <sc-for list="{{filas}}" as="f" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); font-size: 11px; border-bottom: 1px solid #f1f5f9; color: #334155">
+            <div style="padding: 9px 12px; font-family: ui-monospace, monospace; color: #64748b">{{f.cufe}}</div>
+            <div style="padding: 9px 12px">{{f.emisor}}</div>
+            <div style="padding: 9px 12px">{{f.subtotal}}</div>
+            <div style="padding: 9px 12px">{{f.iva}}</div>
+            <div style="padding: 9px 12px"><span style="color: #15803d; font-weight: 600">{{f.ok}}</span></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; gap: 32px; margin-top: 20px; font-size: 13px; color: #64748b">
+      <span><strong style="color:#0f172a">312</strong> facturas leídas</span>
+      <span><strong style="color:#0f172a">4</strong> con inconsistencias detectadas</span>
+      <span><strong style="color:#0f172a">18 s</strong> de proceso</span>
+    </div>
+  </div>
+
+  <div style="background: #f8fafc; padding: 40px; border-top: 1px solid #e5e7eb">
+    <div style="font-size: 13px; font-weight: 600; color: #64748b; margin-bottom: 20px">Todo el ciclo, en una herramienta</div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{modulos}}" as="m" hint-placeholder-count="4">
+        <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 11px; padding: 16px">
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 5px">{{m.t}}</div>
+          <div style="font-size: 12px; color: #64748b; line-height: 1.45">{{m.d}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":900,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      filas: [
+        { cufe: "a1f4…9c2", emisor: "EPM ESP", subtotal: "$1.240.000", iva: "$235.600", ok: "OK" },
+        { cufe: "7bd2…41a", emisor: "Comertex SAS", subtotal: "$860.500", iva: "$163.495", ok: "OK" },
+        { cufe: "e903…7f8", emisor: "Entreaguas", subtotal: "$2.150.000", iva: "$408.500", ok: "OK" },
+        { cufe: "c55a…20b", emisor: "Bodega de Moda", subtotal: "$430.000", iva: "$81.700", ok: "OK" },
+      ],
+      modulos: [
+        { t: "Facturas DIAN", d: "XML y PDF. CUFE, IVA, bases, retención." },
+        { t: "Exógenas 1003", d: "Varios conceptos por certificado." },
+        { t: "Nómina", d: "Parafiscales y ARL, CST 2026." },
+        { t: "Renta", d: "Art. 241 ET con tabla UVT." },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
