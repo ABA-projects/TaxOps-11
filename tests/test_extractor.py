@@ -17,6 +17,7 @@ from pipeline.extractor import (
     _search_money_near,
     _AUTORRETENEDORES,
     extract_pdf,
+    extract_xml,
 )
 
 
@@ -309,3 +310,168 @@ class TestExtractPdf:
         with patch("pipeline.extractor.pdfplumber.open", return_value=_mock_pdf(TEXTO_FACTURA_DIAN)):
             row = extract_pdf(p)
         assert row["cufe"] == "a" * 96
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# XML — AttachedDocument (contenedor DIAN)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Contexto: la DIAN entrega predominantemente un <AttachedDocument> UBL 2.1 con la factura
+# embebida como CDATA, no el UBL plano. Ver context/memory/discovery-dian-xml.md y
+# docs/research/dian-xml/FINDINGS.md.
+#
+# DEUDA CONOCIDA: estos fixtures son SINTÉTICOS, construidos según el research, no XML reales
+# de la DIAN. Antes de considerar esto productivo hay que validarlo contra 2-3 AttachedDocument
+# reales (con y sin ApplicationResponse).
+
+_UBL_NS = (
+    'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
+    'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" '
+    'xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"'
+)
+
+_CUFE_FAKE = "a" * 96
+_CUDE_FAKE = "b" * 96
+
+
+def _invoice_ubl(tipo: str = "Invoice", cufe: str = _CUFE_FAKE) -> str:
+    """UBL plano de factura o nota crédito, como el que va embebido en el contenedor."""
+    cufe_block = (
+        f"<cbc:UUID>{cufe}</cbc:UUID>" if tipo == "Invoice"
+        else ("<ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent>"
+              f"<cbc:UUID>{cufe}</cbc:UUID>"
+              "</ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>")
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<{tipo} {_UBL_NS}>
+  {cufe_block}
+  <cbc:ID>SETP990000001</cbc:ID>
+  <cbc:IssueDate>2026-09-13</cbc:IssueDate>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PartyTaxScheme><cbc:CompanyID>900373115</cbc:CompanyID></cac:PartyTaxScheme>
+    <cac:PartyLegalEntity><cbc:RegistrationName>EMISOR SAS</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PartyTaxScheme><cbc:CompanyID>901234567</cbc:CompanyID></cac:PartyTaxScheme>
+    <cac:PartyLegalEntity><cbc:RegistrationName>RECEPTOR LTDA</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:TaxTotal>
+    <cbc:TaxAmount>190000.00</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount>1000000.00</cbc:TaxableAmount>
+      <cbc:Percent>19.00</cbc:Percent>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:TaxExclusiveAmount>1000000.00</cbc:TaxExclusiveAmount>
+    <cbc:PayableAmount>1190000.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+</{tipo}>"""
+
+
+def _application_response(cude: str = _CUDE_FAKE) -> str:
+    """ApplicationResponse de la DIAN — trae el CUDE y el estado de validación."""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<ApplicationResponse {_UBL_NS}>
+  <cbc:UUID>{cude}</cbc:UUID>
+  <cbc:IssueDate>2026-09-13</cbc:IssueDate>
+  <cbc:IssueTime>10:15:00-05:00</cbc:IssueTime>
+  <cac:DocumentResponse><cac:Response>
+    <cbc:ResponseCode>02</cbc:ResponseCode>
+    <cbc:Description>Documento validado por la Dian</cbc:Description>
+  </cac:Response></cac:DocumentResponse>
+</ApplicationResponse>"""
+
+
+def _attached_document(embedded: str, application_response: str | None = None) -> str:
+    """Contenedor AttachedDocument con el UBL embebido como CDATA."""
+    ar_block = ""
+    if application_response is not None:
+        ar_block = f"""
+  <cac:ParentDocumentLineReference><cac:DocumentReference>
+    <cbc:ID>ar-1</cbc:ID>
+  </cac:DocumentReference></cac:ParentDocumentLineReference>
+  <cac:AdditionalDocumentReference><cac:Attachment><ext:ExternalReference>
+    <cbc:Description><![CDATA[{application_response}]]></cbc:Description>
+  </ext:ExternalReference></cac:Attachment></cac:AdditionalDocumentReference>"""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<AttachedDocument {_UBL_NS}>
+  <cbc:ID>AD-001</cbc:ID>
+  <cbc:IssueDate>2026-09-13</cbc:IssueDate>
+  <cbc:DocumentType>Contenedor de Factura Electrónica</cbc:DocumentType>
+  <cac:Attachment><ext:ExternalReference>
+    <cbc:Description><![CDATA[{embedded}]]></cbc:Description>
+  </ext:ExternalReference></cac:Attachment>{ar_block}
+</AttachedDocument>"""
+
+
+class TestAttachedDocument:
+    def _escribir(self, tmp_path, contenido: str, nombre: str = "FE-AD.xml") -> Path:
+        p = tmp_path / nombre
+        p.write_text(contenido, encoding="utf-8")
+        return p
+
+    def test_factura_embebida_se_desenvuelve(self, tmp_path):
+        """El gap real: si llega el contenedor, hoy extract_xml devuelve vacío en silencio."""
+        p = self._escribir(tmp_path, _attached_document(_invoice_ubl()))
+        r = extract_xml(p)
+
+        assert r["cufe"] == _CUFE_FAKE, "no desenvolvió el CDATA del AttachedDocument"
+        assert r["tipo"] == "Factura Electrónica"
+        assert r["folio"] == "SETP990000001"
+        assert r["nit_emisor"] == "900373115"
+        assert r["nombre_emisor"] == "EMISOR SAS"
+        assert r["nit_receptor"] == "901234567"
+        assert r["iva_19"] == 190000.00
+        assert r["subtotal"] == 1000000.00
+        assert r["total"] == 1190000.00
+        assert r["fuente"] == "XML"
+
+    def test_nota_credito_embebida_lleva_signo_negativo(self, tmp_path):
+        p = self._escribir(tmp_path, _attached_document(_invoice_ubl("CreditNote")))
+        r = extract_xml(p)
+
+        assert r["tipo"] == "Nota Crédito"
+        assert r["cufe"] == _CUFE_FAKE
+        assert r["subtotal"] == -1000000.00, "la nota crédito debe restar"
+        assert r["iva_19"] == -190000.00
+        assert r["total"] == -1190000.00
+
+    def test_captura_cude_y_estado_de_validacion(self, tmp_path):
+        """CUFE y CUDE son distintos: el CUDE identifica la validación, no la factura."""
+        p = self._escribir(
+            tmp_path, _attached_document(_invoice_ubl(), _application_response())
+        )
+        r = extract_xml(p)
+
+        assert r["cufe"] == _CUFE_FAKE
+        assert r.get("cude") == _CUDE_FAKE
+        assert r.get("estado_dian") == "Documento validado por la Dian"
+        assert r.get("fecha_validacion_dian") == "2026-09-13"
+
+    def test_sin_application_response_no_rompe_el_esquema(self, tmp_path):
+        """Los campos nuevos son opcionales: su ausencia no puede romper el flujo existente."""
+        p = self._escribir(tmp_path, _attached_document(_invoice_ubl()))
+        r = extract_xml(p)
+
+        assert r["cufe"] == _CUFE_FAKE
+        assert not r.get("cude")
+        assert not r.get("estado_dian")
+
+    def test_ubl_plano_sigue_funcionando(self, tmp_path):
+        """Regresión: el camino que ya existía no se toca."""
+        p = self._escribir(tmp_path, _invoice_ubl(), "FE-plano.xml")
+        r = extract_xml(p)
+
+        assert r["cufe"] == _CUFE_FAKE
+        assert r["tipo"] == "Factura Electrónica"
+        assert r["iva_19"] == 190000.00
+
+    def test_contenedor_sin_cdata_no_revienta(self, tmp_path):
+        """Un AttachedDocument malformado degrada, no tumba el procesamiento del lote."""
+        roto = f'<?xml version="1.0"?><AttachedDocument {_UBL_NS}><cbc:ID>X</cbc:ID></AttachedDocument>'
+        p = self._escribir(tmp_path, roto, "FE-roto.xml")
+        r = extract_xml(p)
+
+        assert r["archivo"] == "FE-roto.xml"
+        assert r["cufe"] == ""
