@@ -153,7 +153,7 @@ function NotificationBell() {
       >
         <Bell size={18} />
         {alerts.length > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-[#E05519] text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+          <span className="absolute top-1 right-1 w-4 h-4 bg-[#146b53] text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
             {alerts.length}
           </span>
         )}
@@ -208,7 +208,7 @@ function NotificationBell() {
           )}
 
           <div className="px-4 py-2 border-t border-gray-100 dark:border-slate-700 text-right">
-            <Link href="/calendario" onClick={() => setOpen(false)} className="text-xs text-[#E05519] hover:underline font-medium">
+            <Link href="/calendario" onClick={() => setOpen(false)} className="text-xs text-[#146b53] hover:underline font-medium">
               Ver calendario completo →
             </Link>
           </div>

@@ -8,18 +8,18 @@
   <!-- ISOTIPO SIMPLIFICADO para favicon -->
   <g transform="translate(128, 128)">
     <!-- Engranaje simplificado - solo contorno -->
-    <circle cx="0" cy="0" r="80" fill="none" stroke="#E05519" stroke-width="6"/>
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#146b53" stroke-width="6"/>
     
     <!-- Dientes simplificados (4 dientes en lugar de 8 para claridad en tamaños pequeños) -->
-    <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+    <rect x="-10" y="-95" width="20" height="30" fill="#146b53" rx="4"/>
     <g transform="rotate(90)">
-      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+      <rect x="-10" y="-95" width="20" height="30" fill="#146b53" rx="4"/>
     </g>
     <g transform="rotate(180)">
-      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+      <rect x="-10" y="-95" width="20" height="30" fill="#146b53" rx="4"/>
     </g>
     <g transform="rotate(270)">
-      <rect x="-10" y="-95" width="20" height="30" fill="#E05519" rx="4"/>
+      <rect x="-10" y="-95" width="20" height="30" fill="#146b53" rx="4"/>
     </g>
 
     <!-- Centro del engranaje -->

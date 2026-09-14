@@ -63,16 +63,18 @@ function GoogleSignupForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-navy to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <div className="text-4xl font-black tracking-tight">
-              <span className="text-brand-orange">Tax</span>
-              <span className="text-white">Ops</span>
+            <div className="inline-flex items-center gap-3 font-serif text-4xl text-gray-900">
+              <span aria-hidden className="relative inline-block w-8 h-8 rounded-lg bg-brand-orange">
+                <span className="absolute inset-x-2 inset-y-[9px] border-y-2 border-white" />
+              </span>
+              taxops
             </div>
           </Link>
-          <p className="text-slate-400 text-sm mt-2">Automatización Contable Colombia</p>
+          <p className="text-gray-500 text-sm mt-2">Automatización contable para Colombia</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">

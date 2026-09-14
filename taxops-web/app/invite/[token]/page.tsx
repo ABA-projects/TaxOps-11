@@ -60,7 +60,7 @@ export default function AcceptInvitePage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-navy to-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
           <p className="text-2xl mb-3">🔗</p>
           <h1 className="text-lg font-bold text-gray-900 mb-2">Invitación inválida</h1>
@@ -80,13 +80,15 @@ export default function AcceptInvitePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-navy to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-4xl font-black tracking-tight">
-            <span className="text-brand-orange">Tax</span>
-            <span className="text-white">Ops</span>
-          </div>
+          <div className="inline-flex items-center gap-3 font-serif text-4xl text-gray-900">
+              <span aria-hidden className="relative inline-block w-8 h-8 rounded-lg bg-brand-orange">
+                <span className="absolute inset-x-2 inset-y-[9px] border-y-2 border-white" />
+              </span>
+              taxops
+            </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">

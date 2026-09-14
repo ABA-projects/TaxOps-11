@@ -70,7 +70,7 @@ function DarkTooltip({ active, payload, label }: {
       {payload.map((p, i) => (
         <p key={i} className="text-slate-200">
           {p.name === "count" ? "Facturas" : "Monto"}:{" "}
-          <span className="font-bold text-orange-400">
+          <span className="font-bold text-brand-orange-light">
             {p.name === "total_amount" ? formatCOP(p.value) : p.value.toLocaleString("es-CO")}
           </span>
         </p>
@@ -117,9 +117,9 @@ function KpiCard({ label, value, sub, icon, accentLight, accentDark, trendData }
 // ── Quick Action ──────────────────────────────────────────────────────────────
 
 const BORDER_COLORS: Record<string, string> = {
-  orange:  "border-t-orange-500",
-  blue:    "border-t-blue-500",
-  violet:  "border-t-violet-500",
+  orange:  "border-t-brand-orange",
+  blue:    "border-t-amber-600",
+  violet:  "border-t-gray-500",
   amber:   "border-t-amber-500",
   cyan:    "border-t-cyan-500",
   emerald: "border-t-emerald-500",
@@ -141,7 +141,7 @@ function QuickAction({ href, icon, title, sub, color }: {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const PIE_COLORS = ["#f97316", "#3b82f6", "#a855f7", "#22c55e", "#f59e0b", "#06b6d4"];
+const PIE_COLORS = ["#146b53", "#c2731a", "#4fbf9a", "#8f9c96", "#e5a04a", "#2a6f8f"];
 const MESES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const MODULE_LABELS: Record<string, string> = {
   facturas: "Facturas", exogenas: "Exógenas", renta: "Renta",
@@ -219,20 +219,20 @@ export default function DashboardPage() {
             label="Facturas totales"
             value={loading ? "…" : (stats?.total_invoices ?? 0).toLocaleString("es-CO")}
             sub={`${stats?.invoices_this_month ?? 0} este mes`}
-            icon="📄" accentLight="bg-orange-50" accentDark="bg-orange-950"
+            icon="📄" accentLight="bg-emerald-50" accentDark="bg-emerald-950"
             trendData={loading ? undefined : trendInv}
           />
           <KpiCard
             label="Exógenas"
             value={loading ? "…" : (stats?.total_exogenas ?? 0).toLocaleString("es-CO")}
             sub="certificados"
-            icon="📋" accentLight="bg-blue-50" accentDark="bg-blue-950"
+            icon="📋" accentLight="bg-amber-50" accentDark="bg-amber-950"
           />
           <KpiCard
             label="Facturado total"
             value={loading ? "…" : formatCOP(totalFact)}
             sub="COP acumulado"
-            icon="💰" accentLight="bg-violet-50" accentDark="bg-violet-950"
+            icon="💰" accentLight="bg-gray-100" accentDark="bg-gray-800"
             trendData={loading ? undefined : trendAmt}
           />
           <KpiCard
@@ -255,8 +255,8 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-gray-800 dark:text-slate-200 text-sm font-semibold">Facturas por mes</h3>
               <div className="flex gap-3 text-[10px]">
-                <span className="flex items-center gap-1 text-orange-500"><span className="w-3 h-0.5 bg-orange-500 inline-block rounded" /> Conteo</span>
-                <span className="flex items-center gap-1 text-blue-500"><span className="w-3 h-0.5 bg-blue-500 inline-block rounded" /> Monto</span>
+                <span className="flex items-center gap-1 text-brand-orange"><span className="w-3 h-0.5 bg-emerald-500 inline-block rounded" /> Conteo</span>
+                <span className="flex items-center gap-1 text-amber-600"><span className="w-3 h-0.5 bg-amber-500 inline-block rounded" /> Monto</span>
               </div>
             </div>
             {loading ? (
@@ -266,19 +266,19 @@ export default function DashboardPage() {
                 <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gCount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#f97316" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                      <stop offset="5%"  stopColor="#146b53" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#146b53" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gAmount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      <stop offset="5%"  stopColor="#c2731a" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#c2731a" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#94a3b8", fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="label" tick={{ fill: "#8f9c96", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#8f9c96", fontSize: 9 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<DarkTooltip />} />
-                  <Area type="monotone" dataKey="total_amount" stroke="#3b82f6" strokeWidth={1} strokeDasharray="4 2" fill="url(#gAmount)" />
-                  <Area type="monotone" dataKey="count" stroke="#f97316" strokeWidth={2} fill="url(#gCount)" dot={{ fill: "#f97316", r: 3 }} activeDot={{ r: 5 }} />
+                  <Area type="monotone" dataKey="total_amount" stroke="#c2731a" strokeWidth={1} strokeDasharray="4 2" fill="url(#gAmount)" />
+                  <Area type="monotone" dataKey="count" stroke="#146b53" strokeWidth={2} fill="url(#gCount)" dot={{ fill: "#146b53", r: 3 }} activeDot={{ r: 5 }} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -330,14 +330,14 @@ export default function DashboardPage() {
                   <BarChart data={stats.top_providers} layout="vertical"
                     margin={{ top: 0, right: 5, left: -20, bottom: 0 }}>
                     <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" tick={{ fill: "#94a3b8", fontSize: 9 }}
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#8f9c96", fontSize: 9 }}
                       axisLine={false} tickLine={false} width={55} />
                     <Tooltip
                       cursor={{ fill: "rgba(148,163,184,0.08)" }}
                       contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }}
-                      labelStyle={{ color: "#94a3b8" }} itemStyle={{ color: "#f8fafc" }}
+                      labelStyle={{ color: "#8f9c96" }} itemStyle={{ color: "#e8ede9" }}
                     />
-                    <Bar dataKey="count" fill="#f97316" radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="count" fill="#146b53" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (

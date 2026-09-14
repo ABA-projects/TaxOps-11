@@ -64,11 +64,14 @@ export default function Sidebar() {
     <aside className="w-64 min-h-screen bg-brand-navy flex flex-col">
       {/* Logo */}
       <div className="px-6 py-5 border-b border-white/10">
-        <div className="text-2xl font-black tracking-tight">
-          <span className="text-brand-orange">Tax</span>
-          <span className="text-white">Ops</span>
+        {/* Misma marca que la landing: cuadro verde con dos rayas de libro + wordmark en serif */}
+        <div className="flex items-center gap-2.5 font-serif text-2xl text-white">
+          <span aria-hidden className="relative inline-block w-6 h-6 rounded-md bg-brand-navy-light">
+            <span className="absolute inset-x-1.5 inset-y-[7px] border-y-2 border-brand-navy" />
+          </span>
+          taxops
         </div>
-        <p className="text-slate-400 text-xs mt-0.5">Automatización Contable</p>
+        <p className="text-slate-400 text-xs mt-1">Automatización contable para Colombia</p>
       </div>
 
       {/* Navigation */}
@@ -146,7 +149,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       className={clsx(
         "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
         active
-          ? "bg-brand-orange text-white"
+          ? "bg-brand-navy-light text-brand-navy" // verde claro sobre el fondo tinta: contraste, no verde sobre verde
           : "text-slate-300 hover:bg-white/5 hover:text-white"
       )}
     >

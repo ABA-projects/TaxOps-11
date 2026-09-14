@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description:
     "Procesa facturas electrónicas DIAN, prorrateo IVA Art. 490 ET, exógenas Formato 1003 y chatbot contable IA.",
   manifest: "/manifest.json",
-  themeColor: "#1A3A5C",
+  themeColor: "#17201c",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "TaxOps" },
 };
 
@@ -38,7 +38,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1A3A5C" />
+        <meta name="theme-color" content="#17201c" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className="font-sans bg-gray-50 text-gray-900 dark:bg-slate-900 dark:text-gray-100">

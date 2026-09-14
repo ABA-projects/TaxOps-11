@@ -4,8 +4,8 @@
   "description": "Procesa facturas DIAN, nómina, IVA y exógenas con IA",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#1A3A5C",
-  "theme_color": "#1A3A5C",
+  "background_color": "#17201c",
+  "theme_color": "#17201c",
   "orientation": "portrait-primary",
   "icons": [
     {
