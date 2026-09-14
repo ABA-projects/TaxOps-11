@@ -1,308 +1,269 @@
-"use client";
-
 import Link from "next/link";
-import { useState } from "react";
-import {
-  Bell, Bot, Calculator, Calendar, Check, ClipboardList, Download, FileText, Mail, MapPin, Menu, Phone, Shield, TrendingUp, X,
-} from "lucide-react";
+import "./landing.css";
+import FlujoXmlExcel from "@/components/landing/FlujoXmlExcel";
+import { diaYMes, leerCalendarioDelRepo, proximosEventos } from "@/lib/calendarioPreview";
+
+// Landing pública. Componente de servidor: el calendario se lee del JSON del repo en build time,
+// así las fechas nunca vuelven a quedar vencidas en producción (deuda del PR #52).
+// Todo el copy es verificable contra el producto: sin cifras de uso ni testimonios inventados.
+
+// ISR diario: las fechas del calendario avanzan solas sin necesidad de un deploy.
+export const revalidate = 86400;
 
 const NAV = [
-  { label: "Funcionalidades", href: "#features" },
-  { label: "Precios", href: "#pricing" },
-  { label: "Calendario DIAN", href: "#calendar" },
-  { label: "Contacto", href: "#contact" },
+  { label: "Módulos", href: "#modulos" },
+  { label: "Qué valida", href: "#valida" },
+  { label: "Calendario DIAN", href: "#calendario" },
+  { label: "Planes", href: "#planes" },
+  { label: "Contacto", href: "#contacto" },
 ];
 
-const FEATURES = [
+const DOLORES = [
   {
-    icon: <FileText size={24} className="text-brand-orange" />,
-    title: "Facturas DIAN",
-    desc: "Procesa XML/PDF de facturación electrónica. Extrae CUFE, IVA 19%/5%, retención, bases y genera Excel automáticamente.",
-    tag: "✅ Disponible",
+    dia: "día 3",
+    t: "Bajar facturas una por una del catálogo DIAN",
+    p: "Buscar, abrir, descargar, renombrar. Doscientas veces. Y al final una se te queda y aparece en la revisión.",
+    fix: "Sueltas la carpeta de XML y ya está.",
   },
   {
-    icon: <ClipboardList size={24} className="text-blue-400" />,
-    title: "Exógenas Formato 1003",
-    desc: "Carga certificados de retención en la fuente. Detecta múltiples conceptos por PDF, valida tasas y genera el Formato 1003 DIAN.",
-    tag: "✅ Disponible",
+    dia: "día 12",
+    t: "Digitar bases y IVA desde el PDF",
+    p: "El total no cuadra con la suma. ¿Es un descuento, un redondeo o un error tuyo? Lo revisas dos veces.",
+    fix: "Se lee del XML, no del PDF: la cifra es la que firmó la DIAN.",
   },
   {
-    icon: <Calculator size={24} className="text-amber-400" />,
-    title: "Liquidación de Nómina",
-    desc: "Nómina mensual con parafiscales completos (SENA, ICBF, Caja), ARL por clase de riesgo, y liquidación definitiva CST Colombia 2026.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <Bot size={24} className="text-violet-400" />,
-    title: "Asistente IA Contable",
-    desc: "Chatbot especializado en normativa DIAN, ET colombiano, IVA, retención, nómina y exógenas. Responde sobre tus propios documentos.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <Shield size={24} className="text-emerald-400" />,
-    title: "Deduplicación por CUFE",
-    desc: "Cada factura se identifica por su CUFE único. Si vuelves a cargar la misma, no se duplica: el sistema la reconoce y la omite automáticamente.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <Bell size={24} className="text-red-400" />,
-    title: "Alertas DIAN",
-    desc: "Calendario tributario con fechas clave 2026. Sincronización con Google Calendar y correo. Alertas antes de cada vencimiento.",
-    tag: "🚧 Próximamente",
-  },
-  {
-    icon: <Calendar size={24} className="text-cyan-400" />,
-    title: "Calendario Tributario",
-    desc: "Fechas DIAN 2026: retención mensual, IVA bimestral, renta personas jurídicas y naturales, exógenas y más.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <Shield size={24} className="text-brand-orange" />,
-    title: "Multi-empresa",
-    desc: "Gestiona múltiples empresas o clientes desde una sola cuenta. Control de acceso por roles: dueño, admin, contador.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <Download size={24} className="text-green-400" />,
-    title: "Exportación Excel",
-    desc: "Descarga reportes formateados en Excel: facturas procesadas, base de exógenas, nómina mensual y liquidaciones.",
-    tag: "✅ Disponible",
-  },
-  {
-    icon: <TrendingUp size={24} className="text-rose-400" />,
-    title: "Declaración de Renta",
-    desc: "Expediente digital por contribuyente. Carga documentos, aplica Art. 241 ET 2025 con tabla progresiva UVT y liquida renta personas naturales automáticamente.",
-    tag: "✅ Disponible",
+    dia: "día 17",
+    t: "Recordar qué vence hoy según el último dígito del NIT",
+    p: "Retención, IVA bimestral, exógenas. Cada cliente con su fecha. Una que se pasa es una sanción.",
+    fix: "Calendario 2026 con alerta antes de cada vencimiento.",
   },
 ];
 
-const PLANS = [
+// Lo que el pipeline revisa antes de entregar el Excel. Todo verificable en pipeline/validator.py.
+const CHECKS = [
+  { t: "Formato de CUFE y CUDE", d: "96 caracteres hexadecimales. Si no cuadra, no pasa." },
+  { t: "Duplicados por CUFE", d: "La misma factura cargada dos veces no se cuenta dos veces." },
+  { t: "Subtotal + IVA ≈ total", d: "Tolerancia de $1 COP. Detecta el descuadre de centavos." },
+  { t: "Prorrateo Art. 490 ET", d: "Mandatos siempre a no deducible; notas crédito restan del mes." },
+  { t: "3.286 autorretenedores", d: "Listado DIAN cargado: reconoce al emisor automáticamente." },
+  { t: "Tipos de documento", d: "Notas crédito y débito, doc. equivalente POS y SPD, mandato, peaje." },
+];
+
+const PLANES = [
   {
     name: "Gratuito",
     price: "$0",
-    period: "/mes",
     desc: "Para conocer la herramienta",
-    color: "border-gray-200",
     badge: null,
-    features: [
-      "50 facturas/mes",
-      "10 certificados exógenas",
-      "2 liquidaciones de nómina",
-      "Exportación Excel",
-      "1 usuario",
-      "Soporte comunidad",
-    ],
-    noFeatures: ["Chatbot IA", "Calendario DIAN + alertas", "Multi-empresa", "API acceso"],
+    features: ["50 facturas/mes", "10 certificados exógenas", "2 liquidaciones de nómina", "Exportación Excel", "1 usuario"],
+    no: ["Asistente IA", "Calendario DIAN + alertas", "Multi-empresa"],
     cta: "Empezar gratis",
-    href: "/login",
+    href: "/signup",
     primary: false,
   },
   {
     name: "Profesional",
     price: "$79.900",
-    period: "/mes",
     desc: "Para contadores y firmas pequeñas",
-    color: "border-brand-orange",
     badge: "Más popular",
     features: [
       "Facturas ilimitadas",
       "Exógenas ilimitadas",
       "Nómina ilimitada",
-      "Chatbot IA contable",
+      "Asistente IA contable",
       "Calendario DIAN + alertas",
       "Sincronización Google Calendar",
       "Hasta 5 usuarios",
-      "Soporte por email 48h",
+      "Soporte por email 48 h",
     ],
-    noFeatures: ["API acceso", "Soporte prioritario"],
+    no: [],
     cta: "Empezar 14 días gratis",
-    href: "/login",
+    href: "/signup",
     primary: true,
   },
   {
     name: "Empresarial",
     price: "$249.900",
-    period: "/mes",
     desc: "Para firmas y medianas empresas",
-    color: "border-violet-500",
     badge: "Próximamente",
     features: [
       "Todo en Profesional",
       "Usuarios ilimitados",
-      "API REST acceso completo",
-      "Integraciones ERP (SIIGO, Helisa)",
+      "API REST completa",
+      "Integraciones ERP (Siigo, Helisa)",
       "Onboarding personalizado",
-      "Soporte prioritario 4h",
-      "Facturación electrónica DIAN",
+      "Soporte prioritario 4 h",
     ],
-    noFeatures: [],
+    no: [],
     cta: "Contactar ventas",
-    href: "#contact",
+    href: "#contacto",
     primary: false,
   },
 ];
 
-// Tomadas de api/data/calendario_2026.json, que es la fuente de verdad del calendario en la app.
-// Las que había antes (May 20, Jun 16, Jun 30, Jul 20, Ago 18) ya estaban VENCIDAS y se mostraban
-// como próximas: una landing que anuncia fechas pasadas resta credibilidad justo donde más
-// importa. DEUDA: esto se vuelve a poner viejo solo; lo correcto es leerlas del JSON en build
-// time — queda anotado en context/current-task.md.
-const DIAN_PREVIEW = [
-  { mes: "Sep", dia: 22, titulo: "Retención — agosto 2026", tipo: "retencion" },
-  { mes: "Sep", dia: 22, titulo: "IVA bimestral — jul-ago", tipo: "iva" },
-  { mes: "Sep", dia: 22, titulo: "Patrimonio — cuota 2", tipo: "patrimonio" },
-  { mes: "Oct", dia: 23, titulo: "Retención — septiembre 2026", tipo: "retencion" },
-  { mes: "Oct", dia: 23, titulo: "Renta personas naturales — cierre", tipo: "renta" },
-  { mes: "Nov", dia: 25, titulo: "IVA bimestral — sep-oct", tipo: "iva" },
-];
-
-const TYPE_COLORS: Record<string, string> = {
-  retencion: "text-brand-orange",
-  iva: "text-sky-400",
-  exogenas: "text-violet-400",
-  renta: "text-rose-400",
-  patrimonio: "text-amber-400",
+const TIPO_LABEL: Record<string, string> = {
+  retencion: "Retención",
+  iva: "IVA",
+  exogenas: "Exógenas",
+  renta: "Renta",
+  patrimonio: "Patrimonio",
 };
 
-// Lo que el pipeline revisa antes de entregar el Excel. Todo verificable en el código:
-// pipeline/validator.py, pipeline/prorateo.py y pipeline/autorretenedores.txt.
-const VALIDACIONES = [
-  { k: "cufe", t: "Formato de CUFE y CUDE", d: "96 caracteres hexadecimales. Si no cuadra, no pasa." },
-  { k: "dup", t: "Duplicados por CUFE", d: "La misma factura cargada dos veces no se cuenta dos veces." },
-  { k: "suma", t: "Subtotal + IVA ≈ total", d: "Tolerancia de $1 COP. Detecta el descuadre de centavos." },
-  { k: "490", t: "Prorrateo Art. 490 ET", d: "Mandatos siempre a no deducible; notas crédito restan del mes." },
-  { k: "auto", t: "3.286 autorretenedores", d: "Listado DIAN cargado: reconoce al emisor automáticamente." },
-  { k: "doc", t: "Tipos de documento", d: "Notas crédito y débito, doc. equivalente POS y SPD, mandato, peaje." },
-];
-
-// Ejemplo ilustrativo de una corrida — NO son cifras de uso del producto.
-const LOG_PROCESO = [
-  { t: "00:00", tag: "leer", c: "text-slate-500", m: "312 archivos (287 XML · 25 PDF)" },
-  { t: "00:04", tag: "extraer", c: "text-slate-500", m: "CUFE, emisor, bases, IVA, retención" },
-  { t: "00:11", tag: "validar", c: "text-slate-500", m: "subtotal + IVA ≈ total · tolerancia $1" },
-  { t: "00:14", tag: "alerta", c: "text-amber-400", m: "4 facturas con inconsistencia — marcadas" },
-  { t: "00:16", tag: "prorrateo", c: "text-slate-500", m: "Art. 490 ET aplicado a 2 períodos" },
-  { t: "00:18", tag: "listo", c: "text-emerald-400", m: "BASE_DATOS.xlsx · VALIDACION · PRORRATEO_IVA" },
-];
+function Check() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M5 12l5 5L19 7" />
+    </svg>
+  );
+}
 
 export default function LandingPage() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [billingAnnual, setBillingAnnual] = useState(false);
-
-  function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-    setMenuOpen(false);
-  }
+  const hoy = new Date().toISOString().slice(0, 10);
+  const eventos = proximosEventos(leerCalendarioDelRepo(), hoy, 6);
 
   return (
-    <div className="bg-[#0b1220] text-slate-200 min-h-screen font-sans">
-      {/* ── NAVBAR ─────────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0b1220]/90 backdrop-blur border-b border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 bg-brand-orange rounded-sm" />
-            <span className="font-mono text-base font-semibold tracking-tight text-white">taxops</span>
-          </div>
-
-          <div className="hidden md:flex items-center gap-6">
+    <div className="lp">
+      <nav>
+        <div className="wrap">
+          <Link className="brand" href="/">
+            <i />
+            taxops
+          </Link>
+          <ul className="links">
             {NAV.map((n) => (
-              <button key={n.label} onClick={() => scrollTo(n.href.slice(1))}
-                className="font-mono text-xs text-slate-400 hover:text-brand-orange transition-colors">
-                {n.label.toLowerCase()}
-              </button>
+              <li key={n.href}>
+                <a href={n.href}>{n.label}</a>
+              </li>
             ))}
-          </div>
-
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="text-sm text-slate-300 hover:text-white transition-colors px-3 py-2">
+          </ul>
+          <div className="nav-cta">
+            <Link className="btn btn-ghost" href="/login">
               Iniciar sesión
             </Link>
-            <Link href="/signup"
-              className="bg-brand-orange text-[#0b1220] text-sm font-bold px-5 py-2 rounded-lg hover:bg-orange-400 transition-colors">
+            <Link className="btn btn-primary" href="/signup">
               Empezar gratis
             </Link>
+            <details className="menu">
+              <summary aria-label="Menú">☰</summary>
+              <ul>
+                {NAV.map((n) => (
+                  <li key={n.href}>
+                    <a href={n.href}>{n.label}</a>
+                  </li>
+                ))}
+                <li>
+                  <Link href="/login">Iniciar sesión</Link>
+                </li>
+              </ul>
+            </details>
           </div>
-
-          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-slate-300" aria-label="Menú">
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
-
-        {menuOpen && (
-          <div className="md:hidden bg-[#0b1220] border-t border-slate-800 px-4 py-4 space-y-3">
-            {NAV.map((n) => (
-              <button key={n.label} onClick={() => scrollTo(n.href.slice(1))}
-                className="block w-full text-left text-sm text-slate-300 py-2">
-                {n.label}
-              </button>
-            ))}
-            <Link href="/login" className="block text-sm text-slate-300 py-2">Iniciar sesión</Link>
-            <Link href="/signup"
-              className="block text-center bg-brand-orange text-[#0b1220] font-bold py-2.5 rounded-lg mt-2">
-              Empezar gratis
-            </Link>
-          </div>
-        )}
       </nav>
 
-      {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="pt-32 pb-12">
-        <div className="max-w-6xl mx-auto px-4">
-          <p className="font-mono text-xs text-brand-orange mb-5">$ taxops procesar ./facturas --mes 2026-09</p>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.08] text-white mb-5 max-w-3xl text-pretty">
-            El cierre mensual,<br />hecho por una máquina<br />que sabe el Estatuto.
-          </h1>
-          <p className="text-base text-slate-400 leading-relaxed mb-7 max-w-2xl">
-            Subís los XML o PDF de tus facturas DIAN y sale un Excel con CUFE, bases, IVA y retención —
-            con las inconsistencias ya marcadas. Lo mismo para exógenas, nómina y renta.
-          </p>
-          <div className="flex flex-wrap gap-3 items-center">
-            <Link href="/signup"
-              className="bg-brand-orange text-[#0b1220] font-bold px-6 py-3 rounded-lg hover:bg-orange-400 transition-colors">
-              Empezar gratis
-            </Link>
-            <button onClick={() => scrollTo("features")}
-              className="border border-slate-700 px-6 py-3 rounded-lg text-slate-200 hover:border-slate-500 transition-colors">
-              Ver qué valida
-            </button>
-            <span className="text-xs text-slate-500">Sin tarjeta · 50 facturas al mes en el plan gratuito</span>
+      <section className="hero">
+        <div className="wrap">
+          <div className="hero-copy">
+            <span className="eyebrow">Automatización contable para Colombia</span>
+            <h1>
+              Tus facturas DIAN, en Excel y validadas. <em>Sin digitar.</em>
+            </h1>
+            <p className="lead">
+              Subes los XML o PDF de tus facturas DIAN y sale un Excel con CUFE, bases, IVA y retención — con las
+              inconsistencias ya marcadas. Lo mismo para exógenas, nómina y renta.
+            </p>
+            <div className="hero-actions">
+              <Link className="btn btn-primary" href="/signup">
+                Empezar gratis
+              </Link>
+              <a className="btn btn-ghost" href="#valida">
+                Ver qué valida
+              </a>
+            </div>
+            <p className="hero-note">Sin tarjeta · 50 facturas al mes en el plan gratuito</p>
           </div>
-        </div>
-      </section>
-
-      {/* ── LOG DE PROCESO ─────────────────────────────────────────────── */}
-      <section className="pb-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 font-mono text-xs leading-7 overflow-x-auto">
-            {LOG_PROCESO.map((l) => (
-              <div key={l.tag} className="flex gap-3 whitespace-nowrap">
-                <span className="text-slate-600 w-14 shrink-0">{l.t}</span>
-                <span className={`${l.c} w-20 shrink-0`}>{l.tag}</span>
-                <span className="text-slate-300">{l.m}</span>
+          <div className="frame" aria-label="Ejemplo del asistente contable">
+            <div className="frame-bar">
+              <b />
+              <b />
+              <b />
+              <span>app.taxopsapp.com · asistente</span>
+            </div>
+            <div className="chat">
+              <div className="msg u">¿Cuánto IVA descontable tengo en agosto y qué facturas quedaron con error?</div>
+              <div className="tool">
+                <i />
+                consultar_iva_mes · resumen_errores
               </div>
-            ))}
+              <div className="msg a">
+                En <strong>agosto 2026</strong> tienes 47 facturas procesadas. El IVA descontable, después del prorrateo
+                Art. 490 ET, queda así:
+                <table className="mono">
+                  <tbody>
+                    <tr>
+                      <td>IVA gravado 19 %</td>
+                      <td>$ 4.812.300</td>
+                    </tr>
+                    <tr>
+                      <td>IVA 5 %</td>
+                      <td>$ 96.450</td>
+                    </tr>
+                    <tr>
+                      <td>No deducible (mandatos)</td>
+                      <td>− $ 312.000</td>
+                    </tr>
+                    <tr className="tot">
+                      <td>Descontable</td>
+                      <td>$ 4.596.750</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p style={{ marginTop: 10 }}>
+                  4 facturas marcadas: 2 con CUFE duplicado, 1 con subtotal + IVA que no cuadra ($ 0,03) y 1 sin NIT del
+                  adquiriente.
+                </p>
+              </div>
+            </div>
+            <div className="frame-foot">
+              Conversación ilustrativa con cifras de ejemplo. Las herramientas que aparecen son las reales del asistente.
+            </div>
           </div>
-          <p className="font-mono text-xs text-slate-600 mt-3">
-            {/* Honestidad: es un ejemplo de corrida, no una métrica de uso del producto. */}
-            {"// ejemplo de una corrida — cada paso queda registrado y es reproducible"}
-          </p>
         </div>
       </section>
 
-      {/* ── QUÉ VALIDA ─────────────────────────────────────────────────── */}
-      <section className="border-t border-slate-800 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Lo que revisa antes de darte el Excel</h2>
-          <p className="text-sm text-slate-400 mb-8">
-            Los errores que un ojo humano deja pasar a las once de la noche del día 17.
-          </p>
-          <div className="grid md:grid-cols-2 gap-2.5">
-            {VALIDACIONES.map((v) => (
-              <div key={v.k} className="flex gap-3 p-4 bg-[#0f172a] rounded-lg border border-slate-800/80">
-                <span className="font-mono text-[11px] text-brand-orange pt-0.5 shrink-0">{v.k}</span>
+      <section className="demo" style={{ paddingTop: 0 }}>
+        <div className="wrap">
+          <div className="frame">
+            <div className="frame-bar">
+              <b />
+              <b />
+              <b />
+              <span>del AttachedDocument de la DIAN al Excel del cierre</span>
+            </div>
+            <FlujoXmlExcel />
+            <div className="frame-foot">
+              Ilustración del flujo con cifras de ejemplo. El formato del XML y las validaciones son las reales.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="pains">
+        <div className="wrap">
+          <div>
+            <span className="eyebrow">Si eres contador en Colombia</span>
+            <h2 style={{ marginTop: 14 }}>Esto ya lo sabes. Nadie te lo tiene que explicar.</h2>
+            <p className="lead" style={{ marginTop: 18 }}>
+              Los errores que un ojo humano deja pasar a las once de la noche del día 17.
+            </p>
+          </div>
+          <div className="pain-list">
+            {DOLORES.map((d) => (
+              <div className="pain" key={d.dia}>
+                <time>{d.dia}</time>
                 <div>
-                  <p className="text-sm font-semibold text-white mb-1">{v.t}</p>
-                  <p className="text-xs text-slate-400 leading-relaxed">{v.d}</p>
+                  <h3>{d.t}</h3>
+                  <p>{d.p}</p>
+                  <p className="fix">{d.fix}</p>
                 </div>
               </div>
             ))}
@@ -310,192 +271,219 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── MÓDULOS ────────────────────────────────────────────────────── */}
-      <section id="features" className="border-t border-slate-800 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <p className="font-mono text-xs text-slate-600 mb-5">{"// módulos"}</p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="p-4 bg-[#0f172a] rounded-lg border border-slate-800/80">
-                <div className="flex items-center gap-2.5 mb-2">
-                  {f.icon}
-                  <span className="text-sm font-bold text-white">{f.title}</span>
+      <section id="modulos">
+        <div className="wrap">
+          <span className="eyebrow">Módulos</span>
+          <h2 style={{ marginTop: 14, maxWidth: "22ch" }}>Cinco cosas que hace hoy, no en el roadmap.</h2>
+          <div className="bento">
+            <div className="tile big">
+              <span className="k">FACTURAS · XML / PDF</span>
+              <div className="tile-art">
+                <span className="row ok" style={{ top: 16, width: "70%" }} />
+                <span className="row ok" style={{ top: 36, width: "82%" }} />
+                <span className="row warn" style={{ top: 56, width: "48%" }} />
+                <span className="row ok" style={{ top: 76, width: "64%" }} />
+                <span className="row ok" style={{ top: 96, width: "76%" }} />
+              </div>
+              <h3>Facturas DIAN</h3>
+              <p>
+                Procesa XML o PDF de facturación electrónica. Extrae CUFE, IVA 19 % / 5 %, retención y bases; genera el
+                Excel con BASE_DATOS, VALIDACIÓN y PRORRATEO_IVA.
+              </p>
+            </div>
+            <div className="tile">
+              <span className="k">EXÓGENAS</span>
+              <div className="stat">
+                1003
+                <small>Formato DIAN generado desde certificados PDF, imagen, Excel o Word</small>
+              </div>
+              <h3>Exógenas</h3>
+              <p>Detecta varios conceptos por certificado y valida las tarifas.</p>
+            </div>
+            <div className="tile">
+              <span className="k">DEDUPLICACIÓN</span>
+              <div className="stat">
+                96
+                <small>caracteres de CUFE. Si vuelves a cargar la misma factura, se omite sola.</small>
+              </div>
+              <h3>Nunca dos veces</h3>
+              <p>La misma factura cargada dos veces no se cuenta dos veces.</p>
+            </div>
+            <div className="tile">
+              <span className="k">NÓMINA</span>
+              <h3>Liquidación de nómina</h3>
+              <p>
+                Mensual con parafiscales completos (SENA, ICBF, Caja), ARL por clase de riesgo y liquidación definitiva
+                CST 2026.
+              </p>
+            </div>
+            <div className="tile">
+              <span className="k">RENTA · PERSONAS NATURALES</span>
+              <h3>Declaración de renta</h3>
+              <p>Expediente por contribuyente, tabla progresiva UVT del Art. 241 ET y liquidación automática.</p>
+            </div>
+            <div className="tile">
+              <span className="k">ASISTENTE</span>
+              <h3>Asistente contable con IA</h3>
+              <p>
+                Responde sobre normativa DIAN, ET, IVA, retención y nómina — y sobre <strong>tus propios documentos</strong>,
+                consultando la base real, no adivinando.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="checks" id="valida">
+        <div className="wrap">
+          <div>
+            <span className="eyebrow">Qué valida</span>
+            <h2 style={{ marginTop: 14 }}>Lo que revisa antes de darte el Excel.</h2>
+            <p className="lead" style={{ marginTop: 18 }}>
+              Todo esto está en el código y se puede leer. Ninguna es una promesa.
+            </p>
+          </div>
+          <div className="check-grid">
+            {CHECKS.map((c) => (
+              <div className="check" key={c.t}>
+                <Check />
+                <div>
+                  <b>{c.t}</b>
+                  <span>{c.d}</span>
                 </div>
-                <p className="text-xs text-slate-400 leading-relaxed mb-3">{f.desc}</p>
-                <span className={`font-mono text-[10px] ${f.tag.includes("Próximamente") ? "text-amber-400" : "text-emerald-400"}`}>
-                  {f.tag.includes("Próximamente") ? "en curso" : "activo"}
-                </span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CALENDARIO ─────────────────────────────────────────────────── */}
-      <section id="calendar" className="border-t border-slate-800 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-6">
-            <h2 className="text-xl font-bold tracking-tight text-white">Calendario DIAN 2026</h2>
-            <span className="font-mono text-xs text-slate-500">31 fechas cargadas</span>
+      <section id="calendario">
+        <div className="wrap">
+          <div className="cal-head">
+            <div>
+              <span className="eyebrow">Calendario DIAN 2026</span>
+              <h2 style={{ marginTop: 14 }}>Lo que vence próximamente.</h2>
+            </div>
+            <p className="hero-note">Fechas del calendario oficial 2026 · rangos por último dígito del NIT</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {DIAN_PREVIEW.map((d) => (
-              <div key={`${d.mes}-${d.dia}-${d.titulo}`} className="bg-[#0f172a] border border-slate-800/80 rounded-lg p-4">
-                <p className={`font-mono text-[11px] mb-1.5 ${TYPE_COLORS[d.tipo] ?? "text-slate-400"}`}>
-                  {d.dia} {d.mes.toUpperCase()}
-                </p>
-                <p className="text-xs font-semibold text-white leading-snug">{d.titulo}</p>
-              </div>
-            ))}
+          <div className="cal">
+            {eventos.map((e) => {
+              const { dia, mes } = diaYMes(e.fecha);
+              return (
+                <div className="ev" key={e.id}>
+                  <div className="d">
+                    <b>{dia}</b>
+                    <small>{mes}</small>
+                  </div>
+                  <div>
+                    <span className="tag">{TIPO_LABEL[e.tipo] ?? e.tipo}</span>
+                    <h3>{e.titulo}</h3>
+                    {e.articulo && <p>{e.articulo}</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* ── PRECIOS ────────────────────────────────────────────────────── */}
-      <section id="pricing" className="border-t border-slate-800 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-3 mb-6">
-            <h2 className="text-xl font-bold tracking-tight text-white">Precios</h2>
-            <button onClick={() => setBillingAnnual(!billingAnnual)}
-              className="font-mono text-xs text-slate-400 hover:text-brand-orange transition-colors">
-              {billingAnnual ? "ver mensual" : "ver anual (−20%)"}
-            </button>
-          </div>
-          <div className="grid md:grid-cols-3 gap-3">
-            {PLANS.map((plan) => (
-              <div key={plan.name}
-                className={`bg-[#0f172a] rounded-xl p-5 border ${plan.primary ? "border-brand-orange" : "border-slate-800"}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-bold text-white">{plan.name}</p>
-                  {plan.badge && (
-                    <span className="font-mono text-[10px] text-slate-500">{plan.badge.toLowerCase()}</span>
-                  )}
+      <section id="planes" style={{ paddingTop: 0 }}>
+        <div className="wrap">
+          <span className="eyebrow">Planes</span>
+          <h2 style={{ marginTop: 14 }}>Empieza gratis. Paga cuando te ahorre tiempo.</h2>
+          <div className="plans">
+            {PLANES.map((p) => (
+              <div className={p.primary ? "plan hi" : "plan"} key={p.name}>
+                {p.badge && <span className={p.badge === "Próximamente" ? "badge soon" : "badge"}>{p.badge}</span>}
+                <div>
+                  <h3>{p.name}</h3>
+                  <p style={{ color: "var(--muted)" }}>{p.desc}</p>
                 </div>
-                <p className="font-mono text-2xl font-semibold text-white">
-                  {plan.price}
-                  <span className="text-xs text-slate-500 font-normal">{plan.period}</span>
-                </p>
-                <p className="text-[11px] text-slate-500 mt-1 mb-4">{plan.desc}</p>
-                <Link href={plan.href}
-                  className={`block text-center text-sm font-bold py-2.5 rounded-lg mb-4 transition-colors ${
-                    plan.primary
-                      ? "bg-brand-orange text-[#0b1220] hover:bg-orange-400"
-                      : "border border-slate-700 text-slate-200 hover:border-slate-500"
-                  }`}>
-                  {plan.cta}
-                </Link>
-                <ul className="space-y-1.5">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex gap-2 text-xs text-slate-300">
-                      <Check size={13} className="text-emerald-400 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
+                <div className="price">
+                  {p.price}
+                  <small> /mes</small>
+                </div>
+                <ul>
+                  {p.features.map((f) => (
+                    <li key={f}>{f}</li>
                   ))}
-                  {plan.noFeatures.map((f) => (
-                    <li key={f} className="flex gap-2 text-xs text-slate-600">
-                      <X size={13} className="shrink-0 mt-0.5" />
-                      <span className="line-through">{f}</span>
+                  {p.no.map((f) => (
+                    <li className="no" key={f}>
+                      {f}
                     </li>
                   ))}
                 </ul>
+                {p.href.startsWith("#") ? (
+                  <a className="btn btn-ghost" href={p.href}>
+                    {p.cta}
+                  </a>
+                ) : (
+                  <Link className={p.primary ? "btn btn-primary" : "btn btn-ghost"} href={p.href}>
+                    {p.cta}
+                  </Link>
+                )}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CIERRE HONESTO ─────────────────────────────────────────────── */}
-      <section className="border-t border-slate-800 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-6">
-            <h2 className="text-base font-bold text-white mb-2">TaxOps es un producto joven</h2>
-            <p className="text-sm text-slate-400 leading-relaxed mb-5 max-w-2xl">
-              No vamos a inventarte cifras de uso ni testimonios. Los módulos de facturas, exógenas, nómina,
-              renta y calendario están funcionando hoy; podés probarlos gratis y juzgar vos. Si algo no sirve
-              para tu caso, escribinos y lo hablamos.
+      <section className="honest">
+        <div className="wrap">
+          <h2>TaxOps es un producto joven. No te vamos a vender humo.</h2>
+          <div>
+            <p>
+              No inventamos cifras de uso ni testimonios. Los módulos de facturas, exógenas, nómina, renta y calendario
+              funcionan hoy; puedes probarlos gratis y juzgar tú. Si algo no sirve para tu caso, escríbenos y lo
+              hablamos.
             </p>
-            <div className="flex flex-wrap gap-3 items-center">
-              <Link href="/signup"
-                className="bg-brand-orange text-[#0b1220] font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-orange-400 transition-colors">
-                Crear cuenta gratis
-              </Link>
-              <span className="font-mono text-xs text-slate-500">hola@taxops.co · Medellín</span>
-            </div>
+            <Link className="btn" href="/signup" style={{ marginTop: 22 }}>
+              Crear cuenta gratis
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* ── CONTACTO ───────────────────────────────────────────────────── */}
-      <section id="contact" className="border-t border-slate-800 py-16">
-        <div className="max-w-4xl mx-auto px-4">
-          <h2 className="text-xl font-bold tracking-tight text-white mb-2">¿Tienes preguntas?</h2>
-          <p className="text-sm text-slate-400 mb-8">Escríbenos y respondemos en menos de 24 horas.</p>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-5">
-              {[
-                { icon: <Mail size={18} className="text-brand-orange" />, label: "Email", value: "hola@taxops.co" },
-                { icon: <Phone size={18} className="text-brand-orange" />, label: "WhatsApp", value: "+57 300 000 0000" },
-                { icon: <MapPin size={18} className="text-brand-orange" />, label: "Ciudad", value: "Medellín, Colombia" },
-              ].map((c) => (
-                <div key={c.label} className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-[#0f172a] border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
-                    {c.icon}
-                  </div>
-                  <div>
-                    <p className="font-mono text-[10px] text-slate-500">{c.label.toLowerCase()}</p>
-                    <p className="text-sm font-semibold text-white">{c.value}</p>
-                  </div>
-                </div>
-              ))}
-
-              <div className="pt-2">
-                <p className="text-sm text-slate-300 font-medium mb-2">¿Eres contador o firma contable?</p>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Pregúntanos sobre onboarding personalizado, migración de datos y planes para grupos de profesionales.
-                </p>
-              </div>
-            </div>
-
-            <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
-              <div>
-                <label htmlFor="c-nombre" className="block font-mono text-[10px] text-slate-500 mb-1">nombre</label>
-                <input id="c-nombre"
-                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
-                  placeholder="Tu nombre" />
-              </div>
-              <div>
-                <label htmlFor="c-email" className="block font-mono text-[10px] text-slate-500 mb-1">email</label>
-                <input id="c-email" type="email"
-                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
-                  placeholder="tu@email.com" />
-              </div>
-              <div>
-                <label htmlFor="c-msg" className="block font-mono text-[10px] text-slate-500 mb-1">mensaje</label>
-                <textarea id="c-msg" rows={4}
-                  className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
-                  placeholder="¿En qué podemos ayudarte?" />
-              </div>
-              <button className="w-full bg-brand-orange text-[#0b1220] font-bold py-2.5 rounded-lg hover:bg-orange-400 transition-colors text-sm">
-                Enviar mensaje
-              </button>
-            </form>
+      <section className="contact" id="contacto">
+        <div className="wrap">
+          <div className="contact-info">
+            <span className="eyebrow">Contacto</span>
+            <h2>¿Eres contador o firma contable?</h2>
+            <p className="lead">
+              Pregúntanos sobre onboarding, migración de datos y planes para grupos de profesionales. Respondemos en
+              menos de 24 horas.
+            </p>
+            <p className="mono">hola@taxops.co · Medellín</p>
           </div>
+          {/* El formulario no tiene backend todavía (igual que antes de este rediseño): mailto para que al menos llegue. */}
+          <form action="mailto:hola@taxops.co" method="post" encType="text/plain">
+            <label htmlFor="c-nombre">
+              Nombre
+              <input id="c-nombre" name="nombre" type="text" placeholder="Tu nombre" />
+            </label>
+            <label htmlFor="c-email">
+              Correo
+              <input id="c-email" name="email" type="email" placeholder="tu@firma.com" />
+            </label>
+            <label htmlFor="c-msg">
+              Mensaje
+              <textarea
+                id="c-msg"
+                name="mensaje"
+                placeholder="Cuéntanos cuántas facturas procesas al mes y qué te quita más tiempo."
+              />
+            </label>
+            <button className="btn btn-primary" type="submit" style={{ justifySelf: "start" }}>
+              Enviar mensaje
+            </button>
+          </form>
         </div>
       </section>
 
-      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
-      <footer className="border-t border-slate-800 py-8">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-[11px] text-slate-600">
+      <footer>
+        <div className="wrap">
           <span>taxops · automatización contable para Colombia</span>
-          <div className="flex flex-wrap gap-5">
-            <button onClick={() => scrollTo("features")} className="hover:text-slate-300 transition-colors">módulos</button>
-            <button onClick={() => scrollTo("pricing")} className="hover:text-slate-300 transition-colors">precios</button>
-            <button onClick={() => scrollTo("calendar")} className="hover:text-slate-300 transition-colors">calendario</button>
-            <button onClick={() => scrollTo("contact")} className="hover:text-slate-300 transition-colors">contacto</button>
-            <Link href="/login" className="hover:text-slate-300 transition-colors">entrar</Link>
-          </div>
-          <span>© 2026</span>
+          <span className="mono">Medellín · 2026</span>
         </div>
       </footer>
     </div>

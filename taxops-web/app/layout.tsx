@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
+import { Fraunces, JetBrains_Mono, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
+
+// Fuentes del sistema de diseño (landing hoy; la app las adopta en la fase B vía tailwind.config).
+const display = Fraunces({ subsets: ["latin"], axes: ["opsz", "SOFT"], variable: "--font-display", display: "swap" });
+const body = Source_Sans_3({ subsets: ["latin"], variable: "--font-body", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "TaxOps · Automatización Contable Colombia",
@@ -28,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="manifest" href="/manifest.json" />
