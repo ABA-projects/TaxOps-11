@@ -82,3 +82,12 @@ Formato por entrada:
 - **Problemas:** ninguno.
 - **Estado:** setup completo; `CLAUDE.md` intacto.
 - **Próximos pasos:** al abrir Kiro, correr `scripts/context-sync.sh`; retomar backlog cuando aplique.
+
+## 2026-09-14 — Rediseño frontend (A+B) y hallazgo DIAN
+- PR #53: landing editorial clara (neutros de papel columnar, Fraunces + Source Sans 3), hero con el
+  asistente real, ilustración SVG del flujo AttachedDocument → Excel. Calendario leído del JSON con
+  ISR diario. Copy unificado a tuteo. Sin cifras ni testimonios.
+- PR #54: la app entera adopta el sistema por tokens (brand.orange = verde, gray/slate = neutros
+  nuevos, fuentes de next/font). Login/signup/invite a fondo claro; dashboard con charts verde/ámbar.
+- DIAN: confirmado en Anexo 1.9 §7.14.1 que el RECEPTOR puede bajar XML por SOAP con su
+  certificado (dado el CUFE). No hay listado por NIT. Ver context/current-task.md.

@@ -3,32 +3,42 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-12 · **Por:** Claude Code (cron #51 y landing #52 mergeados)
+**Última actualización:** 2026-09-14 · **Por:** Claude Code (rediseño frontend A+B mergeados; DIAN en investigación)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código a medias.** Todo mergeado, nada en vuelo.
+**Investigación DIAN: cómo traer las facturas recibidas sin descargarlas a mano.** Sin código aún.
 
-Cerrado hoy:
-- **PR #51** — cron semanal reactivado, pero SOLO para `dian-monitor` y `monitor-niif`. Los otros
-  dos (`vencimientos-tributarios`, `prospector-clientes-contables`) se saltan en el cron con un
-  `if` explícito sobre `github.event_name`: el calendario DIAN se publica una vez al año y el
-  prospector necesita sector/ciudad del usuario. Siguen disponibles vía `workflow_dispatch` y
-  desde el chatbot.
-- **PR #52** — landing portada a la dirección C (oscura, IBM Plex Mono, log de proceso). Se
-  preservó el contenido honesto del #45 (verificado: 0 claims falsos reintroducidos) y los
-  fuentes del canvas quedaron versionados en `docs/design/landing/`.
+Estado al 2026-09-14:
+- **Hallazgo confirmado** (Anexo Técnico 1.9 §7.14.1, textual): `GetXmlByDocumentKey` valida que el
+  certificado "corresponda al NIT de la empresa emisora **o receptora**". Es decir, el receptor SÍ
+  puede bajar el XML por SOAP con su propio certificado digital, dado el CUFE. Vía oficial.
+- **Limitación confirmada**: no hay método SOAP para listar recibidas por NIT/fecha (revisadas las
+  753 páginas). Los CUFE hay que conseguirlos: Excel de "Documentos Recibidos" del catálogo (1 clic
+  al mes), buzón de correo, o RADIAN (solo portal, sin WS de listado).
+- **Sin confirmar**: si un NIT puede habilitarse como "software propio" SOLO para consultar sin
+  emitir el set de pruebas; costo real del certificado (~190k COP/año, gratis con el software
+  gratuito DIAN). El agente que lo investigaba murió por rate limit; relanzar.
+- Descartado: scraping del catálogo (robots.txt Disallow, token de 1 h) y `searchqr` (Turnstile).
+- Material extraído (fuera del repo, en el scratchpad de la sesión de Claude):
+  `anexo19.txt`, `consulta-eventos-radian.txt`, `acuse.txt`. Si se pierden, se regeneran del PDF.
+- Jaime tiene colegas con un sistema privado que lo hace; no sabemos el mecanismo. Pregunta
+  abierta: ¿el contador hace algo manual en cada sync (token/link) o corre solo?
+
+Siguiente paso: cerrar lo "sin confirmar", luego brainstorm del conector (spec) con la
+recomendación actual: Excel del catálogo → CUFEs → SOAP con certificado del cliente → Fase 1.
 
 ## Pendiente
 
-- **Rediseño visual dirección C — HECHO y mergeado** (PR #52). Los fuentes del canvas ya no
-  dependen de una sesión de Claude: están versionados en `docs/design/landing/`.
-  **DEUDA nueva:** las fechas del bloque "Calendario DIAN" de la landing están hardcodeadas en
-  `page.tsx`. Las anteriores (May-Ago) ya estaban VENCIDAS y se mostraban como próximas; se
-  reemplazaron por las reales de `api/data/calendario_2026.json`, pero se van a volver a poner
-  viejas solas. Lo correcto es leerlas del JSON en build time.
+- **Rediseño frontend — Fases A y B HECHAS y mergeadas** (PR #53 landing editorial clara,
+  PR #54 tokens de la app: verde, neutros de papel, Fraunces/Source Sans 3/JetBrains Mono).
+  Calendario de la landing ya se lee del JSON con ISR diario (deuda pagada).
+  **Fase C pendiente (solo si hace falta)**: pulido por página tras ver #54 en prod —
+  revisar primero `/facturas` y `/chatbot` (más usos de `gray-*`). Deudas menores: renombrar
+  `brand.orange`→`brand.green` (nombre engañoso a propósito, ~120 usos); el formulario de
+  contacto de la landing es un `mailto:` sin backend; no se verificó en navegador (Chrome falló).
 - **Discovery DIAN/XML — CERRADO (2026-09-10).** Veredicto: tratar el XML como fuente primaria está
   bien fundado legalmente (Res. 000165/2023 Art. 66: el XML tiene valor legal, el PDF es opcional).
   **Gap real:** `extract_xml` parsea UBL plano pero NO desenvuelve el `AttachedDocument` (contenedor
