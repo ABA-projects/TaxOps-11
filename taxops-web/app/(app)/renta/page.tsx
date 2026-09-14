@@ -556,19 +556,19 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Renta Personas</h1>
           <button onClick={() => setShowForm(true)}
-            className="flex items-center gap-1 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14]">
+            className="flex items-center gap-1 rounded-lg bg-[#146b53] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14]">
             <Plus size={14} /> Nuevo
           </button>
         </div>
 
         <div className="flex gap-2">
           <select value={filtroAño} onChange={e => setFiltroAño(e.target.value ? Number(e.target.value) : "")}
-            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]">
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#146b53]">
             <option value="">Todos los años</option>
             {AÑOS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
           <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
-            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#E05519]">
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#146b53]">
             <option value="">Todos los estados</option>
             {Object.entries(ESTADO_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
@@ -593,7 +593,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 return (
                   <li key={c.id}>
                     <button onClick={() => handleSelect(c)}
-                      className={`w-full px-3 py-2.5 text-left transition-colors hover:bg-orange-50 ${selected?.id === c.id ? "bg-orange-50 border-l-2 border-[#E05519]" : ""}`}>
+                      className={`w-full px-3 py-2.5 text-left transition-colors hover:bg-orange-50 ${selected?.id === c.id ? "bg-orange-50 border-l-2 border-[#146b53]" : ""}`}>
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-gray-900">{c.nombre_completo}</p>
@@ -648,7 +648,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               {contribuyentes.length === 0 && !loading && (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="mt-5 w-full rounded-xl bg-[#E05519] px-4 py-3 text-sm font-semibold text-white hover:bg-[#c44a14]">
+                  className="mt-5 w-full rounded-xl bg-[#146b53] px-4 py-3 text-sm font-semibold text-white hover:bg-[#c44a14]">
                   + Agregar primer contribuyente
                 </button>
               )}
@@ -790,10 +790,10 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 onDragOver={e => { e.preventDefault(); }}
                 onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 p-6 text-center hover:border-[#E05519] hover:bg-orange-50 transition-colors"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 p-6 text-center hover:border-[#146b53] hover:bg-orange-50 transition-colors"
               >
                 <Upload size={24} className="text-gray-400" />
-                <p className="text-sm text-gray-500">Arrastra archivos o <span className="text-[#E05519] font-medium">haz clic</span></p>
+                <p className="text-sm text-gray-500">Arrastra archivos o <span className="text-[#146b53] font-medium">haz clic</span></p>
                 <p className="text-xs text-gray-400">PDF · JPG · PNG · DOCX · XLSX — máx. 20 MB</p>
               </div>
               <input ref={fileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.webp,.docx,.xlsx,.xls"
@@ -825,14 +825,14 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-gray-100">
-                    <div className="h-1.5 rounded-full bg-[#E05519] transition-all" style={{ width: `${uploadProgress}%` }} />
+                    <div className="h-1.5 rounded-full bg-[#146b53] transition-all" style={{ width: `${uploadProgress}%` }} />
                   </div>
                 </div>
               )}
 
               {uploadFiles.length > 0 && !uploading && (
                 <button onClick={handleUpload}
-                  className="mt-3 w-full rounded-lg bg-[#E05519] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14]">
+                  className="mt-3 w-full rounded-lg bg-[#146b53] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14]">
                   Subir {uploadFiles.length} archivo{uploadFiles.length > 1 ? "s" : ""}
                 </button>
               )}
@@ -859,7 +859,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                   <div className="flex gap-1 mb-3 border-b border-gray-200">
                     {(["general", "dividendos", "ganancias", "patrimonio"] as const).map(tab => (
                       <button key={tab} onClick={() => setDatosTab(tab)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-t transition-colors ${datosTab === tab ? "bg-[#E05519] text-white" : "text-gray-500 hover:text-gray-800"}`}>
+                        className={`px-3 py-1.5 text-xs font-medium rounded-t transition-colors ${datosTab === tab ? "bg-[#146b53] text-white" : "text-gray-500 hover:text-gray-800"}`}>
                         {tab === "general" ? "Cédula General" : tab === "dividendos" ? "Dividendos" : tab === "ganancias" ? "Gan. Ocasionales" : "Patrimonio"}
                       </button>
                     ))}
@@ -882,7 +882,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                           <input type="number" value={datosForm[k]}
                             onChange={e => setDatosForm(p => ({ ...p, [k]: e.target.value }))}
                             disabled={!isEditable}
-                            className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                             placeholder="0" />
                         </div>
                       ))}
@@ -891,7 +891,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                         <input type="number" min="0" max="4" value={datosForm.dependientes}
                           onChange={e => setDatosForm(p => ({ ...p, dependientes: e.target.value }))}
                           disabled={!isEditable}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -903,7 +903,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                       <input type="number" value={datosForm.dividendos}
                         onChange={e => setDatosForm(p => ({ ...p, dividendos: e.target.value }))}
                         disabled={!isEditable}
-                        className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                         placeholder="0" />
                       <p className="mt-2 text-[10px] text-gray-400">Tarifa: 0% hasta 300 UVT · 15% sobre el exceso (Art. 242 ET)</p>
                     </div>
@@ -916,7 +916,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                         <select value={datosForm.tipo_ganancia}
                           onChange={e => setDatosForm(p => ({ ...p, tipo_ganancia: e.target.value }))}
                           disabled={!isEditable}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:cursor-not-allowed">
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:cursor-not-allowed">
                           <option value="venta_activo">Venta activo fijo &gt;2 años — 10%</option>
                           <option value="herencia">Herencia / donación — 10%</option>
                           <option value="loteria">Lotería / rifa — 20%</option>
@@ -927,7 +927,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                         <input type="number" value={datosForm.ganancias_ocasionales}
                           onChange={e => setDatosForm(p => ({ ...p, ganancias_ocasionales: e.target.value }))}
                           disabled={!isEditable}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -940,7 +940,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                         <input type="number" value={datosForm.patrimonio_bruto}
                           onChange={e => setDatosForm(p => ({ ...p, patrimonio_bruto: e.target.value }))}
                           disabled={!isEditable}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                       <div>
@@ -948,7 +948,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                         <input type="number" value={datosForm.pasivos}
                           onChange={e => setDatosForm(p => ({ ...p, pasivos: e.target.value }))}
                           disabled={!isEditable}
-                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#E05519] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#146b53] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                           placeholder="0" />
                       </div>
                     </div>
@@ -982,7 +982,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                     onClick={handleCalcular}
                     disabled={declLoading || isPresented}
                     title={isPresented ? "Declaración presentada — no se puede recalcular" : undefined}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#E05519] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14] disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-lg bg-[#146b53] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c44a14] disabled:opacity-50"
                   >
                     {declLoading ? <Loader2 size={12} className="animate-spin" /> : <Calculator size={12} />}
                     {decl ? "Recalcular" : "Calcular declaración"}
@@ -1273,7 +1273,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
           <div className="mb-3 w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ height: "480px" }}>
             <div className="bg-[#0F172A] px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot size={18} className="text-[#E05519]" />
+                <Bot size={18} className="text-[#146b53]" />
                 <span className="text-white text-sm font-semibold">Asistente Renta</span>
               </div>
               <button onClick={() => setChatOpen(false)} className="text-slate-400 hover:text-white">
@@ -1285,7 +1285,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               {chatMsgs.map((m, i) => (
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[80%] rounded-xl px-3 py-2 text-xs whitespace-pre-wrap ${
-                    m.role === "user" ? "bg-[#E05519] text-white" : "bg-white border border-gray-200 text-gray-700"
+                    m.role === "user" ? "bg-[#146b53] text-white" : "bg-white border border-gray-200 text-gray-700"
                   }`}>
                     {m.content}
                   </div>
@@ -1305,10 +1305,10 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()}
                 placeholder="Pregunta sobre renta personas naturales..."
-                className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#E05519]"
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#146b53]"
               />
               <button onClick={sendChat} disabled={!chatInput.trim() || chatLoading}
-                className="rounded-lg bg-[#E05519] px-3 py-1.5 text-white hover:bg-[#c44a14] disabled:opacity-50">
+                className="rounded-lg bg-[#146b53] px-3 py-1.5 text-white hover:bg-[#c44a14] disabled:opacity-50">
                 <Send size={14} />
               </button>
             </div>
@@ -1317,7 +1317,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
 
         <button
           onClick={() => setChatOpen(p => !p)}
-          className="w-14 h-14 rounded-full bg-[#E05519] shadow-lg flex items-center justify-center hover:bg-[#c44a14] transition-colors"
+          className="w-14 h-14 rounded-full bg-[#146b53] shadow-lg flex items-center justify-center hover:bg-[#c44a14] transition-colors"
         >
           {chatOpen ? <ChevronDown size={22} className="text-white" /> : <Bot size={24} className="text-white" />}
         </button>
@@ -1333,14 +1333,14 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 <div className="w-36">
                   <label className="mb-1 block text-xs text-gray-600">Tipo doc</label>
                   <select value={form.tipo_doc} onChange={e => setForm({ ...form, tipo_doc: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]">
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#146b53]">
                     {Object.entries(TIPO_DOC_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Número documento *</label>
                   <input value={form.numero_doc} onChange={e => setForm({ ...form, numero_doc: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#146b53]"
                     placeholder="1000123456" required />
                 </div>
               </div>
@@ -1348,7 +1348,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Nombre completo *</label>
                 <input value={form.nombre_completo} onChange={e => setForm({ ...form, nombre_completo: e.target.value })}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#146b53]"
                   placeholder="Nombre Apellido" required />
               </div>
 
@@ -1356,13 +1356,13 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Email</label>
                   <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#146b53]"
                     placeholder="correo@ejemplo.com" />
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-600">Ciudad</label>
                   <input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#146b53]"
                     placeholder="Bogotá" />
                 </div>
               </div>
@@ -1370,7 +1370,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Año gravable</label>
                 <select value={form.año_gravable} onChange={e => setForm({ ...form, año_gravable: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E05519]">
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#146b53]">
                   {AÑOS.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
@@ -1378,7 +1378,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
               <div>
                 <label className="mb-1 block text-xs text-gray-600">Observaciones</label>
                 <textarea value={form.observaciones} onChange={e => setForm({ ...form, observaciones: e.target.value })} rows={2}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E05519]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#146b53]"
                   placeholder="Notas adicionales…" />
               </div>
 
@@ -1388,7 +1388,7 @@ Responde de forma clara, práctica y con números concretos cuando el contribuye
                 <button type="button" onClick={() => { setShowForm(false); setFormError(""); }}
                   className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
                 <button type="submit" disabled={saving}
-                  className="rounded-lg bg-[#E05519] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14] disabled:opacity-50">
+                  className="rounded-lg bg-[#146b53] px-4 py-2 text-sm font-medium text-white hover:bg-[#c44a14] disabled:opacity-50">
                   {saving ? "Guardando…" : "Guardar"}
                 </button>
               </div>
@@ -1430,7 +1430,7 @@ function DeclRow({
             defaultValue={displayVal}
             onBlur={e => { onOverrideChange(campo, parseFloat(e.target.value) || 0); onSave(); }}
             onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            className="w-28 rounded border border-[#E05519] bg-white px-1 py-0.5 text-xs text-right text-gray-900 focus:outline-none"
+            className="w-28 rounded border border-[#146b53] bg-white px-1 py-0.5 text-xs text-right text-gray-900 focus:outline-none"
           />
         ) : (
           <span className="flex items-center justify-end gap-1">
@@ -1439,7 +1439,7 @@ function DeclRow({
             )}
             {fmtCOP(displayVal)}
             <button onClick={() => onEdit(campo)}
-              className="ml-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-[#E05519] transition-opacity">
+              className="ml-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-[#146b53] transition-opacity">
               <Pencil size={11} />
             </button>
           </span>
