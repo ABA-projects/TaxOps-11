@@ -3,32 +3,19 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-14 · **Por:** Claude Code (rediseño frontend A+B mergeados; DIAN en investigación)
+**Última actualización:** 2026-09-16 · **Por:** Claude Code (conector DIAN descartado; ver decisions.md)
 
 ---
 
 ## Tarea activa
 
-**Investigación DIAN: cómo traer las facturas recibidas sin descargarlas a mano.** Sin código aún.
+**Ninguna tarea de código en curso.** El conector DIAN quedó **descartado** (2026-09-16, ver
+`context/decisions.md`): el cliente entrega el paquete de facturas y TaxOps lo procesa, como hoy.
 
-Estado al 2026-09-14:
-- **Hallazgo confirmado** (Anexo Técnico 1.9 §7.14.1, textual): `GetXmlByDocumentKey` valida que el
-  certificado "corresponda al NIT de la empresa emisora **o receptora**". Es decir, el receptor SÍ
-  puede bajar el XML por SOAP con su propio certificado digital, dado el CUFE. Vía oficial.
-- **Limitación confirmada**: no hay método SOAP para listar recibidas por NIT/fecha (revisadas las
-  753 páginas). Los CUFE hay que conseguirlos: Excel de "Documentos Recibidos" del catálogo (1 clic
-  al mes), buzón de correo, o RADIAN (solo portal, sin WS de listado).
-- **Sin confirmar**: si un NIT puede habilitarse como "software propio" SOLO para consultar sin
-  emitir el set de pruebas; costo real del certificado (~190k COP/año, gratis con el software
-  gratuito DIAN). El agente que lo investigaba murió por rate limit; relanzar.
-- Descartado: scraping del catálogo (robots.txt Disallow, token de 1 h) y `searchqr` (Turnstile).
-- Material extraído (fuera del repo, en el scratchpad de la sesión de Claude):
-  `anexo19.txt`, `consulta-eventos-radian.txt`, `acuse.txt`. Si se pierden, se regeneran del PDF.
-- Jaime tiene colegas con un sistema privado que lo hace; no sabemos el mecanismo. Pregunta
-  abierta: ¿el contador hace algo manual en cada sync (token/link) o corre solo?
-
-Siguiente paso: cerrar lo "sin confirmar", luego brainstorm del conector (spec) con la
-recomendación actual: Excel del catálogo → CUFEs → SOAP con certificado del cliente → Fase 1.
+Lo que sigue en orden:
+1. **Validar la Fase 1 (AttachedDocument) con XML reales de la DIAN** — sigue pendiente de que Jaime
+   consiga 2–3 archivos. Hasta entonces el parser no se considera productivo.
+2. Fase C del frontend solo si al usar #54 en prod aparece algo mal (revisar `/facturas`, `/chatbot`).
 
 ## Pendiente
 

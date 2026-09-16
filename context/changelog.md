@@ -91,3 +91,8 @@ Formato por entrada:
   nuevos, fuentes de next/font). Login/signup/invite a fondo claro; dashboard con charts verde/ámbar.
 - DIAN: confirmado en Anexo 1.9 §7.14.1 que el RECEPTOR puede bajar XML por SOAP con su
   certificado (dado el CUFE). No hay listado por NIT. Ver context/current-task.md.
+
+## 2026-09-16 — Conector DIAN descartado
+- Investigación cerrada: vía SOAP oficial existe para receptor pero exige certificado + habilitación
+  por NIT; no hay listado por NIT; scraping es zona gris. Decisión: el cliente entrega el paquete.
+  Justificación completa en `context/decisions.md`. También registrada la decisión Amplify vs ECR.
