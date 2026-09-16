@@ -41,7 +41,7 @@
 - El catálogo con token es scraping (robots.txt Disallow, sesión de 1 h). `searchqr` tiene Turnstile.
 - Las alternativas legales y gratuitas (buzón de correo + Excel del catálogo) son trabajo real de producto sin ingresos que lo justifiquen hoy.
 
-**Si se reabre:** empezar por buzón de correo (Gmail API) → AttachedDocument → Fase 1, con el Excel de "Documentos Recibidos" para conciliar. Pendiente de confirmar si el certificado gratuito de "Facturación Gratuita DIAN" es exportable (bajaría el costo de la vía SOAP a $0 para esos clientes).
+**Si se reabre:** la vía más probable es **integrar la solución privada de colegas de Jaime** que ya la tienen (mecanismo desconocido aún). Para evaluarla hacen falta 4 datos: cómo obtiene las facturas (correo / catálogo con token / certificado), qué entrega (AttachedDocument XML crudo o ya parseado), bajo qué condiciones se puede usar (licencia, costo, quién opera el certificado) y si expone API o solo archivos. Con XML crudo entra directo a la Fase 1 sin tocar el pipeline. Alternativa propia: empezar por buzón de correo (Gmail API) → AttachedDocument → Fase 1, con el Excel de "Documentos Recibidos" para conciliar. Pendiente de confirmar si el certificado gratuito de "Facturación Gratuita DIAN" es exportable (bajaría el costo de la vía SOAP a $0 para esos clientes).
 
 ## 2026-09-15 — Frontend se queda en Amplify; no Docker/ECR por ahora
 
