@@ -4,7 +4,7 @@
 > Neutral respecto a la herramienta. Ambos agentes leen y actualizan este archivo.
 > Detalle técnico profundo (arquitectura de módulos, regex, schema) vive en `CLAUDE.md` — no se duplica aquí.
 
-**Última actualización:** 2026-09-09 · **Actualizado por:** Kiro CLI (integrando memoria de Claude 2026-09-05, verificada contra git)
+**Última actualización:** 2026-09-16 · **Actualizado por:** Claude Code (verificado contra git y GitHub: 0 PRs abiertos)
 
 ---
 
@@ -40,23 +40,43 @@ Producción en AWS (migrada desde GCP Cloud Run + Vercel):
 | Admin (usuarios/grupos/audit) | ✅ Terminado | |
 | Auth JWT + Google OAuth | ✅ Terminado | |
 | Migración GCP→AWS | ✅ Completa (chunks 0-8) | Verificada con archivos reales |
-| Agentes contables on-demand | ✅ Terminado y verificado en prod | `agents/` — SQS→worker Lambda→Groq→web→publish→Postgres/S3. PRs #36–#44 |
+| Agentes contables on-demand + cron | ✅ Terminado y verificado en prod | `agents/` — SQS→worker Lambda→Groq→web→publish→Postgres/S3. PRs #36–#44. Cron semanal reactivado solo para `dian-monitor` y `monitor-niif` (#51) |
+| DIAN AttachedDocument (Fase 1) | ⚠️ Hecho, sin validar con XML reales | `pipeline/extractor.py` desenvuelve el contenedor (#50). Fixtures sintéticos; falta probar con 2–3 XML reales de la DIAN |
+| Landing + sistema de diseño | ✅ Terminado | Landing editorial clara (#53) y tokens de la app en verde/neutros (#54). Calendario de la landing desde el JSON con ISR diario. Fuentes del canvas en `docs/design/landing/` |
+| `.dockerignore` | ✅ Hecho | #47 — no excluye los archivos que el runtime necesita (config.yaml, autorretenedores.txt, calendario JSON, init.sql) |
 
-**Rama/commit actual:** `main` @ `fc0401e` (PR #44 mergeado, nada en vuelo — verificado 2026-09-09).
+**Rama/commit actual:** `main` @ `6264e23` (PR #54 mergeado, 0 PRs abiertos — verificado 2026-09-16).
 
 ## En progreso
 
-- **Sin tarea de código a medias.** Claims falsos de la landing corregidos (2026-09-09, ver changelog).
-- Pendiente aparte (no bloqueante): rediseño visual dirección C y `.dockerignore`. Ver `current-task.md`.
+- **Sin tarea de código a medias.** Ver `current-task.md` para el siguiente paso.
+
+## Decisiones cerradas recientes
+
+Ver `context/decisions.md`. Las dos más relevantes: **no se construye conector DIAN** (el cliente
+entrega el paquete de facturas; posible integración futura con la solución privada de colegas) y
+**el frontend sigue en Amplify** (no Docker/ECR por ahora).
 
 ## Pendiente (backlog priorizado)
 
-- Decomisión completa de Vercel (soak period de Amplify) — según README v1.1
-- Rate limiting por organización
+**Riesgo / seguridad (primero)**
+- Validar Fase 1 AttachedDocument con XML reales de la DIAN — depende de conseguir los archivos
+- Acotar rol OIDC de GitHub Actions (hoy `AdministratorAccess`) a ECR + Lambda + Amplify + S3 + SSM
+- Lambda Node.js 20 EOL (aviso AWS, deadline 2027-03-03): ubicar el origen (probablemente SSR de Amplify) y planear
+
+**Producto**
+- Formulario de contacto de la landing sin backend (hoy `mailto:`) → endpoint + SES
 - Invitaciones por email (hoy el owner crea usuarios directamente)
-- Permisos por grupo (bloqueo de rutas frontend según grupo)
-- Script auto-update calendario DIAN (parsear PDF DIAN anual → JSON)
-- Acotar rol OIDC de GitHub Actions (hoy `AdministratorAccess`, deuda técnica)
+- Permisos por grupo (los grupos tienen `modules[]` pero el frontend no bloquea rutas)
+- Bugs conocidos del extractor de exógenas (6 casos listados en `CLAUDE.md`)
+- Script auto-update calendario DIAN (parsear PDF DIAN anual → JSON) — urge antes de enero 2027
+
+**Plataforma / higiene**
+- Rate limiting por organización (sin throttling; Groq comparte 8000 TPM por cuenta)
+- Frontend Fase C: pulido por página solo si #54 dejó contraste flojo (revisar `/facturas`, `/chatbot`); renombrar `brand.orange`→`brand.green`
+
+**Diferido a propósito**
+- Fase 2 DIAN/XML (exógenas/renta en XML) — el research la marca como dudosa
 
 ## Bloqueado / en espera
 
@@ -66,5 +86,5 @@ Producción en AWS (migrada desde GCP Cloud Run + Vercel):
 
 ## Próximos pasos recomendados
 
-La tarea activa es **sacar los claims falsos de la landing** (ver `current-task.md`), empezando por
-los testimonios inventados (riesgo legal/reputacional). Después, el backlog de arriba.
+En orden: (1) acotar el rol OIDC — peor relación riesgo/esfuerzo y va por el pipeline de Terraform
+que ya funciona; (2) contact form con SES; (3) validar Fase 1 apenas haya XML reales.
