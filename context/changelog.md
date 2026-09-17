@@ -96,3 +96,9 @@ Formato por entrada:
 - Investigación cerrada: vía SOAP oficial existe para receptor pero exige certificado + habilitación
   por NIT; no hay listado por NIT; scraping es zona gris. Decisión: el cliente entrega el paquete.
   Justificación completa en `context/decisions.md`. También registrada la decisión Amplify vs ECR.
+
+## 2026-09-16 — OIDC con mínimo privilegio (PR #55, aplicado)
+- Un solo rol AdministratorAccess para 4 workflows → tres roles con trust por sub (pull_request /
+  environment:production / ref main) y permisos mínimos. Costo $0. Deploy verificado hasta ECR push;
+  UpdateFunctionCode y rol de plan se verifican con los próximos runs. PR #56 (re-deploy con tag
+  existente) abierto. `context/project-state.md` actualizado con backlog priorizado.

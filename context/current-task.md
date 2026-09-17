@@ -3,19 +3,26 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-16 · **Por:** Claude Code (conector DIAN descartado; ver decisions.md)
+**Última actualización:** 2026-09-16 · **Por:** Claude Code (OIDC mínimo privilegio aplicado; PR #56 abierto)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código en curso.** El conector DIAN quedó **descartado** (2026-09-16, ver
-`context/decisions.md`): el cliente entrega el paquete de facturas y TaxOps lo procesa, como hoy.
+**OIDC de GitHub Actions con mínimo privilegio — aplicado, falta cerrar la verificación.**
 
-Lo que sigue en orden:
-1. **Validar la Fase 1 (AttachedDocument) con XML reales de la DIAN** — sigue pendiente de que Jaime
-   consiga 2–3 archivos. Hasta entonces el parser no se considera productivo.
-2. Fase C del frontend solo si al usar #54 en prod aparece algo mal (revisar `/facturas`, `/chatbot`).
+- PR #55 mergeado y **aplicado** (gate aprobado). Tres roles: `taxops-github-actions-plan`
+  (pull_request, ReadOnly + lock + kms:Decrypt vía SSM), `-terraform` (environment production,
+  PowerUser + IAM acotado a `taxops-*`), `-deploy` (main, ECR + UpdateFunctionCode + S3 config/*).
+- Variables de GitHub creadas: `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`.
+- Verificado con el rol de deploy: login + push a ECR. **NO verificado aún**: `lambda:UpdateFunctionCode`
+  (la prueba manual chocó con el tag inmutable de ECR, no con permisos) y el rol de plan.
+- **PR #56 abierto** (fix: `workflow_dispatch` de deploy-lambda re-usa la imagen si el tag existe).
+  Al mergearlo, el push a main ejercita el deploy completo con el rol nuevo → mirar que quede en verde.
+  El primer PR que toque `infra/` ejercita el rol de plan.
+
+Si algo falla será un `AccessDenied` explícito en el log; se corrige agregando la acción en
+`infra/modules/github-oidc/main.tf` por el pipeline normal. Producción no se afecta.
 
 ## Pendiente
 
