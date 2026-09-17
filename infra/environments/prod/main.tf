@@ -107,7 +107,17 @@ output "job_artifacts_bucket" {
 
 output "github_actions_role_arn" {
   value       = module.github_oidc.role_arn
-  description = "Copiar a GitHub → Settings → Secrets and variables → Actions → Variables → AWS_TERRAFORM_ROLE_ARN"
+  description = "GitHub → Variables → AWS_TERRAFORM_ROLE_ARN (solo apply, environment production)"
+}
+
+output "github_actions_plan_role_arn" {
+  value       = module.github_oidc.plan_role_arn
+  description = "GitHub → Variables → AWS_PLAN_ROLE_ARN (terraform-plan en PRs)"
+}
+
+output "github_actions_deploy_role_arn" {
+  value       = module.github_oidc.deploy_role_arn
+  description = "GitHub → Variables → AWS_DEPLOY_ROLE_ARN (deploy-lambda y agentes en main)"
 }
 
 output "amplify_default_domain" {
