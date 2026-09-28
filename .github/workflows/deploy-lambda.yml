@@ -60,15 +60,31 @@ jobs:
           aws ecr get-login-password --region ${{ env.AWS_REGION }} \
             | docker login --username AWS --password-stdin ${{ env.ECR_REPO }}
 
+      # El repo ECR tiene tags inmutables: re-desplegar el mismo SHA (workflow_dispatch sin
+      # commit nuevo) fallaba en el push con "tag already exists". Si la imagen ya está, se
+      # salta build+push y se va directo a actualizar las funciones con esa imagen.
+      - name: Verificar si la imagen ya existe en ECR
+        id: imagen
+        run: |
+          if aws ecr describe-images --repository-name taxops-api \
+               --image-ids imageTag=${{ github.sha }} --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+            echo "Imagen ${{ github.sha }} ya está en ECR — se reutiliza."
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # x86_64 explícito: los binarios precompilados de Tesseract en api/Dockerfile-lambda
       # solo existen para esa arquitectura (ver el Dockerfile para el detalle completo).
       # ubuntu-latest ya es x86_64 nativo, este build no necesita emulación.
       - name: Build imagen Lambda
+        if: steps.imagen.outputs.existe != 'true'
         run: |
           docker build --platform linux/amd64 -f api/Dockerfile-lambda \
             -t ${{ env.ECR_REPO }}:${{ github.sha }} .
 
       - name: Push a ECR
+        if: steps.imagen.outputs.existe != 'true'
         run: docker push ${{ env.ECR_REPO }}:${{ github.sha }}
 
       # Con Mangum(app, lifespan="off") el thread de Alembic de api/main.py nunca corre
