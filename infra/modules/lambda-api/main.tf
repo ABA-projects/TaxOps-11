@@ -87,34 +87,16 @@ resource "aws_lambda_permission" "public_function_url" {
 # Terraform quien lo declara y aplica (terraform apply, trackeado en state), no un
 # comando suelto fuera de código. Reemplazar por el argumento nativo en cuanto el
 # provider lo publique.
-resource "null_resource" "public_function_url_invoke_permission" {
-  triggers = {
-    function_name = aws_lambda_function.api.function_name
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      aws lambda add-permission \
-        --function-name ${aws_lambda_function.api.function_name} \
-        --statement-id AllowPublicFunctionUrlInvokeFunction \
-        --action lambda:InvokeFunction \
-        --principal '*' \
-        --invoked-via-function-url \
-        --region us-east-1 \
-        || true
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      aws lambda remove-permission \
-        --function-name ${self.triggers.function_name} \
-        --statement-id AllowPublicFunctionUrlInvokeFunction \
-        --region us-east-1 \
-        || true
-    EOT
-  }
-
-  depends_on = [aws_lambda_function.api]
+#
+# Function URLs públicas necesitan DOS permisos: InvokeFunctionUrl (arriba) y
+# además InvokeFunction condicionado a InvokedViaFunctionUrl=true. Antes esto se
+# hacía con un null_resource + `aws lambda add-permission --invoked-via-function-url`
+# (flag inexistente en el CLI → fallaba silencioso con `|| true`, y la Function
+# URL devolvía 403). Se reemplaza por un aws_lambda_permission nativo, que sí
+# expresa la condición correctamente y es idempotente/gestionado por el state.
+resource "aws_lambda_permission" "public_function_url_invoke_function" {
+  statement_id  = "AllowPublicFunctionUrlInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "*"
 }
