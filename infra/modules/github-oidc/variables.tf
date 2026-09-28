@@ -12,7 +12,7 @@ variable "region" {
 variable "tfstate_bucket" {
   type        = string
   description = "Bucket del state (backend.tf). El rol de plan necesita escribir el .tflock ahí."
-  default     = "taxops11-tfstate-786567028012"
+  default     = "taxops11-tfstate-562548008942"
 }
 
 variable "tfstate_key" {

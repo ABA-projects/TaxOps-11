@@ -42,7 +42,7 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPO: 786567028012.dkr.ecr.us-east-1.amazonaws.com/taxops-api
+  ECR_REPO: 562548008942.dkr.ecr.us-east-1.amazonaws.com/taxops-api
 
 jobs:
   deploy:

@@ -9,8 +9,9 @@ terraform {
 }
 
 provider "aws" {
-  region  = "us-east-1"
-  profile = "taxops-admin"
+  region = "us-east-1"
+  # Sin profile hardcodeado: lo resuelve AWS_PROFILE del entorno (taxops-admin
+  # para la cuenta vieja, taxops para la nueva). Bootstrap account-agnostic.
 
   default_tags {
     tags = {
