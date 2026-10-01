@@ -8,6 +8,18 @@ description: "Reglas de comportamiento de Kiro en TaxOps-11: coexistencia con Cl
 Este repo se desarrolla con **Claude Code** y **Kiro CLI** sobre el mismo proyecto.
 Comparten una fuente de verdad en `context/`. No compiten memorias.
 
+## Premisa de costo (no negociable)
+
+**Todo gratis, siempre.** Antes de proponer o crear cualquier recurso AWS, di su costo; si no está
+en capa gratuita **perpetua**, dilo antes de hacerlo. Dos datos verificados el 2026-09-30 que
+cambian el cálculo:
+
+- La cuenta `562548008942` **no tiene capa gratuita de 12 meses** — es miembro de una AWS
+  Organization y el free tier se cuenta desde la cuenta de gestión, cuyo reloj ya venció.
+- El free tier **se agrega por consolidated billing en toda la Organization**: lo que consuman las
+  otras cuentas descuenta del mismo 1M de requests de Lambda y 1 TB de CloudFront.
+- Cost Explorer cobra **US$0,01 por consulta**: una sola mensual agrupada por servicio, no iterar.
+
 ## Fuente de verdad (no dupliques)
 
 - **`CLAUDE.md`** — instrucciones y arquitectura técnica detallada. Es de Claude. Léelo cuando necesites detalle de módulos/regex/schema. **No lo edites** salvo que el usuario lo pida explícitamente y de forma aditiva.
@@ -26,6 +38,12 @@ Si un dato ya existe en `CLAUDE.md` o `README.md`, **referéncialo**, no lo copi
 5. Reconstruye un contexto de trabajo conciso: proyecto, estado, tarea, últimos cambios, decisiones, problemas conocidos, siguiente acción.
 
 ## Protocolo de CIERRE (cuando la sesión produce cambios relevantes)
+
+> ⚠️ **Esto se incumplió y costó tiempo real.** Entre el 2026-09-16 y el 2026-09-30 entraron tres
+> PRs —incluida la migración a la cuenta AWS dedicada (#57), el cambio de infra más grande del
+> proyecto— **sin actualizar `context/`**. El otro agente arrancó ciego y tuvo que reconstruir el
+> estado desde git, GitHub y producción. **Un PR mergeado sin actualizar `context/current-task.md`
+> no está terminado.** Si el cambio toca infra, deploy o costos, va también a `decisions.md`.
 
 Actualiza de forma **incremental y aditiva**:
 - `context/current-task.md` — nuevo estado y próximos pasos.

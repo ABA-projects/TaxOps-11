@@ -18,6 +18,16 @@
 | Reglas de comportamiento de Kiro (arranque/cierre/no-destrucción) | **`.kiro/steering/taxops.md`** | Kiro |
 | Planes/specs/handoffs históricos | **`docs/superpowers/`** | Claude |
 
+## Antes de tocar infra o deploy
+
+- **Premisa "todo gratis, siempre"** y las tres salvedades verificadas (la cuenta no tiene free
+  tier de 12 meses; el free tier se comparte en toda la Organization; Cost Explorer cobra por
+  consulta): ver `.kiro/steering/taxops.md` y `CLAUDE.md` §Migración a AWS.
+- **El frontend ya NO se despliega por el webhook de Amplify.** `enable_auto_build` está en
+  `false`; el deploy entra por `.github/workflows/deploy-web.yml` (`paths: taxops-web/**`).
+  Detalle y rollback en `CLAUDE.md` §Deployment.
+- Regla de oro de `infra/`: PR → plan → merge → aprobación manual → apply. Nunca `apply` a mano.
+
 ## Regla de coexistencia
 
 - **No dupliques.** Si un dato ya está en `CLAUDE.md` o `README.md`, referéncialo — no lo copies aquí ni en `context/`.

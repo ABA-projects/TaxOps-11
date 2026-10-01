@@ -4,7 +4,7 @@
 > Neutral respecto a la herramienta. Ambos agentes leen y actualizan este archivo.
 > Detalle técnico profundo (arquitectura de módulos, regex, schema) vive en `CLAUDE.md` — no se duplica aquí.
 
-**Última actualización:** 2026-09-30 · **Actualizado por:** Claude Code (verificado contra git, GitHub y producción)
+**Última actualización:** 2026-10-01 · **Actualizado por:** Claude Code (verificado contra git, GitHub, AWS y producción)
 
 ---
 
@@ -46,7 +46,7 @@ plan en `PLAN-MIGRACION-CUENTA.md`). Antes vivía en `786567028012`:
 | Landing + sistema de diseño | ✅ Terminado | Landing editorial clara (#53) y tokens de la app en verde/neutros (#54). Calendario de la landing desde el JSON con ISR diario. Fuentes del canvas en `docs/design/landing/` |
 | `.dockerignore` | ✅ Hecho | #47 — no excluye los archivos que el runtime necesita (config.yaml, autorretenedores.txt, calendario JSON, init.sql) |
 
-**Rama/commit actual:** `main` @ `2186643` (PR #58 mergeado, 0 PRs abiertos — verificado 2026-09-30).
+**Rama/commit actual:** `main` @ `db335d0` (PR #60 mergeado, 0 PRs abiertos — verificado 2026-10-01).
 
 ## En progreso
 
@@ -61,9 +61,11 @@ entrega el paquete de facturas; posible integración futura con la solución pri
 ## Pendiente (backlog priorizado)
 
 **Riesgo / costo (primero)**
-- **Fase 8 de la migración: confirmar que la infra vieja en `786567028012` está destruida.**
-  Sin verificar (SSO vencido). Choca con la premisa "todo gratis": CloudFront, Lambda, Amplify y
-  buckets vivos allá consumen capa gratuita o cobran. `aws sso login --profile taxops-admin`.
+- **Auditoría de free tier a nivel AWS Organization.** El free tier se agrega por consolidated
+  billing, no por cuenta: `investment-self`, `dianbot` y las demás descuentan del mismo 1M de
+  requests de Lambda y 1 TB de CloudFront. Nunca se ha medido. Es el riesgo de costo abierto.
+- ~~Fase 8: destruir la infra vieja~~ — VERIFICADA COMPLETA (2026-09-30): `786567028012` sin
+  nada de TaxOps en todos los servicios y 6 regiones.
 - Validar Fase 1 AttachedDocument con XML reales de la DIAN — depende de conseguir los archivos
 - Lambda Node.js 20 EOL (deadline 2027-03-03): el aviso llegó por la cuenta vieja; revalidar si
   aplica a la cuenta nueva y ubicar el origen (probablemente el SSR de Amplify)
