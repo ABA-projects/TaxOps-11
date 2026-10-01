@@ -3,48 +3,33 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-30 · **Por:** Claude Code (puesta al día: 13 días sin actualizar la seña)
+**Última actualización:** 2026-10-01 · **Por:** Claude Code (costo de Amplify optimizado; nada en vuelo)
 
 ---
 
 ## Tarea activa
 
-**Ninguna tarea de código en curso.** `main` @ `2186643`, 0 PRs abiertos, producción verde.
+**Ninguna tarea en curso.** `main` @ `008ca4e`, 0 PRs abiertos, producción verde.
 
-> ⚠️ Esta seña estuvo **13 días desactualizada** (16 → 30 sep). En ese hueco entró la migración
-> de cuenta AWS (#57), que es el cambio más grande del proyecto desde la migración a AWS. Quien
-> trabaje —Claude o Kiro— actualiza este archivo al terminar; si no, el otro agente arranca ciego.
-
-**Lo que pasó mientras tanto (reconstruido de git + GitHub + producción, 2026-09-30):**
-
-- **#56** — fix del re-deploy con tag inmutable de ECR. Mergeado.
-- **#57 — migración a cuenta AWS dedicada `taxops` (562548008942)**, saliendo de `786567028012`.
-  Plan completo en `PLAN-MIGRACION-CUENTA.md` (raíz del repo, 508 líneas, 8 fases).
-  `terraform-apply` en verde. Producción confirmada hoy: `api.taxopsapp.com/health` → 200,
-  `app.taxopsapp.com` → 200, DNS del API en el CloudFront nuevo (`dsu87dwerxsuj.cloudfront.net`).
-- **#58** — `psycopg` v3 para alembic/SQLAlchemy; arregló el `Deploy to Lambda` que falló en #57.
-
-**OIDC mínimo privilegio — VERIFICACIÓN CERRADA** (quedó pendiente el 16 sep, hoy confirmada):
-los tres roles corrieron en verde contra la cuenta nueva — `Terraform Plan` (rol plan, 28 sep),
-`Terraform Apply` (rol terraform) y `Deploy to Lambda` sobre `2186643` (rol deploy, cierra
-`lambda:UpdateFunctionCode`). Variables de GitHub ya apuntan a `562548008942`.
-El módulo sobrevivió la migración sin tocarse porque usa `data.aws_caller_identity`.
-
-**Fase 8 — VERIFICADA Y COMPLETA (2026-09-30).** La cuenta vieja `786567028012` no tiene nada de
-TaxOps: CloudFront, Amplify, ECR, SQS, SSM, roles IAM `taxops-*` y el propio OIDC provider, todos
-borrados; sin buckets `taxops*`; nada en us-east-2/us-west-1/us-west-2/eu-west-1/sa-east-1. Lo que
-queda allá es de otros proyectos (`investment-self`, `dianbot`, CloudTrail).
-
-**Hallazgo de costo que SÍ importa — Amplify no es gratis.** Septiembre en la cuenta vieja costó
-**US$1,16**: Amplify **$0,87**, ECR $0,20, Cost Explorer $0,05, S3 $0,03. Es costo histórico (TaxOps
-corrió allá hasta el 28-sep) y el residuo diario tras la migración es lag de facturación, no fuga.
-Pero **ese ~$0,87/mes de Amplify se mudó con el proyecto a la cuenta nueva**, no desapareció.
-Choca con "todo gratis, siempre" y nadie lo había medido.
-→ **Pendiente:** medir el costo real en `562548008942` (perfil `taxops`, hoy sin sesión SSO) y
-decidir si se acepta ~$1/mes o se busca alternativa $0 para el hosting del frontend.
-Ojo: cada consulta a Cost Explorer cuesta US$0,01 — usar `--granularity MONTHLY` y no iterar.
+Cerrado el 2026-09-30/10-01:
+- **Puesta al día** tras 13 días sin actualizar esta seña (entró la migración de cuenta AWS #57).
+- **Fase 8 de la migración VERIFICADA**: `786567028012` quedó limpia de TaxOps (todos los
+  servicios, 6 regiones). Lo que queda allá es de otros proyectos.
+- **Costo de Amplify: de ~US$0,95 a ~US$0,25/mes** (#59 + #60). El webhook reconstruía Next.js
+  en cada push a `main` sin filtrar por ruta — era el 80 % del costo. Ahora `enable_auto_build`
+  está en `false` y despliega `.github/workflows/deploy-web.yml` con `paths: taxops-web/**`.
+  **Probado con evidencia**: el commit `008ca4e` (solo docs) no disparó build.
+- **Decidido y registrado** (`decisions.md`): el frontend NO se migra a Cloudflare/Netlify/Vercel.
+- OIDC mínimo privilegio: verificación cerrada, los 3 roles en verde contra la cuenta nueva.
 
 ## Pendiente
+
+- **Auditoría de free tier a nivel AWS Organization (riesgo de costo abierto).** La capa gratuita
+  se agrega por consolidated billing, no por cuenta: lo que consuman `investment-self`, `dianbot`
+  y las demás descuenta del mismo 1M de requests de Lambda y 1 TB de CloudFront. "Todo gratis" en
+  TaxOps depende de los otros proyectos. Nunca se ha medido.
+- **Validar Fase 1 (AttachedDocument) con 2-3 XML reales de la DIAN** — depende de que Jaime los
+  consiga. Hasta entonces el parser no se considera productivo (fixtures sintéticos).
 
 - **Rediseño frontend — Fases A y B HECHAS y mergeadas** (PR #53 landing editorial clara,
   PR #54 tokens de la app: verde, neutros de papel, Fraunces/Source Sans 3/JetBrains Mono).

@@ -118,3 +118,13 @@ Formato por entrada:
   Histórico (TaxOps corrió allá hasta el 28), no fuga activa.
 - **Lo relevante: Amplify ~$0,87/mes se mudó a la cuenta nueva.** El frontend no es gratis.
   Pendiente medirlo en `562548008942` y decidir si se acepta o se busca alternativa $0.
+
+## 2026-10-01 — Costo de Amplify optimizado (#59, #60)
+- Auto-build de Amplify apagado; el deploy del frontend entra por `deploy-web.yml` con
+  `paths: taxops-web/**` y `amplify start-job` vía el rol OIDC de deploy (sin secreto nuevo).
+  Hecho en dos pasos para no quedarnos sin forma de desplegar: paso 1 agregó el camino nuevo
+  con el webhook aún activo, paso 2 lo apagó tras probarlo en verde (run 36801806424).
+- De ~US$0,95 a ~US$0,25/mes. Verificado: el commit `008ca4e` (docs) no disparó build.
+- `CLAUDE.md` corregido: la ruta de deploy del frontend ya no es el webhook; documentado que la
+  cuenta NO tiene free tier de 12 meses y que Cost Explorer cobra US$0,01 por consulta.
+- Decisión registrada: no se migra a Cloudflare/Netlify/Vercel (ver `decisions.md`).
