@@ -46,3 +46,29 @@
 ## 2026-09-15 — Frontend se queda en Amplify; no Docker/ECR por ahora
 
 **Decisión:** seguir con Amplify Hosting (SSR nativo). **Por qué:** ISR (calendario de la landing) no funciona en Lambda sin OpenNext o caché compartido; cold start de 1–3 s en la landing; costo equivalente (centavos); `output: standalone` ya deja el Dockerfile trivial si hace falta. **Reabrir si:** EOL de Node 20 en Amplify (marzo 2027) obliga a migrar, o se quiere gate de CI antes del deploy. Camino en ese caso: OpenNext → Lambda + CloudFront + S3.
+
+## 2026-10-01 — El frontend se queda en Amplify; no se migra a Cloudflare/Netlify/Vercel
+
+**Decisión:** seguir en Amplify Hosting. Se optimizó el costo en vez de migrar (PRs #59 y #60:
+auto-build apagado, deploy por `deploy-web.yml` filtrado por `paths: taxops-web/**`).
+De ~US$0,95/mes a ~US$0,25/mes.
+
+**Por qué no migrar** (investigado 2026-10-01, fuentes oficiales):
+- **Vercel Hobby: prohibido.** ToS literal: *"Hobby teams are restricted to non-commercial
+  personal use only"*, y define uso comercial como procesar pagos de visitantes. TaxOps cobra.
+- **Netlify free: riesgo inaceptable.** Cuentas nuevas (post 4-sep-2025) van por créditos —
+  300/mes con tope duro y **el sitio se pausa** al agotarlos; un deploy a producción cuesta 15.
+- **Cloudflare Workers: más riesgo del esperado.** Cloudflare ya no recomienda
+  `@opennextjs/cloudflare` sino `vinext`, que apunta a **Next 16** (la app es 15.3 → upgrade
+  mayor). El plan gratuito limita a **10 ms de CPU por request** y su propia doc dice que un
+  SSR típico consume 10–20 ms.
+- El ahorro restante (~US$3/año) no justifica migrar el hosting de producción.
+
+**Si se reabre** (por el EOL de Node 20 en Amplify, o por desacoplarse de AWS): la ruta sensata
+es **self-host con `@opennextjs/aws`** en la cuenta existente (Lambda + CloudFront + S3; ISR vía
+S3 + DynamoDB + SQS FIFO). No Cloudflare.
+
+**Hallazgo colateral importante:** la capa gratuita de AWS **se agrega por consolidated billing
+en toda la Organization**, no por cuenta. Lo que consuman las otras cuentas (`investment-self`,
+`dianbot`, …) descuenta del mismo 1M de requests de Lambda y 1 TB de CloudFront. "Todo gratis"
+en TaxOps depende de los demás proyectos; vale una auditoría a nivel de Organization.
