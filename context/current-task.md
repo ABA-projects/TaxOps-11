@@ -30,11 +30,19 @@ los tres roles corrieron en verde contra la cuenta nueva — `Terraform Plan` (r
 `lambda:UpdateFunctionCode`). Variables de GitHub ya apuntan a `562548008942`.
 El módulo sobrevivió la migración sin tocarse porque usa `data.aws_caller_identity`.
 
-**Lo único sin verificar — Fase 8 de la migración:** si la infra vieja en `786567028012` se
-destruyó. No pude comprobarlo: las sesiones SSO de los perfiles `taxops` y `taxops-admin` están
-vencidas. **Importa por la premisa "todo gratis"**: CloudFront, Lambda, Amplify y buckets vivos
-en la cuenta vieja siguen consumiendo capa gratuita o generando cargo. Para comprobarlo:
-`aws sso login --profile taxops-admin` y revisar CloudFront/Lambda/Amplify/S3 en esa cuenta.
+**Fase 8 — VERIFICADA Y COMPLETA (2026-09-30).** La cuenta vieja `786567028012` no tiene nada de
+TaxOps: CloudFront, Amplify, ECR, SQS, SSM, roles IAM `taxops-*` y el propio OIDC provider, todos
+borrados; sin buckets `taxops*`; nada en us-east-2/us-west-1/us-west-2/eu-west-1/sa-east-1. Lo que
+queda allá es de otros proyectos (`investment-self`, `dianbot`, CloudTrail).
+
+**Hallazgo de costo que SÍ importa — Amplify no es gratis.** Septiembre en la cuenta vieja costó
+**US$1,16**: Amplify **$0,87**, ECR $0,20, Cost Explorer $0,05, S3 $0,03. Es costo histórico (TaxOps
+corrió allá hasta el 28-sep) y el residuo diario tras la migración es lag de facturación, no fuga.
+Pero **ese ~$0,87/mes de Amplify se mudó con el proyecto a la cuenta nueva**, no desapareció.
+Choca con "todo gratis, siempre" y nadie lo había medido.
+→ **Pendiente:** medir el costo real en `562548008942` (perfil `taxops`, hoy sin sesión SSO) y
+decidir si se acepta ~$1/mes o se busca alternativa $0 para el hosting del frontend.
+Ojo: cada consulta a Cost Explorer cuesta US$0,01 — usar `--granularity MONTHLY` y no iterar.
 
 ## Pendiente
 

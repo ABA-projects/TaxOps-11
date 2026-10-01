@@ -111,3 +111,10 @@ Formato por entrada:
   del bucket de tfstate. **Verificación cerrada**: plan, apply y deploy en verde contra la cuenta nueva.
 - Pendiente: Fase 8 (destruir la infra vieja) — sin verificar, SSO vencido.
 - Nota de proceso: estos tres PRs entraron sin actualizar `context/`; la seña quedó 13 días ciega.
+
+## 2026-09-30 — Auditoría de la cuenta vieja (Fase 8 cerrada) y costo real de Amplify
+- Verificado: `786567028012` quedó limpia de TaxOps (todos los servicios y 6 regiones). Fase 8 OK.
+- Costo septiembre allá: US$1,16 — Amplify $0,87, ECR $0,20, Cost Explorer $0,05, S3 $0,03.
+  Histórico (TaxOps corrió allá hasta el 28), no fuga activa.
+- **Lo relevante: Amplify ~$0,87/mes se mudó a la cuenta nueva.** El frontend no es gratis.
+  Pendiente medirlo en `562548008942` y decidir si se acepta o se busca alternativa $0.
