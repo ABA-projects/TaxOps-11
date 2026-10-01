@@ -1,0 +1,66 @@
+# Deploy del frontend a Amplify, solo cuando el frontend cambia.
+#
+# Antes, Amplify tenía auto_build y su webhook dispara en CADA push a main sin poder filtrar
+# por ruta: un commit de Python, de infra/ o de context/*.md reconstruía Next.js completo.
+# Medido en la cuenta nueva (28-30 sep): BuildDuration fue el 80 % del costo de Amplify
+# (9,18 min a US$0,01/min) y la cuenta NO tiene capa gratuita, por ser miembro de una
+# Organization cuyo reloj de 12 meses ya venció.
+#
+# Ahora auto_build está apagado (infra/modules/amplify/main.tf) y el build entra por acá,
+# con paths: filtrado. Autenticación por OIDC con el rol de deploy — sin secreto que rotar.
+name: Deploy Web (Amplify)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "taxops-web/**"
+      # El calendario de la landing se empaqueta en el build (lib/calendarioPreview.ts lo
+      # importa), así que un cambio del JSON sí exige reconstruir.
+      - "api/data/calendario_2026.json"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch: {} # re-desplegar a mano sin tocar código
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false # un build de Amplify a medias no se cancela: se deja terminar
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Disparar y esperar el build de Amplify
+        run: |
+          set -euo pipefail
+          APP_ID=$(aws amplify list-apps --query "apps[?name=='taxops-web-prod'].appId | [0]" --output text)
+          if [ -z "$APP_ID" ] || [ "$APP_ID" = "None" ]; then
+            echo "::error::No se encontró la app 'taxops-web-prod' en Amplify"; exit 1
+          fi
+
+          JOB_ID=$(aws amplify start-job --app-id "$APP_ID" --branch-name main \
+            --job-type RELEASE --commit-id "${GITHUB_SHA}" \
+            --query 'jobSummary.jobId' --output text)
+          echo "Build $JOB_ID lanzado para $GITHUB_SHA — https://console.aws.amazon.com/amplify/apps/$APP_ID"
+
+          # Amplify no tiene `wait`: se consulta hasta estado terminal. Tope de 30 min para
+          # no dejar el job colgado si Amplify se queda en PENDING.
+          for _ in $(seq 1 90); do
+            sleep 20
+            STATUS=$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID" \
+              --query 'job.summary.status' --output text)
+            echo "estado: $STATUS"
+            case "$STATUS" in
+              SUCCEED) echo "Build OK"; exit 0 ;;
+              FAILED|CANCELLED) echo "::error::Build $STATUS — ver la consola de Amplify"; exit 1 ;;
+            esac
+          done
+          echo "::error::Timeout a los 30 min esperando el build $JOB_ID"; exit 1

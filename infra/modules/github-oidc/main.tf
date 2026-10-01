@@ -187,6 +187,21 @@ data "aws_iam_policy_document" "deploy" {
     ]
     resources = [for f in var.lambda_functions : "arn:aws:lambda:${var.region}:${local.account_id}:function:${f}"]
   }
+  # deploy-web.yml dispara el build del frontend (auto_build está apagado en Amplify para
+  # no reconstruir en commits que no tocan taxops-web/). Acotado a los jobs de la rama main.
+  # ListApps es una operación de listado: no admite recurso. Solo lectura.
+  statement {
+    effect    = "Allow"
+    actions   = ["amplify:ListApps"]
+    resources = ["*"]
+  }
+  # Disparar y consultar builds, acotado a la rama main: no puede tocar otras ramas ni
+  # modificar la app (nada de UpdateApp/DeleteApp/UpdateBranch).
+  statement {
+    effect    = "Allow"
+    actions   = ["amplify:StartJob", "amplify:GetJob"]
+    resources = ["arn:aws:amplify:${var.region}:${local.account_id}:apps/*/branches/main/jobs/*"]
+  }
   # vencimientos-tributarios/publish.py lee y reescribe config/calendario_2026.json.
   statement {
     effect    = "Allow"
