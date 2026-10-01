@@ -68,19 +68,19 @@ resource "aws_amplify_branch" "main" {
   framework   = "Next.js - SSR"
   stage       = "PRODUCTION"
 
-  # TODO (paso 2, PR aparte): pasar a false una vez deploy-web.yml quede probado en verde.
-  # El webhook de Amplify dispara en CADA push a main sin poder filtrar por ruta, así que un
-  # commit de Python, de infra/ o de context/*.md reconstruye Next.js completo. Medido
-  # (28-30 sep): BuildDuration = 80 % del costo de Amplify (9,18 min a US$0,01/min), y la
-  # cuenta NO tiene capa gratuita por ser miembro de una Organization con el reloj vencido.
-  # Se deja en true a propósito hasta comprobar que el disparo por GitHub Actions funciona:
-  # apagarlo antes dejaría el frontend sin forma de desplegar si deploy-web.yml falla.
-  enable_auto_build = true
+  # Apagado a propósito: el webhook de Amplify dispara en CADA push a main sin poder filtrar
+  # por ruta, así que un commit de Python, de infra/ o de context/*.md reconstruía Next.js
+  # completo. Medido (28-30 sep): BuildDuration = 80 % del costo de Amplify (9,18 min a
+  # US$0,01/min), y la cuenta NO tiene capa gratuita por ser miembro de una Organization
+  # cuyo reloj de 12 meses ya venció.
+  #
+  # El deploy entra ahora por .github/workflows/deploy-web.yml, que filtra por
+  # paths: taxops-web/** y dispara amplify:StartJob con el rol OIDC de deploy. Probado en
+  # verde el 2026-10-01 (run 36801806424) antes de apagar esto.
+  #
+  # Para volver atrás: poner true acá y aplicar; el webhook de Amplify sigue existiendo.
+  enable_auto_build = false
 }
-
-# Amplify crea el webhook de GitHub al conectar el repo. Mientras enable_auto_build siga en
-# true ese webhook es el camino vivo; deploy-web.yml dispara por amplify:StartJob con el rol
-# OIDC de deploy (sin secreto que rotar) y lo reemplaza en el paso 2.
 
 # Dominio propio para el frontend (app.taxopsapp.com) — mismo patrón que module.cdn para
 # la API: Cloudflare como DNS, certificado gestionado por Amplify (no ACM directo, a
