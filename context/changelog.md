@@ -102,3 +102,12 @@ Formato por entrada:
   environment:production / ref main) y permisos mínimos. Costo $0. Deploy verificado hasta ECR push;
   UpdateFunctionCode y rol de plan se verifican con los próximos runs. PR #56 (re-deploy con tag
   existente) abierto. `context/project-state.md` actualizado con backlog priorizado.
+
+## 2026-09-28 — Migración a cuenta AWS dedicada (PR #57, #58) · registrado el 30-sep
+- TaxOps sale de `786567028012` y queda en la cuenta dedicada `taxops` (562548008942). Plan de 8
+  fases en `PLAN-MIGRACION-CUENTA.md`. Producción verificada el 30-sep: api y app en 200.
+- #58: `psycopg` v3 para alembic/SQLAlchemy (el deploy de #57 había fallado por eso).
+- OIDC (#55) sobrevivió sin cambios por usar `data.aws_caller_identity`; solo cambió el default
+  del bucket de tfstate. **Verificación cerrada**: plan, apply y deploy en verde contra la cuenta nueva.
+- Pendiente: Fase 8 (destruir la infra vieja) — sin verificar, SSO vencido.
+- Nota de proceso: estos tres PRs entraron sin actualizar `context/`; la seña quedó 13 días ciega.

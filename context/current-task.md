@@ -3,26 +3,38 @@
 > Handoff **vivo** entre Claude y Kiro. Quien trabaja, actualiza este archivo al terminar.
 > Responde: ¿qué se está haciendo ahora mismo y qué sigue?
 
-**Última actualización:** 2026-09-16 · **Por:** Claude Code (OIDC mínimo privilegio aplicado; PR #56 abierto)
+**Última actualización:** 2026-09-30 · **Por:** Claude Code (puesta al día: 13 días sin actualizar la seña)
 
 ---
 
 ## Tarea activa
 
-**OIDC de GitHub Actions con mínimo privilegio — aplicado, falta cerrar la verificación.**
+**Ninguna tarea de código en curso.** `main` @ `2186643`, 0 PRs abiertos, producción verde.
 
-- PR #55 mergeado y **aplicado** (gate aprobado). Tres roles: `taxops-github-actions-plan`
-  (pull_request, ReadOnly + lock + kms:Decrypt vía SSM), `-terraform` (environment production,
-  PowerUser + IAM acotado a `taxops-*`), `-deploy` (main, ECR + UpdateFunctionCode + S3 config/*).
-- Variables de GitHub creadas: `AWS_PLAN_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`.
-- Verificado con el rol de deploy: login + push a ECR. **NO verificado aún**: `lambda:UpdateFunctionCode`
-  (la prueba manual chocó con el tag inmutable de ECR, no con permisos) y el rol de plan.
-- **PR #56 abierto** (fix: `workflow_dispatch` de deploy-lambda re-usa la imagen si el tag existe).
-  Al mergearlo, el push a main ejercita el deploy completo con el rol nuevo → mirar que quede en verde.
-  El primer PR que toque `infra/` ejercita el rol de plan.
+> ⚠️ Esta seña estuvo **13 días desactualizada** (16 → 30 sep). En ese hueco entró la migración
+> de cuenta AWS (#57), que es el cambio más grande del proyecto desde la migración a AWS. Quien
+> trabaje —Claude o Kiro— actualiza este archivo al terminar; si no, el otro agente arranca ciego.
 
-Si algo falla será un `AccessDenied` explícito en el log; se corrige agregando la acción en
-`infra/modules/github-oidc/main.tf` por el pipeline normal. Producción no se afecta.
+**Lo que pasó mientras tanto (reconstruido de git + GitHub + producción, 2026-09-30):**
+
+- **#56** — fix del re-deploy con tag inmutable de ECR. Mergeado.
+- **#57 — migración a cuenta AWS dedicada `taxops` (562548008942)**, saliendo de `786567028012`.
+  Plan completo en `PLAN-MIGRACION-CUENTA.md` (raíz del repo, 508 líneas, 8 fases).
+  `terraform-apply` en verde. Producción confirmada hoy: `api.taxopsapp.com/health` → 200,
+  `app.taxopsapp.com` → 200, DNS del API en el CloudFront nuevo (`dsu87dwerxsuj.cloudfront.net`).
+- **#58** — `psycopg` v3 para alembic/SQLAlchemy; arregló el `Deploy to Lambda` que falló en #57.
+
+**OIDC mínimo privilegio — VERIFICACIÓN CERRADA** (quedó pendiente el 16 sep, hoy confirmada):
+los tres roles corrieron en verde contra la cuenta nueva — `Terraform Plan` (rol plan, 28 sep),
+`Terraform Apply` (rol terraform) y `Deploy to Lambda` sobre `2186643` (rol deploy, cierra
+`lambda:UpdateFunctionCode`). Variables de GitHub ya apuntan a `562548008942`.
+El módulo sobrevivió la migración sin tocarse porque usa `data.aws_caller_identity`.
+
+**Lo único sin verificar — Fase 8 de la migración:** si la infra vieja en `786567028012` se
+destruyó. No pude comprobarlo: las sesiones SSO de los perfiles `taxops` y `taxops-admin` están
+vencidas. **Importa por la premisa "todo gratis"**: CloudFront, Lambda, Amplify y buckets vivos
+en la cuenta vieja siguen consumiendo capa gratuita o generando cargo. Para comprobarlo:
+`aws sso login --profile taxops-admin` y revisar CloudFront/Lambda/Amplify/S3 en esa cuenta.
 
 ## Pendiente
 

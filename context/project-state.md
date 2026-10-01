@@ -4,7 +4,7 @@
 > Neutral respecto a la herramienta. Ambos agentes leen y actualizan este archivo.
 > Detalle técnico profundo (arquitectura de módulos, regex, schema) vive en `CLAUDE.md` — no se duplica aquí.
 
-**Última actualización:** 2026-09-16 · **Actualizado por:** Claude Code (verificado contra git y GitHub: 0 PRs abiertos)
+**Última actualización:** 2026-09-30 · **Actualizado por:** Claude Code (verificado contra git, GitHub y producción)
 
 ---
 
@@ -18,7 +18,8 @@ Detalle de módulos y arquitectura: ver `README.md` (visión de producto) y `CLA
 
 ## Arquitectura actual (resumen)
 
-Producción en AWS (migrada desde GCP Cloud Run + Vercel):
+Producción en AWS, **cuenta dedicada `taxops` (562548008942)** desde el 2026-09-28 (PR #57,
+plan en `PLAN-MIGRACION-CUENTA.md`). Antes vivía en `786567028012`:
 
 - **API**: AWS Lambda (container) detrás de CloudFront — `api.taxopsapp.com`
 - **Worker**: AWS Lambda disparado por SQS (OCR/exógenas, jobs largos)
@@ -45,7 +46,7 @@ Producción en AWS (migrada desde GCP Cloud Run + Vercel):
 | Landing + sistema de diseño | ✅ Terminado | Landing editorial clara (#53) y tokens de la app en verde/neutros (#54). Calendario de la landing desde el JSON con ISR diario. Fuentes del canvas en `docs/design/landing/` |
 | `.dockerignore` | ✅ Hecho | #47 — no excluye los archivos que el runtime necesita (config.yaml, autorretenedores.txt, calendario JSON, init.sql) |
 
-**Rama/commit actual:** `main` @ `6264e23` (PR #54 mergeado, 0 PRs abiertos — verificado 2026-09-16).
+**Rama/commit actual:** `main` @ `2186643` (PR #58 mergeado, 0 PRs abiertos — verificado 2026-09-30).
 
 ## En progreso
 
@@ -59,10 +60,14 @@ entrega el paquete de facturas; posible integración futura con la solución pri
 
 ## Pendiente (backlog priorizado)
 
-**Riesgo / seguridad (primero)**
+**Riesgo / costo (primero)**
+- **Fase 8 de la migración: confirmar que la infra vieja en `786567028012` está destruida.**
+  Sin verificar (SSO vencido). Choca con la premisa "todo gratis": CloudFront, Lambda, Amplify y
+  buckets vivos allá consumen capa gratuita o cobran. `aws sso login --profile taxops-admin`.
 - Validar Fase 1 AttachedDocument con XML reales de la DIAN — depende de conseguir los archivos
-- Acotar rol OIDC de GitHub Actions (hoy `AdministratorAccess`) a ECR + Lambda + Amplify + S3 + SSM
-- Lambda Node.js 20 EOL (aviso AWS, deadline 2027-03-03): ubicar el origen (probablemente SSR de Amplify) y planear
+- Lambda Node.js 20 EOL (deadline 2027-03-03): el aviso llegó por la cuenta vieja; revalidar si
+  aplica a la cuenta nueva y ubicar el origen (probablemente el SSR de Amplify)
+- ~~Acotar rol OIDC~~ — HECHO y verificado (#55; los 3 roles en verde contra la cuenta nueva)
 
 **Producto**
 - Formulario de contacto de la landing sin backend (hoy `mailto:`) → endpoint + SES
