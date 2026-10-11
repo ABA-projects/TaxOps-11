@@ -64,3 +64,37 @@ resource "aws_scheduler_schedule" "reminders" {
   # Un schedule one-time no se auto-borra tras dispararse (queda en estado "COMPLETED") —
   # no afecta nada dejarlo, evita que Terraform intente recrearlo en cada apply.
 }
+
+# Budget mensual de costo con alerta temprana. AWS Budgets da los primeros 2 budgets por
+# cuenta gratis (perpetuo) — este es el primero, así que no cuesta nada. Vigila el gasto de
+# ESTA cuenta (prod corre contra 562548008942/taxops). No ve el consolidado de la Organization
+# (ese payer es 786567028012); para el total de las 3 cuentas se usa la revisión manual
+# documentada en context/decisions.md. Notifica por email directo del budget (no vía SNS):
+# un canal menos que confirmar y sin IAM extra.
+resource "aws_budgets_budget" "monthly" {
+  name         = "taxops-monthly-cost"
+  budget_type  = "COST"
+  limit_amount = var.monthly_budget_usd
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  # Avisa cuando el gasto REAL supera el umbral. A costo-cero el objetivo es enterarse de
+  # cualquier repunte (un recurso olvidado, un build que se disparó) sin tener que consultar
+  # Cost Explorer, que cobra US$0,01 por consulta.
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100 # % del límite
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.email]
+  }
+
+  # Y un aviso anticipado al 80% del REAL, para reaccionar antes de cruzar el límite.
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.email]
+  }
+}

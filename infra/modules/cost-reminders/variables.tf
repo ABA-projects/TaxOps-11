@@ -16,3 +16,13 @@ variable "reminders" {
   }))
   default = {}
 }
+
+variable "monthly_budget_usd" {
+  description = <<-EOT
+    Límite mensual de gasto (USD) de ESTA cuenta para el budget de alerta. Default $1,
+    coherente con la premisa costo-cero: a este proyecto cualquier mes por encima de ~$1
+    es una anomalía que amerita mirar. Avisa al 80% y al 100% del gasto real.
+  EOT
+  type        = string
+  default     = "1"
+}
