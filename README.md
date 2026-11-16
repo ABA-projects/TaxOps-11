@@ -18,7 +18,7 @@
 |----------|-----|
 | Frontend | [https://app.taxopsapp.com](https://app.taxopsapp.com) (AWS Amplify) |
 | API | [https://api.taxopsapp.com](https://api.taxopsapp.com) (CloudFront → Lambda) |
-| Swagger UI | [https://api.taxopsapp.com/docs](https://api.taxopsapp.com/docs) |
+| Swagger UI | Solo en local: http://localhost:8000/docs (apagado en producción) |
 
 ---
 
@@ -368,7 +368,7 @@ cd taxops-web && npm run dev
 
 ## API Reference
 
-Documentación interactiva Swagger: [https://api.taxopsapp.com/docs](https://api.taxopsapp.com/docs)
+Documentación interactiva Swagger: http://localhost:8000/docs al correr la API en local. En producción está apagada (junto con `/redoc` y `/openapi.json`), porque expone el mapa completo de rutas.
 
 ### Auth
 

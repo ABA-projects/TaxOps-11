@@ -9,6 +9,7 @@ el directorio raíz del proyecto quede en el path de Python.
 """
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -69,12 +70,18 @@ async def lifespan(_: FastAPI):
     yield
 
 
+# La documentación interactiva (y el /openapi.json que la alimenta) expone el mapa completo de
+# rutas, incluidas las de /admin/superadmin/*. Se sirve en local y se apaga en producción: el
+# runtime de Lambda siempre define AWS_LAMBDA_FUNCTION_NAME, así que no hace falta configuración.
+_DOCS_ENABLED = "AWS_LAMBDA_FUNCTION_NAME" not in os.environ
+
 app = FastAPI(
     title="TaxOps API",
     version="2.0.1",
     description="API REST para automatización contable colombiana · Facturas DIAN · Exógenas · IA",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
     lifespan=lifespan,
 )
 
