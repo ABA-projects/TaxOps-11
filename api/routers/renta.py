@@ -217,10 +217,12 @@ async def descargar_formulario_210_excel(id: UUID, user: dict = Depends(get_curr
 
 # ─── Reglas tributarias ───────────────────────────────────────────────────────
 
-@router.get("/reglas/{año_gravable}")
+@router.get("/reglas/{anio_gravable}")
 async def get_reglas(
-    año_gravable: int,
+    anio_gravable: int,
     user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
+    # Nombre ASCII a propósito: el regex de rutas de Starlette solo acepta [a-zA-Z_] en los
+    # parámetros de path; con {año_gravable} la ruta nunca matcheaba (404 siempre).
     from db.database_renta import get_reglas_tributarias
-    return get_reglas_tributarias(año_gravable)
+    return get_reglas_tributarias(anio_gravable)
