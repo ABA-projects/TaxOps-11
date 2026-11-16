@@ -77,11 +77,16 @@ jobs:
       # x86_64 explícito: los binarios precompilados de Tesseract en api/Dockerfile-lambda
       # solo existen para esa arquitectura (ver el Dockerfile para el detalle completo).
       # ubuntu-latest ya es x86_64 nativo, este build no necesita emulación.
+      #
+      # --provenance=false --sbom=false: desde que ubuntu-latest pasó a ubuntu-26.04 (nov-2026),
+      # su Docker adjunta por defecto un attestation manifest, y la imagen sale como manifest list
+      # (índice OCI). Lambda lo rechaza con "image manifest, config or layer media type ... is not
+      # supported". Sin atestaciones se exporta un manifiesto simple, como en ubuntu-24.04.
       - name: Build imagen Lambda
         if: steps.imagen.outputs.existe != 'true'
         run: |
-          docker build --platform linux/amd64 -f api/Dockerfile-lambda \
-            -t ${{ env.ECR_REPO }}:${{ github.sha }} .
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            -f api/Dockerfile-lambda -t ${{ env.ECR_REPO }}:${{ github.sha }} .
 
       - name: Push a ECR
         if: steps.imagen.outputs.existe != 'true'
