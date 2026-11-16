@@ -10,7 +10,7 @@ from schemas import NovedadResponse
 router = APIRouter(prefix="/novedades", tags=["Novedades"])
 
 
-@router.get("/", response_model=list[NovedadResponse])
+@router.get("", response_model=list[NovedadResponse])
 async def list_novedades(
     tipo: str | None = None,
     limit: int = 20,

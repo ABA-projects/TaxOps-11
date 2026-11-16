@@ -91,7 +91,7 @@ async def export_excel(
     )
 
 
-@router.get("/")
+@router.get("")
 async def list_invoices(
     periodo: str | None = None,
     nit_emisor: str | None = None,

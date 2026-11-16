@@ -99,7 +99,7 @@ async def export_excel(
     )
 
 
-@router.get("/")
+@router.get("")
 async def list_exogenas(
     anio: int | None = None,
     concepto: str | None = None,
